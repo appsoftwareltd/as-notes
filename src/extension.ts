@@ -104,14 +104,14 @@ async function enterFullMode(
 
     // Shared services
     const wikilinkService = new WikilinkService();
-    const fileService = new WikilinkFileService();
+    const fileService = new WikilinkFileService(indexService);
 
     // Decoration manager
     const decorationManager = new WikilinkDecorationManager(wikilinkService);
     fullModeDisposables.push(decorationManager);
 
-    // Document link provider — Ctrl/Cmd+Click navigation
-    const linkProvider = new WikilinkDocumentLinkProvider(wikilinkService, fileService);
+    // Document link provider — Ctrl/Cmd+Click navigation (alias-aware tooltips)
+    const linkProvider = new WikilinkDocumentLinkProvider(wikilinkService, fileService, indexService);
     fullModeDisposables.push(
         vscode.languages.registerDocumentLinkProvider(MARKDOWN_SELECTOR, linkProvider),
     );

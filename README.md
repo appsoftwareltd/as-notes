@@ -85,13 +85,59 @@ Characters that are invalid in filenames (`/ ? < > \ : * | "`) are replaced with
 [[What is 1/2 + 1/4?]]  →  What is 1_2 + 1_4_.md
 ```
 
+### Page aliases
+
+Define alternative names for a page using YAML front matter at the top of any markdown file:
+
+```yaml
+---
+aliases:
+  - Short Name
+  - Another Name
+---
+```
+
+Or inline array style:
+
+```yaml
+---
+aliases: [Short Name, Another Name]
+---
+```
+
+Linking to `[[Short Name]]` or `[[Another Name]]` navigates to the page that declares those aliases — no extra file is created.
+
+**Hover tooltips** show alias resolution: hovering over `[[Short Name]]` displays `Short Name.md → ActualPage.md` and an alias indicator.
+
+**Rename tracking** is alias-aware. Editing an alias link (e.g. changing `[[Short Name]]` to `[[New Name]]`) offers to update the front matter on the canonical page and all matching references across the workspace. No file is renamed.
+
+**Backlink counts** include both direct and alias references. A page with two aliases counts links to all three names.
+
+Alias values are plain strings. Any accidental `[[` or `]]` brackets are stripped automatically.
+
+### Subfolder link resolution
+
+Wikilinks resolve globally across the workspace, not just in the current directory. The extension uses the persistent index to find matching files anywhere in the folder tree.
+
+**Resolution order:**
+
+1. **Direct filename match** — `[[My Page]]` finds `My Page.md` anywhere in the workspace
+2. **Alias match** — if no file matches, check page aliases
+3. **Auto-create** — if nothing matches, create the file in the same directory as the source
+
+**Disambiguation** — when multiple files share the same name (e.g. `notes/Topic.md` and `archive/Topic.md`):
+
+1. A file in the **same directory** as the source always wins
+2. Otherwise, the **closest folder** is preferred (measured by directory distance)
+
 ### Persistent index
 
 AS Notes maintains a SQLite database (`.asnotes/index.db`) that indexes all markdown files in the workspace. The index tracks:
 
 - **Pages** — file paths, filenames, titles (extracted from the first `# heading`)
 - **Links** — every wikilink in every file, with line, column, nesting depth, and parent references
-- **Backlinks** — reverse lookups for hover tooltips
+- **Aliases** — alternative names declared in YAML front matter, with sanitised filenames
+- **Backlinks** — reverse lookups for hover tooltips (including alias references)
 
 The index is kept up-to-date automatically:
 
@@ -164,12 +210,14 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/Wikilink.ts` | Model class — positions, page name, filename sanitisation |
 | `src/WikilinkService.ts` | Stack-based parser, innermost-offset lookup, segment computation |
 | `src/WikilinkDecorationManager.ts` | Editor decorations (default + active highlight) |
-| `src/WikilinkDocumentLinkProvider.ts` | Ctrl+Click navigation via non-overlapping segments |
-| `src/WikilinkHoverProvider.ts` | Hover tooltips with target file existence, backlink count |
-| `src/WikilinkFileService.ts` | File resolution, case-insensitive matching, creation |
-| `src/WikilinkRenameTracker.ts` | Rename detection (index-backed), confirmation dialog, workspace-wide updates |
-| `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, nesting detection |
+| `src/WikilinkDocumentLinkProvider.ts` | Ctrl+Click navigation via non-overlapping segments (alias-aware tooltips) |
+| `src/WikilinkHoverProvider.ts` | Hover tooltips with target file existence, alias indicator, backlink count |
+| `src/WikilinkFileService.ts` | File resolution — index-aware global matching, alias resolution, subfolder disambiguation |
+| `src/WikilinkRenameTracker.ts` | Rename detection (index-backed), alias vs direct rename classification, workspace-wide updates |
+| `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, alias management, nesting detection |
 | `src/IndexScanner.ts` | VS Code filesystem scanning — file indexing, full scan, stale scan |
+| `src/FrontMatterService.ts` | Lightweight YAML front matter parser — alias extraction, in-place alias updates |
+| `src/PathUtils.ts` | Pure utilities — path distance calculation, filename sanitisation |
 | `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
 | `src/test/` | Unit tests (vitest) |
 

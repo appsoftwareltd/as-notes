@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { WikilinkService } from './WikilinkService.js';
 import { Wikilink } from './Wikilink.js';
+import { FrontMatterService } from './FrontMatterService.js';
 
 // ── Row types ──────────────────────────────────────────────────────────────
 
@@ -37,6 +38,13 @@ export interface LinkInsert {
     context: string | null;
     parent_link_id: number | null;
     depth: number;
+}
+
+export interface AliasRow {
+    id: number;
+    canonical_page_id: number;
+    alias_name: string;
+    alias_filename: string;
 }
 
 export interface ScanSummary {
@@ -243,6 +251,29 @@ export class IndexService {
     }
 
     /**
+     * Get a page by its numeric ID.
+     */
+    getPageById(pageId: number): PageRow | undefined {
+        this.ensureOpen();
+        const result = this.db!.exec(
+            `SELECT id, path, filename, title, mtime, indexed_at FROM pages WHERE id = ?`,
+            [pageId],
+        );
+        if (result.length === 0 || result[0].values.length === 0) {
+            return undefined;
+        }
+        const row = result[0].values[0];
+        return {
+            id: row[0] as number,
+            path: row[1] as string,
+            filename: row[2] as string,
+            title: row[3] as string,
+            mtime: row[4] as number,
+            indexed_at: row[5] as number,
+        };
+    }
+
+    /**
      * Get all pages in the index.
      */
     getAllPages(): PageRow[] {
@@ -373,6 +404,7 @@ export class IndexService {
         const pageId = this.upsertPage(relativePath, filename, title, mtime);
 
         this.setLinksForPageWithNesting(pageId, content);
+        this.indexAliasesFromContent(pageId, content);
 
         return pageId;
     }
@@ -507,6 +539,191 @@ export class IndexService {
             }
         }
         return best;
+    }
+
+    // ── Aliases ────────────────────────────────────────────────────────────
+
+    /**
+     * Parse and store aliases from file content for a given page.
+     * Clears existing aliases for the page before inserting new ones.
+     */
+    private indexAliasesFromContent(pageId: number, content: string): void {
+        const frontMatterService = new FrontMatterService();
+        const aliasNames = frontMatterService.parseAliases(content);
+        this.setAliasesForPage(pageId, aliasNames);
+    }
+
+    /**
+     * Replace all aliases for a page with the given alias names.
+     * Sanitises each alias name into a filename using the same rules as wikilinks.
+     */
+    setAliasesForPage(pageId: number, aliasNames: string[]): void {
+        this.ensureOpen();
+        this.db!.run(`DELETE FROM aliases WHERE canonical_page_id = ?`, [pageId]);
+
+        const invalids = /[\/\?<>\\:\*\|":]/g;
+        for (const name of aliasNames) {
+            const filename = `${name.replace(invalids, '_')}.md`;
+            this.db!.run(
+                `INSERT INTO aliases (canonical_page_id, alias_name, alias_filename) VALUES (?, ?, ?)`,
+                [pageId, name, filename],
+            );
+        }
+    }
+
+    /**
+     * Get all aliases for a specific page.
+     */
+    getAliasesForPage(pageId: number): AliasRow[] {
+        this.ensureOpen();
+        const result = this.db!.exec(
+            `SELECT id, canonical_page_id, alias_name, alias_filename FROM aliases WHERE canonical_page_id = ?`,
+            [pageId],
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            id: row[0] as number,
+            canonical_page_id: row[1] as number,
+            alias_name: row[2] as string,
+            alias_filename: row[3] as string,
+        }));
+    }
+
+    /**
+     * Resolve an alias name to its canonical page. Returns the page row or undefined.
+     * Case-insensitive match on alias_name.
+     */
+    resolveAlias(aliasName: string): PageRow | undefined {
+        this.ensureOpen();
+        const result = this.db!.exec(
+            `SELECT p.id, p.path, p.filename, p.title, p.mtime, p.indexed_at
+             FROM aliases a
+             JOIN pages p ON a.canonical_page_id = p.id
+             WHERE LOWER(a.alias_name) = LOWER(?)`,
+            [aliasName],
+        );
+        if (result.length === 0 || result[0].values.length === 0) {
+            return undefined;
+        }
+        const row = result[0].values[0];
+        return {
+            id: row[0] as number,
+            path: row[1] as string,
+            filename: row[2] as string,
+            title: row[3] as string,
+            mtime: row[4] as number,
+            indexed_at: row[5] as number,
+        };
+    }
+
+    /**
+     * Resolve a page filename to a page. Checks direct filename match first,
+     * then alias match. Returns the page and whether it matched via alias.
+     */
+    resolvePageByFilename(pageFilename: string): { page: PageRow; viaAlias: boolean } | undefined {
+        this.ensureOpen();
+        // Direct match first
+        const directResult = this.db!.exec(
+            `SELECT id, path, filename, title, mtime, indexed_at FROM pages WHERE LOWER(filename) = LOWER(?)`,
+            [pageFilename],
+        );
+        if (directResult.length > 0 && directResult[0].values.length > 0) {
+            const row = directResult[0].values[0];
+            return {
+                page: {
+                    id: row[0] as number,
+                    path: row[1] as string,
+                    filename: row[2] as string,
+                    title: row[3] as string,
+                    mtime: row[4] as number,
+                    indexed_at: row[5] as number,
+                },
+                viaAlias: false,
+            };
+        }
+        // Alias match: strip .md extension to get alias name
+        const aliasName = pageFilename.endsWith('.md') ? pageFilename.slice(0, -3) : pageFilename;
+        const aliasPage = this.resolveAlias(aliasName);
+        if (aliasPage) {
+            return { page: aliasPage, viaAlias: true };
+        }
+        return undefined;
+    }
+
+    /**
+     * Get backlink count including links that target a page via aliases.
+     * Counts both direct filename references and alias filename references.
+     */
+    getBacklinkCountIncludingAliases(pageId: number): number {
+        this.ensureOpen();
+        // Get the page's own filename
+        const pageResult = this.db!.exec(
+            `SELECT filename FROM pages WHERE id = ?`, [pageId],
+        );
+        if (pageResult.length === 0 || pageResult[0].values.length === 0) { return 0; }
+        const filename = pageResult[0].values[0][0] as string;
+
+        // Get alias filenames for this page
+        const aliasResult = this.db!.exec(
+            `SELECT alias_filename FROM aliases WHERE canonical_page_id = ?`, [pageId],
+        );
+        const aliasFilenames: string[] = aliasResult.length > 0
+            ? aliasResult[0].values.map(r => r[0] as string)
+            : [];
+
+        // Count links matching any of these filenames
+        const allFilenames = [filename, ...aliasFilenames];
+        const placeholders = allFilenames.map(() => '?').join(', ');
+        const countResult = this.db!.exec(
+            `SELECT COUNT(*) FROM links WHERE page_filename IN (${placeholders})`,
+            allFilenames,
+        );
+        if (countResult.length === 0) { return 0; }
+        return countResult[0].values[0][0] as number;
+    }
+
+    /**
+     * Update an alias name across the index. Updates the alias record
+     * and all link references that pointed to the old alias filename.
+     */
+    updateAliasRename(oldAliasName: string, newAliasName: string, canonicalPageId: number): void {
+        this.ensureOpen();
+        const invalids = /[\/\?<>\\:\*\|":]/g;
+        const oldFilename = `${oldAliasName.replace(invalids, '_')}.md`;
+        const newFilename = `${newAliasName.replace(invalids, '_')}.md`;
+
+        // Update the alias record
+        this.db!.run(
+            `UPDATE aliases SET alias_name = ?, alias_filename = ? WHERE canonical_page_id = ? AND LOWER(alias_name) = LOWER(?)`,
+            [newAliasName, newFilename, canonicalPageId, oldAliasName],
+        );
+
+        // Update link references pointing to old alias filename
+        this.db!.run(
+            `UPDATE links SET page_name = ?, page_filename = ? WHERE page_filename = ?`,
+            [newAliasName, newFilename, oldFilename],
+        );
+    }
+
+    /**
+     * Find all pages matching a given filename (case-insensitive).
+     * Used for subfolder resolution when multiple pages share the same filename.
+     */
+    findPagesByFilename(filename: string): PageRow[] {
+        this.ensureOpen();
+        const result = this.db!.exec(
+            `SELECT id, path, filename, title, mtime, indexed_at FROM pages WHERE LOWER(filename) = LOWER(?)`,
+            [filename],
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            id: row[0] as number,
+            path: row[1] as string,
+            filename: row[2] as string,
+            title: row[3] as string,
+            mtime: row[4] as number,
+            indexed_at: row[5] as number,
+        }));
     }
 
     // ── Schema management ──────────────────────────────────────────────────

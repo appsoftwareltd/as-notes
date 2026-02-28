@@ -5,24 +5,24 @@ describe('WikilinkService', () => {
     const testCases = [
         {
             description: 'Basic non nested wikilinks',
-            input: 'The quick brown fox [[Mount]] jumped over the lazy sleeping [[BJJ]] dog',
-            expectedWikilinks: ['[[Mount]]', '[[BJJ]]'],
-            expectedPageNames: ['Mount', 'BJJ'],
-            expectedPageFileNames: ['Mount', 'BJJ'],
+            input: 'The quick brown fox [[Apple]] jumped over the lazy sleeping [[Google]] dog',
+            expectedWikilinks: ['[[Apple]]', '[[Google]]'],
+            expectedPageNames: ['Apple', 'Google'],
+            expectedPageFileNames: ['Apple', 'Google'],
         },
         {
             description: 'Nested link',
-            input: 'The quick brown fox [[[[[[Mount]] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[[[Mount]] Escape]] [[[[BJJ]] Systems]]]]', '[[[[Mount]] Escape]]', '[[[[BJJ]] Systems]]', '[[Mount]]', '[[BJJ]]'],
-            expectedPageNames: ['[[[[Mount]] Escape]] [[[[BJJ]] Systems]]', '[[Mount]] Escape', '[[BJJ]] Systems', 'Mount', 'BJJ'],
-            expectedPageFileNames: ['[[[[Mount]] Escape]] [[[[BJJ]] Systems]]', '[[Mount]] Escape', '[[BJJ]] Systems', 'Mount', 'BJJ'],
+            input: 'The quick brown fox [[[[[[Apple]] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[[[Apple]] Microsoft]] [[[[Google]] Systems]]]]', '[[[[Apple]] Microsoft]]', '[[[[Google]] Systems]]', '[[Apple]]', '[[Google]]'],
+            expectedPageNames: ['[[[[Apple]] Microsoft]] [[[[Google]] Systems]]', '[[Apple]] Microsoft', '[[Google]] Systems', 'Apple', 'Google'],
+            expectedPageFileNames: ['[[[[Apple]] Microsoft]] [[[[Google]] Systems]]', '[[Apple]] Microsoft', '[[Google]] Systems', 'Apple', 'Google'],
         },
         {
             description: 'Nested link with / (file separator)',
-            input: 'The quick brown fox [[[[[[Mount]] / Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[[[Mount]] / Escape]] [[[[BJJ]] Systems]]]]', '[[[[Mount]] / Escape]]', '[[[[BJJ]] Systems]]', '[[Mount]]', '[[BJJ]]'],
-            expectedPageNames: ['[[[[Mount]] / Escape]] [[[[BJJ]] Systems]]', '[[Mount]] / Escape', '[[BJJ]] Systems', 'Mount', 'BJJ'],
-            expectedPageFileNames: ['[[[[Mount]] _ Escape]] [[[[BJJ]] Systems]]', '[[Mount]] _ Escape', '[[BJJ]] Systems', 'Mount', 'BJJ'],
+            input: 'The quick brown fox [[[[[[Apple]] / Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[[[Apple]] / Microsoft]] [[[[Google]] Systems]]]]', '[[[[Apple]] / Microsoft]]', '[[[[Google]] Systems]]', '[[Apple]]', '[[Google]]'],
+            expectedPageNames: ['[[[[Apple]] / Microsoft]] [[[[Google]] Systems]]', '[[Apple]] / Microsoft', '[[Google]] Systems', 'Apple', 'Google'],
+            expectedPageFileNames: ['[[[[Apple]] _ Microsoft]] [[[[Google]] Systems]]', '[[Apple]] _ Microsoft', '[[Google]] Systems', 'Apple', 'Google'],
         },
         {
             description: 'Include spaced words in nested link',
@@ -33,52 +33,52 @@ describe('WikilinkService', () => {
         },
         {
             description: 'Multiple top level wikilinks with nested links',
-            input: 'The quick brown fox [[[[[[Mount]] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog. The quick brown fox [[[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]]]', '[[[[[[Mount]] Escape]] [[[[BJJ]] Systems]]]]', '[[[[Jiu Jitsu]] Technique]]', '[[[[Turtle]] Attack]]', '[[[[Mount]] Escape]]', '[[[[BJJ]] Systems]]', '[[Jiu Jitsu]]', '[[Turtle]]', '[[Mount]]', '[[BJJ]]'],
-            expectedPageNames: ['[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]', '[[[[Mount]] Escape]] [[[[BJJ]] Systems]]', '[[Jiu Jitsu]] Technique', '[[Turtle]] Attack', '[[Mount]] Escape', '[[BJJ]] Systems', 'Jiu Jitsu', 'Turtle', 'Mount', 'BJJ'],
-            expectedPageFileNames: ['[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]', '[[[[Mount]] Escape]] [[[[BJJ]] Systems]]', '[[Jiu Jitsu]] Technique', '[[Turtle]] Attack', '[[Mount]] Escape', '[[BJJ]] Systems', 'Jiu Jitsu', 'Turtle', 'Mount', 'BJJ'],
+            input: 'The quick brown fox [[[[[[Apple]] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog. The quick brown fox [[[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]]]', '[[[[[[Apple]] Microsoft]] [[[[Google]] Systems]]]]', '[[[[Jiu Jitsu]] Technique]]', '[[[[Turtle]] Attack]]', '[[[[Apple]] Microsoft]]', '[[[[Google]] Systems]]', '[[Jiu Jitsu]]', '[[Turtle]]', '[[Apple]]', '[[Google]]'],
+            expectedPageNames: ['[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]', '[[[[Apple]] Microsoft]] [[[[Google]] Systems]]', '[[Jiu Jitsu]] Technique', '[[Turtle]] Attack', '[[Apple]] Microsoft', '[[Google]] Systems', 'Jiu Jitsu', 'Turtle', 'Apple', 'Google'],
+            expectedPageFileNames: ['[[[[Turtle]] Attack]] [[[[Jiu Jitsu]] Technique]]', '[[[[Apple]] Microsoft]] [[[[Google]] Systems]]', '[[Jiu Jitsu]] Technique', '[[Turtle]] Attack', '[[Apple]] Microsoft', '[[Google]] Systems', 'Jiu Jitsu', 'Turtle', 'Apple', 'Google'],
         },
         {
-            description: "Unbalanced Wikilink Brackets for '[[[[Mount]] Escape' changes results as expected",
-            input: 'The quick brown fox [[[[[[Mount]] Escape [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[Mount]] Escape [[[[BJJ]] Systems]]]]', '[[[[BJJ]] Systems]]', '[[Mount]]', '[[BJJ]]'],
-            expectedPageNames: ['[[Mount]] Escape [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount', 'BJJ'],
-            expectedPageFileNames: ['[[Mount]] Escape [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount', 'BJJ'],
+            description: "Unbalanced Wikilink Brackets for '[[[[Apple]] Microsoft' changes results as expected",
+            input: 'The quick brown fox [[[[[[Apple]] Microsoft [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[Apple]] Microsoft [[[[Google]] Systems]]]]', '[[[[Google]] Systems]]', '[[Apple]]', '[[Google]]'],
+            expectedPageNames: ['[[Apple]] Microsoft [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple', 'Google'],
+            expectedPageFileNames: ['[[Apple]] Microsoft [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple', 'Google'],
         },
         {
-            description: 'Interrupting $ character in [$[Mount]$] changes results as expected',
-            input: 'The quick brown fox [[[[[$[Mount]$] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[[$[Mount]$] Escape]] [[[[BJJ]] Systems]]]]', '[[[$[Mount]$] Escape]]', '[[[[BJJ]] Systems]]', '[[BJJ]]'],
-            expectedPageNames: ['[[[$[Mount]$] Escape]] [[[[BJJ]] Systems]]', '[$[Mount]$] Escape', '[[BJJ]] Systems', 'BJJ'],
-            expectedPageFileNames: ['[[[$[Mount]$] Escape]] [[[[BJJ]] Systems]]', '[$[Mount]$] Escape', '[[BJJ]] Systems', 'BJJ'],
+            description: 'Interrupting $ character in [$[Apple]$] changes results as expected',
+            input: 'The quick brown fox [[[[[$[Apple]$] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[[$[Apple]$] Microsoft]] [[[[Google]] Systems]]]]', '[[[$[Apple]$] Microsoft]]', '[[[[Google]] Systems]]', '[[Google]]'],
+            expectedPageNames: ['[[[$[Apple]$] Microsoft]] [[[[Google]] Systems]]', '[$[Apple]$] Microsoft', '[[Google]] Systems', 'Google'],
+            expectedPageFileNames: ['[[[$[Apple]$] Microsoft]] [[[[Google]] Systems]]', '[$[Apple]$] Microsoft', '[[Google]] Systems', 'Google'],
         },
         {
-            description: 'Unbalanced interrupting $ character in [$[Mount]] changes results as expected (interrupt on start bracket)',
-            input: 'The quick brown fox [[[[[$[Mount]] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[[$[Mount]] Escape]]', '[[[[BJJ]] Systems]]', '[[[$[Mount]]', '[[BJJ]]'],
-            expectedPageNames: ['[[[$[Mount]] Escape', '[[BJJ]] Systems', '[$[Mount', 'BJJ'],
-            expectedPageFileNames: ['[[[$[Mount]] Escape', '[[BJJ]] Systems', '[$[Mount', 'BJJ'],
+            description: 'Unbalanced interrupting $ character in [$[Apple]] changes results as expected (interrupt on start bracket)',
+            input: 'The quick brown fox [[[[[$[Apple]] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[[$[Apple]] Microsoft]]', '[[[[Google]] Systems]]', '[[[$[Apple]]', '[[Google]]'],
+            expectedPageNames: ['[[[$[Apple]] Microsoft', '[[Google]] Systems', '[$[Apple', 'Google'],
+            expectedPageFileNames: ['[[[$[Apple]] Microsoft', '[[Google]] Systems', '[$[Apple', 'Google'],
         },
         {
-            description: 'Unbalanced interrupting $ character in [[Mount]$] changes results as expected (interrupt on end bracket)',
-            input: 'The quick brown fox [[[[[[Mount]$] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[Mount]$] Escape]] [[[[BJJ]] Systems]]]]', '[[[[BJJ]] Systems]]', '[[Mount]$] Escape]]', '[[BJJ]]'],
-            expectedPageNames: ['[[Mount]$] Escape]] [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount]$] Escape', 'BJJ'],
-            expectedPageFileNames: ['[[Mount]$] Escape]] [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount]$] Escape', 'BJJ'],
+            description: 'Unbalanced interrupting $ character in [[Apple]$] changes results as expected (interrupt on end bracket)',
+            input: 'The quick brown fox [[[[[[Apple]$] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[Apple]$] Microsoft]] [[[[Google]] Systems]]]]', '[[[[Google]] Systems]]', '[[Apple]$] Microsoft]]', '[[Google]]'],
+            expectedPageNames: ['[[Apple]$] Microsoft]] [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple]$] Microsoft', 'Google'],
+            expectedPageFileNames: ['[[Apple]$] Microsoft]] [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple]$] Microsoft', 'Google'],
         },
         {
-            description: 'Unbalanced interrupting  (file separator) character in [[Mount]] changes results as expected (interrupt on end bracket)',
-            input: 'The quick brown fox [[[[[[Mount]\\] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[Mount]\\] Escape]] [[[[BJJ]] Systems]]]]', '[[[[BJJ]] Systems]]', '[[Mount]\\] Escape]]', '[[BJJ]]'],
-            expectedPageNames: ['[[Mount]\\] Escape]] [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount]\\] Escape', 'BJJ'],
-            expectedPageFileNames: ['[[Mount]_] Escape]] [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount]_] Escape', 'BJJ'],
+            description: 'Unbalanced interrupting  (file separator) character in [[Apple]] changes results as expected (interrupt on end bracket)',
+            input: 'The quick brown fox [[[[[[Apple]\\] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[Apple]\\] Microsoft]] [[[[Google]] Systems]]]]', '[[[[Google]] Systems]]', '[[Apple]\\] Microsoft]]', '[[Google]]'],
+            expectedPageNames: ['[[Apple]\\] Microsoft]] [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple]\\] Microsoft', 'Google'],
+            expectedPageFileNames: ['[[Apple]_] Microsoft]] [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple]_] Microsoft', 'Google'],
         },
         {
-            description: 'Unbalanced opening square brackets character in [[Mount] changes results as expected (interrupt on end bracket)',
-            input: 'The quick brown fox [[[[[[Mount] Escape]] [[[[BJJ]] Systems]]]] jumped over the lazy sleeping dog',
-            expectedWikilinks: ['[[[[Mount] Escape]] [[[[BJJ]] Systems]]]]', '[[[[BJJ]] Systems]]', '[[Mount] Escape]]', '[[BJJ]]'],
-            expectedPageNames: ['[[Mount] Escape]] [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount] Escape', 'BJJ'],
-            expectedPageFileNames: ['[[Mount] Escape]] [[[[BJJ]] Systems]]', '[[BJJ]] Systems', 'Mount] Escape', 'BJJ'],
+            description: 'Unbalanced opening square brackets character in [[Apple] changes results as expected (interrupt on end bracket)',
+            input: 'The quick brown fox [[[[[[Apple] Microsoft]] [[[[Google]] Systems]]]] jumped over the lazy sleeping dog',
+            expectedWikilinks: ['[[[[Apple] Microsoft]] [[[[Google]] Systems]]]]', '[[[[Google]] Systems]]', '[[Apple] Microsoft]]', '[[Google]]'],
+            expectedPageNames: ['[[Apple] Microsoft]] [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple] Microsoft', 'Google'],
+            expectedPageFileNames: ['[[Apple] Microsoft]] [[[[Google]] Systems]]', '[[Google]] Systems', 'Apple] Microsoft', 'Google'],
         },
     ];
 
@@ -133,12 +133,12 @@ describe('WikilinkService.findInnermostWikilinkAtOffset', () => {
     });
 
     it('should find innermost in deeply nested structure', () => {
-        const input = 'The quick brown fox [[[[[[Mount]] Escape]] [[[[BJJ]] Systems]]]] jumped';
+        const input = 'The quick brown fox [[[[[[Apple]] Microsoft]] [[[[Google]] Systems]]]] jumped';
         const wikilinks = wikilinkService.extractWikilinks(input);
-        // "Mount" starts at position 26 in the string
+        // "Apple" starts at position 26 in the string
         const result = wikilinkService.findInnermostWikilinkAtOffset(wikilinks, 26);
         expect(result).toBeDefined();
-        expect(result!.pageName).toBe('Mount');
+        expect(result!.pageName).toBe('Apple');
     });
 });
 
@@ -189,16 +189,16 @@ describe('WikilinkService.computeLinkSegments', () => {
     });
 
     it('should handle deeply nested wikilinks with multiple children', () => {
-        const input = '[[[[[[Mount]] Escape]] [[[[BJJ]] Systems]]]]';
+        const input = '[[[[[[Apple]] Microsoft]] [[[[Google]] Systems]]]]';
         const wikilinks = wikilinkService.extractWikilinks(input);
         const segments = wikilinkService.computeLinkSegments(wikilinks);
 
         // Each segment should map to the innermost wikilink at that position
         const pageNames = segments.map(s => s.wikilink.pageName);
 
-        // The segments should include Mount, BJJ as innermost targets
-        expect(pageNames).toContain('Mount');
-        expect(pageNames).toContain('BJJ');
+        // The segments should include Apple, Google as innermost targets
+        expect(pageNames).toContain('Apple');
+        expect(pageNames).toContain('Google');
 
         // No segments should overlap
         for (let i = 1; i < segments.length; i++) {

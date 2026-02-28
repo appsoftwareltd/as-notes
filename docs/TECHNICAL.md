@@ -16,6 +16,15 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Full mode](#full-mode)
   - [Index update triggers](#index-update-triggers)
   - [Periodic scanning](#periodic-scanning)
+- [Aliases and front matter](#aliases-and-front-matter)
+  - [FrontMatterService](#frontmatterservice)
+  - [Alias indexing](#alias-indexing)
+  - [Alias resolution order](#alias-resolution-order)
+  - [Alias-aware rename tracking](#alias-aware-rename-tracking)
+- [Subfolder link resolution](#subfolder-link-resolution)
+  - [Index-based global resolution](#index-based-global-resolution)
+  - [Disambiguation algorithm](#disambiguation-algorithm)
+  - [Path distance calculation](#path-distance-calculation)
 - [Wikilink parsing](#wikilink-parsing)
   - [Stack-based bracket matching](#stack-based-bracket-matching)
   - [The Wikilink model](#the-wikilink-model)
@@ -198,6 +207,112 @@ A background `setInterval` runs `staleScan()` at a configurable interval (defaul
 - Files created or deleted outside VS Code
 
 The interval is read from `as-notes.periodicScanInterval`. Setting it to `0` disables periodic scanning. Changes to the setting take effect immediately (the interval is restarted on `onDidChangeConfiguration`).
+
+---
+
+## Aliases and front matter
+
+### FrontMatterService
+
+`FrontMatterService` (`src/FrontMatterService.ts`) is a lightweight, custom YAML front matter parser with no external dependencies. It handles the specific subset of YAML needed for `aliases:` (and extensible to future fields like `tags:`).
+
+**Parsing approach:**
+
+1. `extractFrontMatter(content)` finds text between the first two `---` lines at the start of a file. Returns `null` if no valid front matter block exists.
+2. `parseAliases(content)` extracts the `aliases:` field and returns a `string[]`.
+
+**Supported alias formats:**
+
+```yaml
+# List style
+aliases:
+  - Alias One
+  - Alias Two
+
+# Inline array style
+aliases: [Alias One, Alias Two]
+
+# Single value
+aliases: Alias One
+```
+
+**Value cleaning:** `cleanAliasValue()` strips surrounding quotes (`'` or `"`) and accidental `[[` / `]]` wikilink brackets from alias values. This prevents user errors from creating broken alias records.
+
+**In-place editing:** `updateAlias(content, oldAlias, newAlias)` modifies the front matter of a markdown file to replace a specific alias name. It returns the modified content string or `null` if the alias is not found. This preserves all formatting outside the targeted alias line.
+
+### Alias indexing
+
+During `IndexService.indexFileContent()`, after link parsing, `indexAliasesFromContent()` is called:
+
+1. A new `FrontMatterService` instance parses the content for aliases.
+2. `setAliasesForPage(pageId, aliasNames)` deletes all existing alias records for the page and inserts fresh ones.
+3. Each alias name is sanitised into a filename using the standard invalid-character replacement (`/ ? < > \ : * | "` → `_`).
+4. The `alias_filename` column stores the sanitised name with `.md` extension (e.g. `"Short Name"` → `"Short Name.md"`).
+
+Alias records cascade-delete when the parent page is removed.
+
+### Alias resolution order
+
+When resolving a wikilink (in `WikilinkFileService.resolveViaIndex()`), the index is queried in this order:
+
+1. **Direct filename match** — `findPagesByFilename()` (case-insensitive)
+2. **Alias match** — `resolveAlias()` (case-insensitive JOIN on `aliases` → `pages`)
+3. **Fallback** — return `undefined` (caller creates the file in source directory)
+
+The `resolvePageByFilename()` method on `IndexService` exposes this two-step lookup directly and returns `{ page, viaAlias }`.
+
+**Backlink counting** uses `getBacklinkCountIncludingAliases(pageId)`, which collects all filenames (the page's own filename plus all alias filenames) and counts matching links across the workspace in a single `IN (...)` query.
+
+### Alias-aware rename tracking
+
+The `WikilinkRenameTracker` classifies each detected rename as either:
+
+- **Direct rename** — the old link name matches a file directly → rename the file, update all references
+- **Alias rename** — the old link name resolves via `resolveAlias()` → update front matter on the canonical page, update all references, **no file rename**
+
+For alias renames:
+
+1. `FrontMatterService.updateAlias()` modifies the canonical page's front matter in-place.
+2. `updateLinksInWorkspace()` replaces all `[[OldAlias]]` references across the workspace with `[[NewAlias]]`.
+3. `IndexService.updateAliasRename()` updates the alias record and all link references in the index.
+4. The canonical page is re-indexed so its alias list is refreshed from the updated front matter.
+
+---
+
+## Subfolder link resolution
+
+### Index-based global resolution
+
+Before subfolder support, all links resolved to the same directory as the source file. With a persistent index, links now resolve globally: `[[My Page]]` finds `My Page.md` anywhere in the workspace.
+
+`WikilinkFileService` accepts an optional `IndexService` via constructor injection. When available, `resolveViaIndex()` queries the index before falling back to same-directory resolution.
+
+### Disambiguation algorithm
+
+When `findPagesByFilename()` returns multiple matches (same-named files in different folders):
+
+1. **Same directory** — if any candidate is in the same directory as the source file, it wins immediately.
+2. **Closest folder** — otherwise, `pickClosest()` selects the candidate with the smallest directory distance.
+
+This is implemented via `getPathDistance()` in `PathUtils.ts`.
+
+### Path distance calculation
+
+`getPathDistance(dirA, dirB)` computes the number of directory hops between two paths:
+
+```
+notes      ↔ notes      → 0 (same directory)
+notes      ↔ notes/sub  → 1 (one hop down)
+notes/a    ↔ notes/b    → 2 (one up, one down)
+.          ↔ deep/nested → 2 (two hops down from root)
+```
+
+The algorithm:
+1. Split both paths into segments (forward slashes).
+2. Find the common prefix length.
+3. Distance = (steps up from A to common ancestor) + (steps down from ancestor to B).
+
+Comparison is case-insensitive to match the case-insensitive filename resolution used elsewhere.
 
 ---
 
@@ -566,7 +681,7 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests use vitest and are split across two test files:
+Tests use vitest and are split across four test files:
 
 ### `WikilinkService.test.ts` (23 tests)
 
@@ -576,7 +691,15 @@ Tests use vitest and are split across two test files:
 
 3. **Segment computation** (6 tests) — empty input, single links, 2-level nesting, 3-level nesting, sibling links, deeply nested structures with multiple children.
 
-### `IndexService.test.ts` (39 tests)
+### `FrontMatterService.test.ts` (26 tests)
+
+1. **`extractFrontMatter`** (7 tests) — valid front matter extraction, no front matter, no closing fence, content before fence, multiple fence blocks, empty front matter, whitespace handling.
+
+2. **`parseAliases`** (11 tests) — list-style aliases, inline array, single inline value, no front matter, no `aliases:` field, empty aliases list, empty inline array, accidental `[[brackets]]` stripping, mixed formats, quoted values.
+
+3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
+
+### `IndexService.test.ts` (54 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
@@ -590,7 +713,13 @@ Tests use vitest and are split across two test files:
 
 6. **`indexFileContent`** (9 tests) — simple file, nested links, 3-level nesting, multi-line, title fallback, re-index, backlinks, empty file, filename sanitisation.
 
-7. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation (comparing index state with reparsed document), `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow (re-index + updateRename).
+7. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation, `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow.
+
+8. **Aliases** (15 tests) — alias storage from front matter, re-indexing replaces aliases, no-front-matter edge case, `resolveAlias()` success and failure, case-insensitive resolution, `resolvePageByFilename()` direct vs alias match, backlink count including aliases, `updateAliasRename()` for alias record and link references, `findPagesByFilename()` for subfolder resolution, cascade delete on page removal, filename sanitisation, `getPageById()`.
+
+### `WikilinkFileService.test.ts` (10 tests)
+
+1. **Path distance** (10 tests) — same directory (0), nested subdirectory (1), sibling directories (2), root to deep (3), deep to root (3), divergent paths, case-insensitive comparison, deeply nested to root, same prefix different branch, single segment root.
 
 Tests that depend on VS Code APIs (decorations, document links, hover, rename tracker event handling) are not unit-tested — they require the extension host and are verified via F5 manual testing.
 
@@ -598,20 +727,16 @@ Tests that depend on VS Code APIs (decorations, document links, hover, rename tr
 
 ## Known limitations and future considerations
 
-1. **Same-directory only** — target files are always resolved relative to the source file's directory. Cross-directory linking would require a path resolution strategy.
+1. **Rename detection by position** — the `(line, start_col)` key works when edits happen inside a wikilink. Edits that shift the wikilink's position (e.g. inserting text before it on the same line) are not detected as renames. This is correct behaviour but worth noting.
 
-2. **Rename detection by position** — the `(line, start_col)` key works when edits happen inside a wikilink. Edits that shift the wikilink's position (e.g. inserting text before it on the same line) are not detected as renames. This is correct behaviour but worth noting.
+2. **Large workspaces** — `updateLinksInWorkspace()` opens every `.md`/`.markdown` file in the workspace. For very large note collections, this could be slow. A `workspace.findTextInFiles` pre-filter could reduce the set of files to open. The index could also be used to narrow the search to files that actually contain the old link.
 
-3. **Large workspaces** — `updateLinksInWorkspace()` opens every `.md`/`.markdown` file in the workspace. For very large note collections, this could be slow. A `workspace.findTextInFiles` pre-filter could reduce the set of files to open. The index could also be used to narrow the search to files that actually contain the old link.
+3. **Concurrent edits** — the rename tracker processes one document at a time. Edits to other documents while a rename dialog is shown are handled by the index refresh in `refreshIndexAfterRename()`.
 
-4. **Concurrent edits** — the rename tracker processes one document at a time. Edits to other documents while a rename dialog is shown are handled by the index refresh in `refreshIndexAfterRename()`.
+4. **Sanitisation consolidation** — `sanitiseFileName()` is now shared via `PathUtils.ts`. The `Wikilink.ts` model still has its own inline sanitisation; a future cleanup could unify these.
 
-5. **Sanitisation duplication** — the invalid-filename-character regex exists in both `Wikilink.ts` and `WikilinkRenameTracker.ts`. A shared utility would reduce the risk of divergence.
+5. **Segment computation performance** — the character-by-character scan is O(n × m). For lines with many wikilinks, a sorted-endpoint sweep-line approach would be O(n log n). This has not been necessary in practice.
 
-6. **Segment computation performance** — the character-by-character scan is O(n × m). For lines with many wikilinks, a sorted-endpoint sweep-line approach would be O(n log n). This has not been necessary in practice.
+6. **Backlink panel** — a dedicated tree view or webview showing all incoming links for the active file. The index already has the data; only the UI needs building.
 
-7. **Aliases** — the `aliases` table is created but not yet populated. A future iteration will allow pages to have alternative names that resolve to the same file.
-
-8. **Backlink panel** — a dedicated tree view or webview showing all incoming links for the active file. The index already has the data; only the UI needs building.
-
-9. **Tags** — `#tag` syntax support with index-backed queries is planned for a future iteration.
+7. **Tags** — `#tag` syntax support with index-backed queries is planned for a future iteration.

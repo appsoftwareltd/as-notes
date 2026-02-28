@@ -4,6 +4,8 @@ import { WikilinkService } from './WikilinkService.js';
 import { WikilinkFileService } from './WikilinkFileService.js';
 import type { IndexService, LinkRow } from './IndexService.js';
 import type { IndexScanner } from './IndexScanner.js';
+import { sanitiseFileName } from './PathUtils.js';
+import { FrontMatterService } from './FrontMatterService.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -286,31 +288,64 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     /**
      * Show a single confirmation dialog for all detected renames,
      * then execute file renames and workspace-wide link updates.
+     *
+     * Renames are classified into two categories:
+     * - **Direct link renames**: the old name matched a file directly → rename the file + update references
+     * - **Alias renames**: the old name matched via alias → update front matter on canonical page + update references (no file rename)
      */
     private async promptAndPerformRenames(
         document: vscode.TextDocument,
         renames: DetectedRename[],
     ): Promise<void> {
-        // Build a user-facing summary of what will happen
+        // Classify each rename as alias or direct
+        interface ClassifiedRename extends DetectedRename {
+            isAlias: boolean;
+            canonicalPageId?: number;
+            canonicalPagePath?: string;
+        }
+
+        const classifiedRenames: ClassifiedRename[] = [];
         const renameDescriptions: string[] = [];
         const fileRenames: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[] = [];
 
         for (const r of renames) {
             const oldFileName = sanitiseFileName(r.oldPageName);
-            const newFileName = sanitiseFileName(r.newPageName);
 
-            const oldUri = await this.fileService.resolveTargetUriCaseInsensitive(
-                document.uri,
-                oldFileName,
-            );
-            const oldFileExists = await this.fileService.fileExists(oldUri);
+            // Check if the old link was an alias
+            const aliasResolution = this.indexService.isOpen
+                ? this.indexService.resolveAlias(oldFileName)
+                : undefined;
 
-            if (oldFileExists) {
-                const newUri = this.fileService.resolveTargetUri(document.uri, newFileName);
-                fileRenames.push({ oldUri, newUri, label: `${oldFileName}.md → ${newFileName}.md` });
-                renameDescriptions.push(`"${oldFileName}.md" → "${newFileName}.md"`);
+            if (aliasResolution) {
+                // Alias rename — no file rename, just update front matter + references
+                classifiedRenames.push({
+                    ...r,
+                    isAlias: true,
+                    canonicalPageId: aliasResolution.id,
+                    canonicalPagePath: aliasResolution.path,
+                });
+                renameDescriptions.push(
+                    `Alias: [[${r.oldPageName}]] → [[${r.newPageName}]] (on ${aliasResolution.filename})`,
+                );
             } else {
-                renameDescriptions.push(`[[${r.oldPageName}]] → [[${r.newPageName}]]`);
+                // Direct link rename — standard file rename flow
+                classifiedRenames.push({ ...r, isAlias: false });
+
+                const newFileName = sanitiseFileName(r.newPageName);
+                const oldResolution = await this.fileService.resolveTargetUriCaseInsensitive(
+                    document.uri,
+                    oldFileName,
+                );
+                const oldUri = oldResolution.uri;
+                const oldFileExists = await this.fileService.fileExists(oldUri);
+
+                if (oldFileExists) {
+                    const newUri = this.fileService.resolveTargetUri(document.uri, newFileName);
+                    fileRenames.push({ oldUri, newUri, label: `${oldFileName}.md → ${newFileName}.md` });
+                    renameDescriptions.push(`"${oldFileName}.md" → "${newFileName}.md"`);
+                } else {
+                    renameDescriptions.push(`[[${r.oldPageName}]] → [[${r.newPageName}]]`);
+                }
             }
         }
 
@@ -325,7 +360,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
         this.isProcessing = true;
         try {
-            // Rename files (outermost first — matches rename order)
+            // Process direct file renames (outermost first — matches rename order)
             for (const fr of fileRenames) {
                 const newFileAlreadyExists = await this.fileService.fileExists(fr.newUri);
                 if (newFileAlreadyExists) {
@@ -337,15 +372,24 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 }
             }
 
+            // Process alias renames — update front matter on canonical pages
+            for (const r of classifiedRenames) {
+                if (r.isAlias && r.canonicalPagePath) {
+                    await this.updateAliasFrontMatter(
+                        r.canonicalPagePath,
+                        r.oldPageName,
+                        r.newPageName,
+                    );
+                }
+            }
+
             // Update links across the workspace (outermost first)
             for (const r of renames) {
                 await this.updateLinksInWorkspace(r.oldPageName, r.newPageName);
             }
 
-            // Re-index all affected files so the index reflects the new state
-            // before we release control. This prevents a stale-index window
-            // where the next edit event could compare against outdated links.
-            await this.refreshIndexAfterRename(document, renames, fileRenames);
+            // Refresh the index
+            await this.refreshIndexAfterRename(document, classifiedRenames, fileRenames);
         } catch (err) {
             const detail = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Rename failed: ${detail}`);
@@ -355,13 +399,52 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     }
 
     /**
+     * Update the aliases front matter on the canonical page when an alias is renamed.
+     * Opens the canonical document, applies the front matter change, and saves.
+     */
+    private async updateAliasFrontMatter(
+        canonicalPagePath: string,
+        oldAliasName: string,
+        newAliasName: string,
+    ): Promise<void> {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!workspaceRoot) { return; }
+
+        const canonicalUri = vscode.Uri.joinPath(workspaceRoot, canonicalPagePath);
+        try {
+            const doc = await vscode.workspace.openTextDocument(canonicalUri);
+            const content = doc.getText();
+
+            const frontMatterService = new FrontMatterService();
+            const updatedContent = frontMatterService.updateAlias(content, oldAliasName, newAliasName);
+
+            if (updatedContent !== null) {
+                const edit = new vscode.WorkspaceEdit();
+                const fullRange = new vscode.Range(
+                    doc.lineAt(0).range.start,
+                    doc.lineAt(doc.lineCount - 1).range.end,
+                );
+                edit.replace(canonicalUri, fullRange, updatedContent);
+                await vscode.workspace.applyEdit(edit);
+                await doc.save();
+            }
+        } catch (err) {
+            console.warn(`as-notes: failed to update alias front matter for ${canonicalPagePath}:`, err);
+        }
+    }
+
+    /**
      * After a rename operation, ensure the index is consistent by
      * re-indexing all files that were touched (the source document,
      * renamed files, and any files whose link text was updated).
+     *
+     * For alias renames, the alias record and link references are updated
+     * in the index; for direct renames, the page path and link references
+     * are updated.
      */
     private async refreshIndexAfterRename(
         sourceDocument: vscode.TextDocument,
-        renames: DetectedRename[],
+        renames: (DetectedRename & { isAlias: boolean; canonicalPageId?: number })[],
         fileRenames: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[],
     ): Promise<void> {
         if (!this.indexService.isOpen) { return; }
@@ -392,15 +475,43 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             }
         }
 
-        // Update link references in the index for the renamed page names
+        // Update the index for each rename
         for (const r of renames) {
             const oldFileName = sanitiseFileName(r.oldPageName);
             const newFileName = sanitiseFileName(r.newPageName);
-            this.indexService.updateRename(
-                `${oldFileName}.md`,
-                r.newPageName,
-                `${newFileName}.md`,
-            );
+
+            if (r.isAlias && r.canonicalPageId !== undefined) {
+                // Alias rename: update alias record + link references
+                this.indexService.updateAliasRename(
+                    r.oldPageName,
+                    r.newPageName,
+                    r.canonicalPageId,
+                );
+
+                // Re-index the canonical page so its aliases are re-read from front matter
+                const canonicalPage = this.indexService.getPageById?.(r.canonicalPageId);
+                if (canonicalPage) {
+                    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+                    if (workspaceRoot) {
+                        const canonicalUri = vscode.Uri.joinPath(workspaceRoot, canonicalPage.path);
+                        if (!indexedUris.has(canonicalUri.toString())) {
+                            try {
+                                await this.indexScanner.indexFile(canonicalUri);
+                                indexedUris.add(canonicalUri.toString());
+                            } catch {
+                                // Page may not exist
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Direct rename: update page path + link references
+                this.indexService.updateRename(
+                    `${oldFileName}.md`,
+                    r.newPageName,
+                    `${newFileName}.md`,
+                );
+            }
         }
 
         // Persist
@@ -453,10 +564,4 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             }
         }
     }
-}
-
-/** Replace characters invalid in filenames with underscores. */
-function sanitiseFileName(pageName: string): string {
-    const invalids = /[\/\?<>\\:\*\|":]/g;
-    return pageName.replace(invalids, '_');
 }

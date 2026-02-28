@@ -582,3 +582,232 @@ describe('IndexService — rename support', () => {
         expect(service.getBacklinkCount('Page B.md')).toBe(1);
     });
 });
+
+describe('IndexService — aliases', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should store aliases from front matter during indexFileContent', () => {
+        const content = '---\naliases:\n  - My Alias\n  - Other Name\n---\n\n# Page Title\n\nBody text.';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        const page = service.getPageByPath('page.md')!;
+        const aliases = service.getAliasesForPage(page.id);
+        expect(aliases).toHaveLength(2);
+        expect(aliases.map(a => a.alias_name).sort()).toEqual(['My Alias', 'Other Name']);
+        expect(aliases.map(a => a.alias_filename).sort()).toEqual(['My Alias.md', 'Other Name.md']);
+    });
+
+    it('should re-index aliases replacing old ones', () => {
+        const content1 = '---\naliases: [Old Alias]\n---\n\n# Page';
+        service.indexFileContent('page.md', 'page.md', content1, 1000);
+
+        const page1 = service.getPageByPath('page.md')!;
+        expect(service.getAliasesForPage(page1.id)).toHaveLength(1);
+        expect(service.getAliasesForPage(page1.id)[0].alias_name).toBe('Old Alias');
+
+        // Re-index with different aliases
+        const content2 = '---\naliases: [New Alias, Another]\n---\n\n# Page';
+        service.indexFileContent('page.md', 'page.md', content2, 2000);
+
+        const page2 = service.getPageByPath('page.md')!;
+        const aliases = service.getAliasesForPage(page2.id);
+        expect(aliases).toHaveLength(2);
+        expect(aliases.map(a => a.alias_name).sort()).toEqual(['Another', 'New Alias']);
+    });
+
+    it('should store no aliases when content has no front matter', () => {
+        const content = '# Just a Page\n\nNo front matter.';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        const page = service.getPageByPath('page.md')!;
+        expect(service.getAliasesForPage(page.id)).toHaveLength(0);
+    });
+
+    it('should resolve alias to canonical page', () => {
+        const content = '---\naliases: [Quick Note]\n---\n\n# My Page';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        const resolved = service.resolveAlias('Quick Note');
+        expect(resolved).toBeDefined();
+        expect(resolved!.filename).toBe('page.md');
+        expect(resolved!.title).toBe('My Page');
+    });
+
+    it('should resolve alias case-insensitively', () => {
+        const content = '---\naliases: [Quick Note]\n---\n\n# My Page';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        const resolved = service.resolveAlias('quick note');
+        expect(resolved).toBeDefined();
+        expect(resolved!.filename).toBe('page.md');
+    });
+
+    it('should return undefined for non-existent alias', () => {
+        const content = '---\naliases: [Real Alias]\n---\n\n# Page';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        expect(service.resolveAlias('Nonexistent')).toBeUndefined();
+    });
+
+    it('should resolve page by filename: direct match first, then alias', () => {
+        // Direct page
+        service.indexFileContent('Direct.md', 'Direct.md', '# Direct Page', 1000);
+        // Page with alias
+        const aliasContent = '---\naliases: [Shortcut]\n---\n\n# Canonical Page';
+        service.indexFileContent('Canonical.md', 'Canonical.md', aliasContent, 1000);
+
+        // Direct match
+        const direct = service.resolvePageByFilename('Direct.md');
+        expect(direct).toBeDefined();
+        expect(direct!.viaAlias).toBe(false);
+        expect(direct!.page.filename).toBe('Direct.md');
+
+        // Alias match
+        const alias = service.resolvePageByFilename('Shortcut.md');
+        expect(alias).toBeDefined();
+        expect(alias!.viaAlias).toBe(true);
+        expect(alias!.page.filename).toBe('Canonical.md');
+
+        // No match
+        const none = service.resolvePageByFilename('Unknown.md');
+        expect(none).toBeUndefined();
+    });
+
+    it('should count backlinks including alias references', () => {
+        // Page with alias
+        const aliasContent = '---\naliases: [Shortcut]\n---\n\n# Target Page';
+        service.indexFileContent('target.md', 'target.md', aliasContent, 1000);
+
+        // Page linking to target directly via its filename
+        service.indexFileContent('linker1.md', 'linker1.md', '# Linker 1\n\nSee [[target]]\n', 1000);
+
+        // Page linking via alias
+        service.indexFileContent('linker2.md', 'linker2.md', '# Linker 2\n\nSee [[Shortcut]]\n', 1000);
+
+        const targetPage = service.getPageByPath('target.md')!;
+
+        // Direct backlinks only (matching target.md)
+        expect(service.getBacklinkCount('target.md')).toBe(1);
+
+        // Including aliases (target.md + Shortcut.md)
+        expect(service.getBacklinkCountIncludingAliases(targetPage.id)).toBe(2);
+    });
+
+    it('should update alias rename in the index', () => {
+        const content = '---\naliases: [Old Name]\n---\n\n# Page';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        // Another page references the alias
+        service.indexFileContent('linker.md', 'linker.md', '# Linker\n\nSee [[Old Name]]\n', 1000);
+
+        const page = service.getPageByPath('page.md')!;
+        service.updateAliasRename('Old Name', 'New Name', page.id);
+
+        // Alias record updated
+        const aliases = service.getAliasesForPage(page.id);
+        expect(aliases).toHaveLength(1);
+        expect(aliases[0].alias_name).toBe('New Name');
+        expect(aliases[0].alias_filename).toBe('New Name.md');
+
+        // Link references updated
+        const linkerPage = service.getPageByPath('linker.md')!;
+        const links = service.getLinksForPage(linkerPage.id);
+        expect(links[0].page_name).toBe('New Name');
+        expect(links[0].page_filename).toBe('New Name.md');
+    });
+
+    it('should find pages by filename for subfolder resolution', () => {
+        service.indexFileContent('notes/Page.md', 'Page.md', '# Page in notes', 1000);
+        service.indexFileContent('archive/Page.md', 'Page.md', '# Page in archive', 1000);
+        service.indexFileContent('Other.md', 'Other.md', '# Other', 1000);
+
+        const matches = service.findPagesByFilename('Page.md');
+        expect(matches).toHaveLength(2);
+        expect(matches.map(m => m.path).sort()).toEqual(['archive/Page.md', 'notes/Page.md']);
+
+        const noMatch = service.findPagesByFilename('Nonexistent.md');
+        expect(noMatch).toHaveLength(0);
+    });
+
+    it('should remove aliases when page is removed', () => {
+        const content = '---\naliases: [My Alias]\n---\n\n# Page';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        const page = service.getPageByPath('page.md')!;
+        expect(service.getAliasesForPage(page.id)).toHaveLength(1);
+        expect(service.resolveAlias('My Alias')).toBeDefined();
+
+        service.removePage('page.md');
+
+        expect(service.resolveAlias('My Alias')).toBeUndefined();
+    });
+
+    it('should sanitise alias filenames for invalid characters', () => {
+        const content = '---\naliases: [What is 1/2?]\n---\n\n# Page';
+        service.indexFileContent('page.md', 'page.md', content, 1000);
+
+        const page = service.getPageByPath('page.md')!;
+        const aliases = service.getAliasesForPage(page.id);
+        expect(aliases).toHaveLength(1);
+        expect(aliases[0].alias_name).toBe('What is 1/2?');
+        expect(aliases[0].alias_filename).toBe('What is 1_2_.md');
+    });
+
+    it('should get a page by its numeric id', () => {
+        const content = '# My Page\n\nSome text';
+        service.indexFileContent('notes/page.md', 'page.md', content, 1000);
+
+        const pageByPath = service.getPageByPath('notes/page.md')!;
+        const pageById = service.getPageById(pageByPath.id);
+        expect(pageById).toBeDefined();
+        expect(pageById!.path).toBe('notes/page.md');
+        expect(pageById!.title).toBe('My Page');
+    });
+
+    it('should return undefined for non-existent page id', () => {
+        expect(service.getPageById(9999)).toBeUndefined();
+    });
+
+    it('should handle updateAliasRename updating both alias record and link references', () => {
+        // Setup: page with alias, and a link referencing the alias
+        const canonical = '---\naliases: [Old Alias]\n---\n\n# Canonical';
+        service.indexFileContent('canonical.md', 'canonical.md', canonical, 1000);
+
+        // Another page has a link using the alias name
+        const linker = '# Linker\n\nSee [[Old Alias]] for details.';
+        service.indexFileContent('linker.md', 'linker.md', linker, 1000);
+
+        const canonicalPage = service.getPageByPath('canonical.md')!;
+
+        // Verify initial state
+        const aliases = service.getAliasesForPage(canonicalPage.id);
+        expect(aliases).toHaveLength(1);
+        expect(aliases[0].alias_name).toBe('Old Alias');
+
+        const links = service.getLinksForPage(service.getPageByPath('linker.md')!.id);
+        expect(links[0].page_name).toBe('Old Alias');
+
+        // Perform alias rename
+        service.updateAliasRename('Old Alias', 'New Alias', canonicalPage.id);
+
+        // Verify alias record updated
+        const updatedAliases = service.getAliasesForPage(canonicalPage.id);
+        expect(updatedAliases).toHaveLength(1);
+        expect(updatedAliases[0].alias_name).toBe('New Alias');
+        expect(updatedAliases[0].alias_filename).toBe('New Alias.md');
+
+        // Verify link references updated
+        const updatedLinks = service.getLinksForPage(service.getPageByPath('linker.md')!.id);
+        expect(updatedLinks[0].page_name).toBe('New Alias');
+        expect(updatedLinks[0].page_filename).toBe('New Alias.md');
+    });
+});

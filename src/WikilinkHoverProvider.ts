@@ -40,10 +40,12 @@ export class WikilinkHoverProvider implements vscode.HoverProvider {
             return undefined;
         }
 
-        const targetUri = await this.fileService.resolveTargetUriCaseInsensitive(
+        const resolution = await this.fileService.resolveTargetUriCaseInsensitive(
             document.uri,
             wikilink.pageFileName,
         );
+        const targetUri = resolution.uri;
+        const viaAlias = resolution.viaAlias;
         const exists = await this.fileService.fileExists(targetUri);
 
         const range = new vscode.Range(
@@ -53,16 +55,37 @@ export class WikilinkHoverProvider implements vscode.HoverProvider {
 
         const status = exists ? '$(file) Existing file' : '$(new-file) Will be created';
 
+        // Resolve display name: if via alias, show the canonical filename
+        const displayFilename = viaAlias
+            ? `${wikilink.pageFileName}.md → ${targetUri.fsPath.split(/[\\/]/).pop()}`
+            : `${wikilink.pageFileName}.md`;
+
+        let aliasInfo = '';
+        if (viaAlias) {
+            aliasInfo = '\n\n$(symbol-reference) Alias';
+        }
+
         let backlinkInfo = '';
         if (this.indexService?.isOpen) {
-            const count = this.indexService.getBacklinkCount(wikilink.pageFileName);
-            if (count > 0) {
-                backlinkInfo = `\n\n$(references) ${count} backlink${count === 1 ? '' : 's'}`;
+            // If via alias, count backlinks including aliases for the canonical page
+            if (viaAlias) {
+                const resolved = this.indexService.resolveAlias(wikilink.pageFileName);
+                if (resolved) {
+                    const count = this.indexService.getBacklinkCountIncludingAliases(resolved.id);
+                    if (count > 0) {
+                        backlinkInfo = `\n\n$(references) ${count} backlink${count === 1 ? '' : 's'}`;
+                    }
+                }
+            } else {
+                const count = this.indexService.getBacklinkCount(wikilink.pageFileName);
+                if (count > 0) {
+                    backlinkInfo = `\n\n$(references) ${count} backlink${count === 1 ? '' : 's'}`;
+                }
             }
         }
 
         const markdown = new vscode.MarkdownString(
-            `**${wikilink.pageFileName}.md**\n\n${status}${backlinkInfo}`,
+            `**${displayFilename}**\n\n${status}${aliasInfo}${backlinkInfo}`,
         );
         markdown.supportThemeIcons = true;
 
