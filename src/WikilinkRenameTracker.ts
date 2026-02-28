@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { Wikilink } from './Wikilink.js';
 import { WikilinkService } from './WikilinkService.js';
 import { WikilinkFileService } from './WikilinkFileService.js';
 
@@ -14,18 +15,45 @@ interface WikilinkSnapshot {
 }
 
 /**
+ * Detected rename: a wikilink at the same position now has a different pageName.
+ */
+interface DetectedRename {
+    oldPageName: string;
+    newPageName: string;
+    line: number;
+    startPosition: number;
+    endPosition: number;
+}
+
+/**
+ * Tracks where the cursor was during editing — used to detect cursor-exit.
+ */
+interface PendingEditInfo {
+    /** Document URI key. */
+    docKey: string;
+    /** Line number the cursor was on during the last edit. */
+    line: number;
+    /** Start position of the outermost wikilink the cursor was inside. */
+    wikilinkStartPos: number;
+}
+
+/**
  * Tracks wikilink edits and offers to rename the corresponding file
  * and update all matching links across the workspace.
  *
  * Detection works by maintaining a snapshot of all wikilinks in each
- * open markdown document. When a document change is debounced (2 s),
- * the old and new snapshots are compared by (line, startPosition).
- * A match at the same position with a different `pageName` is treated
- * as a rename candidate.
+ * open markdown document. When a rename check fires, old and new snapshots
+ * are compared by (line, startPosition). A match at the same position
+ * with a different `pageName` is treated as a rename candidate.
  *
- * Only the innermost rename is acted on when nested links change
- * (editing `[[Inner]]` inside `[[Outer [[Inner]] text]]` changes
- * both pageNames, but only the inner rename is prompted).
+ * ALL nesting levels are processed: editing `[[Inner]]` inside
+ * `[[Outer [[Inner]] text]]` renames both the inner and outer pages.
+ * Outermost renames are applied first so that workspace-wide text
+ * replacements cascade correctly.
+ *
+ * Rename checks fire when:
+ *  - The cursor moves outside the edited wikilink (click or keypress)
+ *  - The user navigates away from the page (active editor change)
  */
 export class WikilinkRenameTracker implements vscode.Disposable {
     private readonly wikilinkService: WikilinkService;
@@ -35,13 +63,11 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     /** Document URI → most-recent wikilink snapshots. */
     private readonly snapshots = new Map<string, WikilinkSnapshot[]>();
 
-    /** Document URI → pending debounce timer. */
-    private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    /** Tracks the wikilink the cursor was inside during the most recent edit. */
+    private pendingEdit: PendingEditInfo | undefined;
 
     /** Guards against re-entrant change events during a rename operation. */
     private isProcessing = false;
-
-    private static readonly DEBOUNCE_MS = 2000;
 
     constructor(wikilinkService: WikilinkService, fileService: WikilinkFileService) {
         this.wikilinkService = wikilinkService;
@@ -50,11 +76,8 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         this.disposables.push(
             vscode.workspace.onDidChangeTextDocument((e) => this.onDocumentChanged(e)),
             vscode.workspace.onDidOpenTextDocument((doc) => this.takeSnapshot(doc)),
-            vscode.window.onDidChangeActiveTextEditor((editor) => {
-                if (editor) {
-                    this.takeSnapshot(editor.document);
-                }
-            }),
+            vscode.window.onDidChangeActiveTextEditor((editor) => this.onActiveEditorChanged(editor)),
+            vscode.window.onDidChangeTextEditorSelection((e) => this.onSelectionChanged(e)),
         );
 
         // Baseline snapshot for every open markdown document
@@ -64,9 +87,6 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     }
 
     dispose(): void {
-        for (const timer of this.debounceTimers.values()) {
-            clearTimeout(timer);
-        }
         for (const d of this.disposables) {
             d.dispose();
         }
@@ -123,26 +143,101 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             return;
         }
 
-        // Reset debounce timer
-        const existing = this.debounceTimers.get(docKey);
-        if (existing) {
-            clearTimeout(existing);
+        // Track which wikilink the cursor is inside (for cursor-exit detection)
+        const editor = vscode.window.activeTextEditor;
+        if (editor && editor.document.uri.toString() === docKey) {
+            const cursorPos = editor.selection.active;
+            const lineText = event.document.lineAt(cursorPos.line).text;
+            const wikilinks = this.wikilinkService.extractWikilinks(lineText);
+            const outermost = this.findOutermostWikilinkAtOffset(wikilinks, cursorPos.character);
+
+            if (outermost) {
+                this.pendingEdit = {
+                    docKey,
+                    line: cursorPos.line,
+                    wikilinkStartPos: outermost.startPositionInText,
+                };
+            }
+        }
+    }
+
+    // ── Active editor change detection ─────────────────────────────────
+
+    /**
+     * When the user switches to a different editor, check for renames
+     * in the previously active document.
+     */
+    private onActiveEditorChanged(editor: vscode.TextEditor | undefined): void {
+        if (this.pendingEdit) {
+            const pendingDocKey = this.pendingEdit.docKey;
+            this.pendingEdit = undefined;
+
+            const doc = vscode.workspace.textDocuments.find(
+                (d) => d.uri.toString() === pendingDocKey,
+            );
+            if (doc) {
+                this.checkForRenames(doc);
+            }
         }
 
-        this.debounceTimers.set(
-            docKey,
-            setTimeout(async () => {
-                this.debounceTimers.delete(docKey);
+        if (editor) {
+            this.takeSnapshot(editor.document);
+        }
+    }
 
-                // Re-fetch the document — the reference in the event may be stale
-                const doc = vscode.workspace.textDocuments.find(
-                    (d) => d.uri.toString() === docKey,
-                );
-                if (doc) {
-                    await this.checkForRenames(doc);
+    // ── Cursor-exit detection ──────────────────────────────────────────
+
+    private onSelectionChanged(event: vscode.TextEditorSelectionChangeEvent): void {
+        if (this.isProcessing || !this.pendingEdit) {
+            return;
+        }
+
+        const docKey = event.textEditor.document.uri.toString();
+        if (docKey !== this.pendingEdit.docKey) {
+            return;
+        }
+
+        const cursorPos = event.selections[0].active;
+        const document = event.textEditor.document;
+        const lineText = document.lineAt(cursorPos.line).text;
+        const wikilinks = this.wikilinkService.extractWikilinks(lineText);
+        const outermost = this.findOutermostWikilinkAtOffset(wikilinks, cursorPos.character);
+
+        // Cursor has left the wikilink if:
+        // - Cursor moved to a different line
+        // - Cursor is no longer inside any wikilink
+        // - Cursor is inside a different outermost wikilink
+        const cursorExited =
+            cursorPos.line !== this.pendingEdit.line ||
+            !outermost ||
+            outermost.startPositionInText !== this.pendingEdit.wikilinkStartPos;
+
+        if (cursorExited) {
+            this.pendingEdit = undefined;
+            this.checkForRenames(document);
+        }
+    }
+
+    // ── Helper ─────────────────────────────────────────────────────────
+
+    /**
+     * Find the outermost (largest) wikilink containing the given offset.
+     */
+    private findOutermostWikilinkAtOffset(
+        wikilinks: Wikilink[],
+        offset: number,
+    ): Wikilink | undefined {
+        let best: Wikilink | undefined;
+
+        for (const wl of wikilinks) {
+            if (offset >= wl.startPositionInText && offset <= wl.endPositionInText) {
+                if (!best || wl.length > best.length) {
+                    best = wl;
                 }
-            }, WikilinkRenameTracker.DEBOUNCE_MS),
-        );
+            }
+        }
+
+        return best;
     }
 
     // ── Rename detection ───────────────────────────────────────────────
@@ -177,14 +272,6 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         }
 
         // Detect renames: same (line, startPos), different pageName
-        interface DetectedRename {
-            oldPageName: string;
-            newPageName: string;
-            line: number;
-            startPosition: number;
-            endPosition: number;
-        }
-
         const renames: DetectedRename[] = [];
 
         for (const newSnap of newSnapshots) {
@@ -202,50 +289,63 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             }
         }
 
-        // Keep only innermost renames — editing an inner link changes the
-        // outer link's pageName too; we only want to act on the inner one.
-        const innermostRenames = renames.filter((r) =>
-            !renames.some(
-                (other) =>
-                    other !== r &&
-                    other.line === r.line &&
-                    other.startPosition > r.startPosition &&
-                    other.endPosition < r.endPosition,
-            ),
-        );
+        if (renames.length === 0) {
+            this.snapshots.set(docKey, newSnapshots);
+            return;
+        }
 
         // Update snapshot before prompting (prevents re-detection if the
         // user takes a while to respond to the dialog)
         this.snapshots.set(docKey, newSnapshots);
 
-        for (const rename of innermostRenames) {
-            await this.promptAndPerformRename(
-                document,
-                rename.oldPageName,
-                rename.newPageName,
-            );
-        }
+        // Sort outermost first (largest range) so workspace replacements
+        // for outer links happen before inner ones. This is correct because
+        // replacing `[[Outer [[Inner]] text]]` in other files also replaces
+        // the inner portion, so the inner pass only affects files that have
+        // the inner link standalone (not wrapped in the outer).
+        renames.sort((a, b) =>
+            (b.endPosition - b.startPosition) - (a.endPosition - a.startPosition),
+        );
+
+        await this.promptAndPerformRenames(document, renames);
     }
 
     // ── Rename execution ───────────────────────────────────────────────
 
-    private async promptAndPerformRename(
+    /**
+     * Show a single confirmation dialog for all detected renames,
+     * then execute file renames and workspace-wide link updates.
+     */
+    private async promptAndPerformRenames(
         document: vscode.TextDocument,
-        oldPageName: string,
-        newPageName: string,
+        renames: DetectedRename[],
     ): Promise<void> {
-        const oldFileName = sanitiseFileName(oldPageName);
-        const newFileName = sanitiseFileName(newPageName);
+        // Build a user-facing summary of what will happen
+        const renameDescriptions: string[] = [];
+        const fileRenames: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[] = [];
 
-        const oldUri = await this.fileService.resolveTargetUriCaseInsensitive(
-            document.uri,
-            oldFileName,
-        );
-        const oldFileExists = await this.fileService.fileExists(oldUri);
+        for (const r of renames) {
+            const oldFileName = sanitiseFileName(r.oldPageName);
+            const newFileName = sanitiseFileName(r.newPageName);
 
-        const message = oldFileExists
-            ? `Rename "${oldPageName}" to "${newPageName}"? This will rename the file and update all matching links.`
-            : `Rename all links from "[[${oldPageName}]]" to "[[${newPageName}]]"?`;
+            const oldUri = await this.fileService.resolveTargetUriCaseInsensitive(
+                document.uri,
+                oldFileName,
+            );
+            const oldFileExists = await this.fileService.fileExists(oldUri);
+
+            if (oldFileExists) {
+                const newUri = this.fileService.resolveTargetUri(document.uri, newFileName);
+                fileRenames.push({ oldUri, newUri, label: `${oldFileName}.md → ${newFileName}.md` });
+                renameDescriptions.push(`"${oldFileName}.md" → "${newFileName}.md"`);
+            } else {
+                renameDescriptions.push(`[[${r.oldPageName}]] → [[${r.newPageName}]]`);
+            }
+        }
+
+        const message = renames.length === 1
+            ? `Rename ${renameDescriptions[0]}? This will update all matching links.`
+            : `Rename ${renames.length} links?\n${renameDescriptions.join('\n')}\nThis will update all matching links.`;
 
         const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
         if (choice !== 'Yes') {
@@ -254,22 +354,22 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
         this.isProcessing = true;
         try {
-            // Rename the target file if it exists
-            if (oldFileExists) {
-                const newUri = this.fileService.resolveTargetUri(document.uri, newFileName);
-                const newFileAlreadyExists = await this.fileService.fileExists(newUri);
-
+            // Rename files (outermost first — matches rename order)
+            for (const fr of fileRenames) {
+                const newFileAlreadyExists = await this.fileService.fileExists(fr.newUri);
                 if (newFileAlreadyExists) {
                     vscode.window.showWarningMessage(
-                        `Cannot rename file: "${newFileName}.md" already exists.`,
+                        `Cannot rename: "${fr.label}" — target already exists.`,
                     );
                 } else {
-                    await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
+                    await vscode.workspace.fs.rename(fr.oldUri, fr.newUri, { overwrite: false });
                 }
             }
 
-            // Update every matching link across the workspace
-            await this.updateLinksInWorkspace(oldPageName, newPageName);
+            // Update links across the workspace (outermost first)
+            for (const r of renames) {
+                await this.updateLinksInWorkspace(r.oldPageName, r.newPageName);
+            }
         } catch (err) {
             const detail = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Rename failed: ${detail}`);
