@@ -1,0 +1,43 @@
+{
+    "name": "as-notes",
+    "displayName": "AS Notes - Wikilink Navigation",
+    "description": "Navigate markdown files using wikilinks. Highlights wikilinks in blue, supports nested links, and creates missing pages on navigation.",
+    "version": "0.1.0",
+    "publisher": "as-notes",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onLanguage:markdown"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "languages": [
+            {
+                "id": "markdown",
+                "extensions": [
+                    ".md",
+                    ".markdown"
+                ]
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run build",
+        "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+        "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@types/vscode": "^1.85.0",
+        "esbuild": "^0.24.0",
+        "typescript": "^5.7.0",
+        "vitest": "^3.0.0"
+    }
+}

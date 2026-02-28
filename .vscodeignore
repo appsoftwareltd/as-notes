@@ -1,0 +1,12 @@
+.vscode/**
+.vscode-test/**
+temp-src/**
+agents/**
+src/**
+!dist/**
+node_modules/**
+.gitignore
+tsconfig.json
+vitest.config.ts
+AGENTS.md
+AGENTS.md.sync
