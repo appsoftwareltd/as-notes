@@ -23,21 +23,46 @@
                     ".markdown"
                 ]
             }
-        ]
+        ],
+        "commands": [
+            {
+                "command": "as-notes.initWorkspace",
+                "title": "AS Notes: Initialise Workspace"
+            },
+            {
+                "command": "as-notes.rebuildIndex",
+                "title": "AS Notes: Rebuild Index"
+            }
+        ],
+        "configuration": {
+            "title": "AS Notes",
+            "properties": {
+                "as-notes.periodicScanInterval": {
+                    "type": "number",
+                    "default": 300,
+                    "minimum": 30,
+                    "description": "Interval in seconds between automatic background scans for file changes. Set to 0 to disable periodic scanning."
+                }
+            }
+        }
     },
     "scripts": {
         "vscode:prepublish": "npm run build",
-        "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-        "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+        "build": "node build.mjs",
+        "watch": "node build.mjs --watch",
         "test": "vitest run",
         "test:watch": "vitest",
         "lint": "tsc --noEmit"
     },
     "devDependencies": {
         "@types/node": "^20.11.0",
+        "@types/sql.js": "^1.4.9",
         "@types/vscode": "^1.85.0",
         "esbuild": "^0.24.0",
         "typescript": "^5.7.0",
         "vitest": "^3.0.0"
+    },
+    "dependencies": {
+        "sql.js": "^1.14.0"
     }
 }

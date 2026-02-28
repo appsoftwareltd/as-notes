@@ -2,17 +2,8 @@ import * as vscode from 'vscode';
 import { Wikilink } from './Wikilink.js';
 import { WikilinkService } from './WikilinkService.js';
 import { WikilinkFileService } from './WikilinkFileService.js';
-
-/**
- * Snapshot of a wikilink's identity and position within a document.
- * Used to detect renames by comparing snapshots before and after edits.
- */
-interface WikilinkSnapshot {
-    pageName: string;
-    startPosition: number;
-    endPosition: number;
-    line: number;
-}
+import type { IndexService, LinkRow } from './IndexService.js';
+import type { IndexScanner } from './IndexScanner.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -41,10 +32,12 @@ interface PendingEditInfo {
  * Tracks wikilink edits and offers to rename the corresponding file
  * and update all matching links across the workspace.
  *
- * Detection works by maintaining a snapshot of all wikilinks in each
- * open markdown document. When a rename check fires, old and new snapshots
- * are compared by (line, startPosition). A match at the same position
- * with a different `pageName` is treated as a rename candidate.
+ * Detection works by comparing the current document state against the
+ * IndexService (whose link records represent the last-indexed state).
+ * When a rename check fires, old links are read from the index and
+ * compared by (line, start_col) to the current document's wikilinks.
+ * A match at the same position with a different `pageName` is treated
+ * as a rename candidate.
  *
  * ALL nesting levels are processed: editing `[[Inner]]` inside
  * `[[Outer [[Inner]] text]]` renames both the inner and outer pages.
@@ -58,10 +51,9 @@ interface PendingEditInfo {
 export class WikilinkRenameTracker implements vscode.Disposable {
     private readonly wikilinkService: WikilinkService;
     private readonly fileService: WikilinkFileService;
+    private readonly indexService: IndexService;
+    private readonly indexScanner: IndexScanner;
     private readonly disposables: vscode.Disposable[] = [];
-
-    /** Document URI → most-recent wikilink snapshots. */
-    private readonly snapshots = new Map<string, WikilinkSnapshot[]>();
 
     /** Tracks the wikilink the cursor was inside during the most recent edit. */
     private pendingEdit: PendingEditInfo | undefined;
@@ -69,57 +61,28 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     /** Guards against re-entrant change events during a rename operation. */
     private isProcessing = false;
 
-    constructor(wikilinkService: WikilinkService, fileService: WikilinkFileService) {
+    constructor(
+        wikilinkService: WikilinkService,
+        fileService: WikilinkFileService,
+        indexService: IndexService,
+        indexScanner: IndexScanner,
+    ) {
         this.wikilinkService = wikilinkService;
         this.fileService = fileService;
+        this.indexService = indexService;
+        this.indexScanner = indexScanner;
 
         this.disposables.push(
             vscode.workspace.onDidChangeTextDocument((e) => this.onDocumentChanged(e)),
-            vscode.workspace.onDidOpenTextDocument((doc) => this.takeSnapshot(doc)),
             vscode.window.onDidChangeActiveTextEditor((editor) => this.onActiveEditorChanged(editor)),
             vscode.window.onDidChangeTextEditorSelection((e) => this.onSelectionChanged(e)),
         );
-
-        // Baseline snapshot for every open markdown document
-        for (const doc of vscode.workspace.textDocuments) {
-            this.takeSnapshot(doc);
-        }
     }
 
     dispose(): void {
         for (const d of this.disposables) {
             d.dispose();
         }
-    }
-
-    // ── Snapshot management ────────────────────────────────────────────
-
-    /**
-     * Record every wikilink in the document as a snapshot.
-     * Called on open, on active-editor change, and after rename operations.
-     */
-    private takeSnapshot(document: vscode.TextDocument): void {
-        if (document.languageId !== 'markdown') {
-            return;
-        }
-
-        const snaps: WikilinkSnapshot[] = [];
-
-        for (let line = 0; line < document.lineCount; line++) {
-            const text = document.lineAt(line).text;
-            const wikilinks = this.wikilinkService.extractWikilinks(text);
-
-            for (const wl of wikilinks) {
-                snaps.push({
-                    pageName: wl.pageName,
-                    startPosition: wl.startPositionInText,
-                    endPosition: wl.endPositionInText,
-                    line,
-                });
-            }
-        }
-
-        this.snapshots.set(document.uri.toString(), snaps);
     }
 
     // ── Change detection ───────────────────────────────────────────────
@@ -137,9 +100,10 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
         const docKey = event.document.uri.toString();
 
-        // Ensure we have a baseline snapshot
-        if (!this.snapshots.has(docKey)) {
-            this.takeSnapshot(event.document);
+        // Only track edits for files the index knows about
+        const relativePath = vscode.workspace.asRelativePath(event.document.uri, false);
+        const page = this.indexService.getPageByPath(relativePath);
+        if (!page) {
             return;
         }
 
@@ -178,10 +142,6 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             if (doc) {
                 this.checkForRenames(doc);
             }
-        }
-
-        if (editor) {
-            this.takeSnapshot(editor.document);
         }
     }
 
@@ -243,26 +203,42 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     // ── Rename detection ───────────────────────────────────────────────
 
     private async checkForRenames(document: vscode.TextDocument): Promise<void> {
-        const docKey = document.uri.toString();
-        const oldSnapshots = this.snapshots.get(docKey);
-        if (!oldSnapshots) {
+        if (!this.indexService.isOpen) {
             return;
         }
 
-        // Index old snapshots by (line, startPosition)
-        const oldMap = new Map<string, WikilinkSnapshot>();
-        for (const snap of oldSnapshots) {
-            oldMap.set(`${snap.line}:${snap.startPosition}`, snap);
+        const relativePath = vscode.workspace.asRelativePath(document.uri, false);
+        const page = this.indexService.getPageByPath(relativePath);
+        if (!page) {
+            return;
         }
 
-        // Build new snapshot list
-        const newSnapshots: WikilinkSnapshot[] = [];
+        // Read the last-indexed link state from the DB
+        const oldLinks = this.indexService.getLinksForPage(page.id);
+        if (oldLinks.length === 0) {
+            return;
+        }
+
+        // Index old links by (line, start_col) for positional matching
+        const oldMap = new Map<string, LinkRow>();
+        for (const link of oldLinks) {
+            oldMap.set(`${link.line}:${link.start_col}`, link);
+        }
+
+        // Parse the current document for wikilinks (the live/edited state)
+        interface CurrentWikilink {
+            pageName: string;
+            startPosition: number;
+            endPosition: number;
+            line: number;
+        }
+        const currentWikilinks: CurrentWikilink[] = [];
         for (let line = 0; line < document.lineCount; line++) {
             const text = document.lineAt(line).text;
             const wikilinks = this.wikilinkService.extractWikilinks(text);
 
             for (const wl of wikilinks) {
-                newSnapshots.push({
+                currentWikilinks.push({
                     pageName: wl.pageName,
                     startPosition: wl.startPositionInText,
                     endPosition: wl.endPositionInText,
@@ -274,29 +250,24 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         // Detect renames: same (line, startPos), different pageName
         const renames: DetectedRename[] = [];
 
-        for (const newSnap of newSnapshots) {
-            const key = `${newSnap.line}:${newSnap.startPosition}`;
-            const oldSnap = oldMap.get(key);
+        for (const curr of currentWikilinks) {
+            const key = `${curr.line}:${curr.startPosition}`;
+            const oldLink = oldMap.get(key);
 
-            if (oldSnap && oldSnap.pageName !== newSnap.pageName) {
+            if (oldLink && oldLink.page_name !== curr.pageName) {
                 renames.push({
-                    oldPageName: oldSnap.pageName,
-                    newPageName: newSnap.pageName,
-                    line: newSnap.line,
-                    startPosition: newSnap.startPosition,
-                    endPosition: newSnap.endPosition,
+                    oldPageName: oldLink.page_name,
+                    newPageName: curr.pageName,
+                    line: curr.line,
+                    startPosition: curr.startPosition,
+                    endPosition: curr.endPosition,
                 });
             }
         }
 
         if (renames.length === 0) {
-            this.snapshots.set(docKey, newSnapshots);
             return;
         }
-
-        // Update snapshot before prompting (prevents re-detection if the
-        // user takes a while to respond to the dialog)
-        this.snapshots.set(docKey, newSnapshots);
 
         // Sort outermost first (largest range) so workspace replacements
         // for outer links happen before inner ones. This is correct because
@@ -370,17 +341,70 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             for (const r of renames) {
                 await this.updateLinksInWorkspace(r.oldPageName, r.newPageName);
             }
+
+            // Re-index all affected files so the index reflects the new state
+            // before we release control. This prevents a stale-index window
+            // where the next edit event could compare against outdated links.
+            await this.refreshIndexAfterRename(document, renames, fileRenames);
         } catch (err) {
             const detail = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Rename failed: ${detail}`);
         } finally {
             this.isProcessing = false;
+        }
+    }
 
-            // Refresh snapshots for all open docs so the new names become the baseline
-            for (const doc of vscode.workspace.textDocuments) {
-                this.takeSnapshot(doc);
+    /**
+     * After a rename operation, ensure the index is consistent by
+     * re-indexing all files that were touched (the source document,
+     * renamed files, and any files whose link text was updated).
+     */
+    private async refreshIndexAfterRename(
+        sourceDocument: vscode.TextDocument,
+        renames: DetectedRename[],
+        fileRenames: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[],
+    ): Promise<void> {
+        if (!this.indexService.isOpen) { return; }
+
+        const indexedUris = new Set<string>();
+
+        // Re-index the source document
+        try {
+            await this.indexScanner.indexFile(sourceDocument.uri);
+            indexedUris.add(sourceDocument.uri.toString());
+        } catch {
+            // File may have been deleted
+        }
+
+        // Re-index renamed files (at their new locations)
+        for (const fr of fileRenames) {
+            if (!indexedUris.has(fr.newUri.toString())) {
+                try {
+                    // Remove the old path from the index
+                    const oldPath = vscode.workspace.asRelativePath(fr.oldUri, false);
+                    this.indexService.removePage(oldPath);
+                    // Index at the new path
+                    await this.indexScanner.indexFile(fr.newUri);
+                    indexedUris.add(fr.newUri.toString());
+                } catch {
+                    // Target may not exist if rename failed
+                }
             }
         }
+
+        // Update link references in the index for the renamed page names
+        for (const r of renames) {
+            const oldFileName = sanitiseFileName(r.oldPageName);
+            const newFileName = sanitiseFileName(r.newPageName);
+            this.indexService.updateRename(
+                `${oldFileName}.md`,
+                r.newPageName,
+                `${newFileName}.md`,
+            );
+        }
+
+        // Persist
+        this.indexService.saveToFile();
     }
 
     /**

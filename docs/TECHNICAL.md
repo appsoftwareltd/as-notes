@@ -5,6 +5,17 @@ This document explains the internal architecture, algorithms, and design decisio
 ## Table of contents
 
 - [Overview](#overview)
+- [Persistent index](#persistent-index)
+  - [Architecture split: IndexService and IndexScanner](#architecture-split-indexservice-and-indexscanner)
+  - [Database schema](#database-schema)
+  - [Content indexing and nesting](#content-indexing-and-nesting)
+  - [Staleness detection](#staleness-detection)
+  - [Persistence strategy](#persistence-strategy)
+- [Activation model](#activation-model)
+  - [Passive mode](#passive-mode)
+  - [Full mode](#full-mode)
+  - [Index update triggers](#index-update-triggers)
+  - [Periodic scanning](#periodic-scanning)
 - [Wikilink parsing](#wikilink-parsing)
   - [Stack-based bracket matching](#stack-based-bracket-matching)
   - [The Wikilink model](#the-wikilink-model)
@@ -23,11 +34,11 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Auto-creation](#auto-creation)
 - [Hover](#hover)
 - [Rename tracking](#rename-tracking)
-  - [Snapshot mechanism](#snapshot-mechanism)
-  - [Snapshot lifecycle](#snapshot-lifecycle)
+  - [Index-backed detection](#index-backed-detection)
   - [Rename detection algorithm](#rename-detection-algorithm)
   - [Cursor-exit and editor-switch triggers](#cursor-exit-and-editor-switch-triggers)
   - [Multi-level rename execution](#multi-level-rename-execution)
+  - [Post-rename index refresh](#post-rename-index-refresh)
   - [Re-entrancy guard](#re-entrancy-guard)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
@@ -43,9 +54,150 @@ as-notes is a VS Code extension that turns `[[double bracket]]` text in markdown
 The extension is built with:
 
 - **TypeScript 5.7**, strict mode, ES2022 target
-- **esbuild** for bundling (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
-- **vitest 3.x** for unit tests
+- **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
+- **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
+- **vitest 3.x** for unit tests (62 tests across 2 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
+
+The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
+
+---
+
+## Persistent index
+
+AS Notes maintains a SQLite database (`.asnotes/index.db`) that indexes all markdown files in the workspace. The index enables backlink counting, rename detection comparison, and will support future features like backlink panels and tag queries.
+
+### Architecture split: IndexService and IndexScanner
+
+The index is split into two layers:
+
+- **`IndexService`** (`src/IndexService.ts`) — Pure data layer with no VS Code dependencies. All SQL operations (schema, CRUD, content parsing) live here. This makes the service fully testable with vitest using an in-memory SQLite database (`initInMemory()`).
+
+- **`IndexScanner`** (`src/IndexScanner.ts`) — VS Code-dependent filesystem layer. Reads files via `workspace.fs.readFile`, resolves mtimes via `workspace.fs.stat`, and delegating to `IndexService.indexFileContent()`. Handles full scans and stale scans.
+
+This separation follows the Ports & Adapters pattern. The IndexService knows nothing about VS Code, files, or URIs — it only works with strings, numbers, and SQL.
+
+### Database schema
+
+```sql
+CREATE TABLE pages (
+    id INTEGER PRIMARY KEY,
+    path TEXT NOT NULL UNIQUE,     -- workspace-relative path
+    filename TEXT NOT NULL,         -- just the filename
+    title TEXT NOT NULL,            -- first # heading, or filename stem
+    mtime INTEGER NOT NULL,         -- last modification time (epoch ms)
+    indexed_at INTEGER NOT NULL     -- when this page was last indexed (epoch ms)
+);
+
+CREATE TABLE links (
+    id INTEGER PRIMARY KEY,
+    source_page_id INTEGER NOT NULL REFERENCES pages(id),
+    page_name TEXT NOT NULL,        -- raw wikilink text (e.g. "My Page")
+    page_filename TEXT NOT NULL,    -- sanitised filename (e.g. "My Page.md")
+    line INTEGER NOT NULL,          -- 0-based line number
+    start_col INTEGER NOT NULL,     -- column of first [
+    end_col INTEGER NOT NULL,       -- column of last ]
+    context TEXT,                   -- full line text for display
+    parent_link_id INTEGER REFERENCES links(id),  -- nesting parent
+    depth INTEGER NOT NULL DEFAULT 0               -- nesting depth (0 = top-level)
+);
+
+CREATE TABLE aliases (
+    id INTEGER PRIMARY KEY,
+    canonical_page_id INTEGER NOT NULL REFERENCES pages(id),
+    alias_name TEXT NOT NULL,
+    alias_filename TEXT NOT NULL
+);
+```
+
+Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`.
+
+### Content indexing and nesting
+
+`IndexService.indexFileContent()` performs the full indexing pipeline for a single file:
+
+1. **Title extraction** — `extractTitle()` scans for the first `# heading`. Falls back to the filename stem (e.g. `Notes.md` → `Notes`).
+
+2. **Page upsert** — `upsertPage()` uses an UPDATE-first-then-INSERT pattern to avoid UPSERT syntax differences.
+
+3. **Link parsing** — `setLinksForPageWithNesting()` parses all lines with `WikilinkService.extractWikilinks()` and inserts links in two passes:
+   - **Pass 1:** Insert all links with `parent_link_id = NULL`.
+   - **Pass 2:** For each link, find the smallest containing wikilink (`findParentWikilink()`), look up its DB id, and UPDATE `parent_link_id`.
+
+   This two-pass approach avoids foreign key ordering issues — all link ids exist before parent references are set.
+
+4. **Depth computation** — `computeDepth()` counts how many larger wikilinks fully contain the current one (by position range). Depth 0 = top-level, depth 1 = nested inside one parent, etc.
+
+### Staleness detection
+
+`IndexScanner.staleScan()` compares the filesystem against the index:
+
+| Category | Condition | Action |
+|---|---|---|
+| **New** | File exists on disk, not in DB | Index it |
+| **Stale** | File mtime > `indexed_at` | Re-index it |
+| **Unchanged** | File mtime ≤ `indexed_at` | Skip |
+| **Deleted** | In DB, not on disk | Remove from DB |
+
+This runs on activation and periodically in the background.
+
+### Persistence strategy
+
+sql.js operates entirely in memory. The database is persisted to disk (`saveToFile()`) at these points:
+
+- After each index update (file save, create, delete, rename, editor switch)
+- After each periodic scan that detects changes
+- On extension deactivation (before the extension host shuts down)
+
+The `saveToFile()` method exports the in-memory database to a `Buffer` and writes it atomically to `.asnotes/index.db`.
+
+---
+
+## Activation model
+
+The extension uses a `.asnotes/` directory in the workspace root as a project marker (analogous to `.git/` or `.obsidian/`). Its presence determines the operating mode.
+
+### Passive mode
+
+When no `.asnotes/` directory is found:
+
+- A status bar item shows `$(circle-slash) AS Notes: not initialised`
+- Clicking it runs the **AS Notes: Initialise Workspace** command
+- No providers (decorations, links, hover, rename tracking) are registered
+- The only active commands are `initWorkspace` and `rebuildIndex`
+
+### Full mode
+
+When `.asnotes/` exists:
+
+1. The database is opened (or created if `index.db` is missing)
+2. A stale scan runs to catch external changes (e.g. git pull)
+3. All providers are registered: decorations, document links, hover, rename tracker
+4. Index update triggers are activated (file events, editor switch, periodic scan)
+5. The status bar shows `$(database) AS Notes (N pages)` — clicking runs rebuild
+
+### Index update triggers
+
+In full mode, these events keep the index current:
+
+| Event | Handler | Action |
+|---|---|---|
+| `onDidSaveTextDocument` | Re-index saved file | Catches content changes |
+| `onDidCreateFiles` | Index new file | New pages enter the index |
+| `onDidDeleteFiles` | Remove from DB | Cascade-deletes links |
+| `onDidRenameFiles` | Remove old + index new | Path updates |
+| `onDidChangeActiveTextEditor` | Re-index departing file | Captures unsaved edits |
+
+All handlers persist the DB after updating.
+
+### Periodic scanning
+
+A background `setInterval` runs `staleScan()` at a configurable interval (default: 300 seconds). This catches:
+
+- Files modified by external tools (git checkout, other editors)
+- Files created or deleted outside VS Code
+
+The interval is read from `as-notes.periodicScanInterval`. Setting it to `0` disables periodic scanning. Changes to the setting take effect immediately (the interval is restarted on `onDidChangeConfiguration`).
 
 ---
 
@@ -241,7 +393,13 @@ The file is created with the exact casing from the wikilink text.
 1. Parses the line for wikilinks
 2. Finds the innermost wikilink at the hover position
 3. Resolves the target file using case-insensitive matching
-4. Returns a `MarkdownString` showing the filename and an existence icon (`$(file)` or `$(new-file)`)
+4. Queries the index for backlink count (`IndexService.getBacklinkCount()`)
+5. Returns a `MarkdownString` showing:
+   - The target filename (e.g. `**My Page.md**`)
+   - Existence status: `$(file) Existing file` or `$(new-file) Will be created`
+   - Backlink count (when > 0): `$(references) N backlinks`
+
+The `IndexService` is an optional constructor parameter — when not provided (e.g. during testing without an index), the backlink count is simply omitted.
 
 ---
 
@@ -249,69 +407,60 @@ The file is created with the exact casing from the wikilink text.
 
 This is the most complex subsystem. It detects when a user edits a wikilink's text and offers to rename the corresponding file and update all matching links across the workspace.
 
-### Snapshot mechanism
+### Index-backed detection
 
-The rename tracker maintains an in-memory map:
+The rename tracker uses the persistent index as the "before" state rather than maintaining separate in-memory snapshots. When a rename check fires, the tracker reads link records from `IndexService.getLinksForPage()` and compares them with the live document state.
+
+This works because the index represents the **last-indexed state** of each file — updated only on save, file events, and editor switch. While the user is actively editing a wikilink, the index still holds the pre-edit link state, providing a natural baseline for comparison.
+
+The tracker accepts `IndexService` and `IndexScanner` as constructor parameters:
 
 ```typescript
-private readonly snapshots = new Map<string, WikilinkSnapshot[]>();
+constructor(
+    wikilinkService: WikilinkService,
+    fileService: WikilinkFileService,
+    indexService: IndexService,
+    indexScanner: IndexScanner,
+)
 ```
 
-**Key:** Document URI string (e.g. `file:///c:/Users/.../Page.md`)
-**Value:** Array of snapshot objects, one per wikilink in the document:
+During editing, the tracker records a `pendingEdit` noting which outermost wikilink the cursor is inside:
 
 ```typescript
-interface WikilinkSnapshot {
-    pageName: string;       // e.g. "Mount"
-    startPosition: number;  // column index of first [
-    endPosition: number;    // column index of last ]
-    line: number;           // 0-based line number
+interface PendingEditInfo {
+    docKey: string;           // document URI
+    line: number;             // line the cursor was on
+    wikilinkStartPos: number; // start of outermost wikilink
 }
 ```
 
-Snapshots record what the extension last knew about the wikilinks in a document. They are not persisted to disk — they exist only in RAM for the lifetime of the extension host process.
-
-### Snapshot lifecycle
-
-1. **Baseline** — On extension activation, `takeSnapshot()` runs for every already-open markdown document. It iterates every line, runs the parser, and stores the resulting snapshots.
-
-2. **On document open** — `onDidOpenTextDocument` takes a fresh snapshot.
-
-3. **On active editor change** — The newly active document gets a snapshot (ensures coverage even if the document wasn't captured at open time).
-
-4. **During editing** — The snapshot is **not** updated while the user types. The old snapshot is preserved as the "before" state. Instead, the tracker records a `pendingEdit` noting which outermost wikilink the cursor is inside:
-
-    ```typescript
-    interface PendingEditInfo {
-        docKey: string;           // document URI
-        line: number;             // line the cursor was on
-        wikilinkStartPos: number; // start of outermost wikilink
-    }
-    ```
-
-5. **On cursor exit or editor switch** — The tracker re-parses the document to produce new snapshots, compares them against the old ones (see below), and replaces the old snapshots with the new ones.
-
-6. **After rename execution** — All open documents get fresh snapshots so the renamed text becomes the new baseline.
+Edits to files not yet in the index (e.g. brand new unsaved files) are ignored — there's no baseline to compare against.
 
 ### Rename detection algorithm
 
 When a rename check fires (cursor exit or editor switch):
 
-1. **Index old snapshots** by the composite key `"line:startPosition"` in a `Map`.
+1. **Look up the page** in the index via `getPageByPath()` using the workspace-relative path.
 
-2. **Build new snapshots** by re-parsing the entire document.
+2. **Read old links** from the index via `getLinksForPage(pageId)`. Each `LinkRow` has `line`, `start_col`, and `page_name` — the same positional data formerly stored in snapshots.
 
-3. **Compare:** For each new snapshot, look up the old snapshot at the same `(line, startPosition)`. If the `pageName` differs, this is classified as a rename:
+3. **Index old links** by the composite key `"line:start_col"` in a `Map`.
+
+4. **Parse the current document** line by line for wikilinks (the live/edited state).
+
+5. **Compare:** For each current wikilink, look up the old link at the same `(line, start_col)`. If the `page_name` differs, this is classified as a rename:
 
     ```
-    Old: { line: 5, startPosition: 10, pageName: "Foo" }
-    New: { line: 5, startPosition: 10, pageName: "Bar" }
+    Index: { line: 5, start_col: 10, page_name: "Foo" }
+    Live:  { line: 5, start_col: 10, pageName: "Bar" }
     → Detected rename: "Foo" → "Bar"
     ```
 
-4. **Why (line, startPosition) works as a stable key:** When the user edits text *inside* a wikilink (between the `[[` and `]]`), the start position of that wikilink does not change — the `[[` stays at the same column. The `pageName` changes but the key remains stable. This is the fundamental invariant that makes snapshot-based detection possible.
+6. **Why (line, start_col) works as a stable key:** When the user edits text *inside* a wikilink (between the `[[` and `]]`), the start position of that wikilink does not change — the `[[` stays at the same column. The `page_name` changes but the key remains stable. This is the fundamental invariant that makes positional detection possible.
 
-5. **When (line, startPosition) breaks:** If the user edits text *before* a wikilink on the same line (e.g. adding characters at the start of the line), the wikilink's `startPosition` shifts. The old and new snapshots won't match by key, so no rename is detected. This is the correct behaviour — the link text hasn't changed; only its position has.
+7. **When (line, start_col) breaks:** If the user edits text *before* a wikilink on the same line (e.g. adding characters at the start of the line), the wikilink's `start_col` shifts. The old and new positions won't match by key, so no rename is detected. This is the correct behaviour — the link text hasn't changed; only its position has.
+
+**Event handler ordering:** The rename tracker's `onDidChangeActiveTextEditor` handler is registered before the extension.ts `onDidChangeActiveTextEditor` handler (which re-indexes the departing file). This ordering is critical — the rename tracker must read the pre-edit index state before the extension.ts handler updates it.
 
 ### Cursor-exit and editor-switch triggers
 
@@ -362,6 +511,17 @@ A single dialog lists all affected renames. For each rename:
 
 `updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and creates a `WorkspaceEdit` that replaces every `[[oldPageName]]` with `[[newPageName]]`. After applying the edit, it saves modified files.
 
+### Post-rename index refresh
+
+After a rename operation completes, `refreshIndexAfterRename()` ensures the index is consistent before releasing control:
+
+1. **Re-index the source document** — captures the edited link text
+2. **Remove old page path + re-index renamed files** — at their new locations
+3. **Bulk-update link references** — `IndexService.updateRename()` updates all `links.page_name` and `links.page_filename` records that point to the old filename
+4. **Persist the database** — `saveToFile()`
+
+This explicit refresh prevents a stale-index window where the next edit event could compare against outdated links. The extension.ts save/rename handlers may also re-index some of these files (via event triggers), but the operations are idempotent — double-indexing is harmless and keeps the code robust.
+
 ### Re-entrancy guard
 
 The `isProcessing` flag prevents document-change events fired by the rename operation itself (file renames, workspace edits) from being treated as new user edits. It is set to `true` before any rename work begins and cleared in the `finally` block.
@@ -385,15 +545,20 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 
 `extension.ts` is the entry point. On activation (`onLanguage:markdown`):
 
-1. Creates shared `WikilinkService` and `WikilinkFileService` instances
-2. Creates and registers:
-   - `WikilinkDecorationManager` (disposable)
-   - `WikilinkDocumentLinkProvider` (via `registerDocumentLinkProvider`)
-   - `WikilinkHoverProvider` (via `registerHoverProvider`)
-   - `WikilinkRenameTracker` (disposable)
-3. Registers the `as-notes.navigateWikilink` command
+1. Creates a status bar item (always visible in both modes)
+2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`
+3. Checks for `.asnotes/` directory in workspace root
+4. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
+   - Opens the SQLite database
+   - Runs a stale scan to catch external changes
+   - Creates shared `WikilinkService`, `WikilinkFileService`, `IndexService`, `IndexScanner`
+   - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`
+   - Registers the `as-notes.navigateWikilink` command
+   - Sets up index update triggers (save, file events, editor switch)
+   - Starts the periodic scanner
+5. **Passive mode** (no `.asnotes/`): status bar only, no providers
 
-All registrations are pushed to `context.subscriptions` for automatic disposal.
+All full-mode registrations are tracked in `fullModeDisposables[]` and pushed to `context.subscriptions`. The `deactivate()` function persists the database and cleans up.
 
 The markdown document selector is `{ language: 'markdown' }`, which VS Code maps to `.md` and `.markdown` files (configured in `package.json` under `contributes.languages`).
 
@@ -401,7 +566,9 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests are in `src/test/WikilinkService.test.ts` using vitest. They cover:
+Tests use vitest and are split across two test files:
+
+### `WikilinkService.test.ts` (23 tests)
 
 1. **Parser extraction** (11 test cases) — basic links, nested links, special characters, unbalanced brackets, interrupting characters. Each test verifies `linkText`, `pageName`, and `pageFileName` arrays.
 
@@ -409,7 +576,23 @@ Tests are in `src/test/WikilinkService.test.ts` using vitest. They cover:
 
 3. **Segment computation** (6 tests) — empty input, single links, 2-level nesting, 3-level nesting, sibling links, deeply nested structures with multiple children.
 
-Tests that depend on VS Code APIs (decorations, links, hover, rename) are not unit-tested — they require the extension host and are verified via F5 manual testing.
+### `IndexService.test.ts` (39 tests)
+
+1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
+
+2. **Schema** (2 tests) — table creation verification, `isOpen` state.
+
+3. **Page CRUD** (6 tests) — insert, upsert, query, delete, cascade.
+
+4. **Link CRUD** (8 tests) — insert, replace, backlinks, backlink count, nesting with parent_link_id and depth, rename updates, page path updates.
+
+5. **Reset schema** (1 test) — drop and recreate.
+
+6. **`indexFileContent`** (9 tests) — simple file, nested links, 3-level nesting, multi-line, title fallback, re-index, backlinks, empty file, filename sanitisation.
+
+7. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation (comparing index state with reparsed document), `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow (re-index + updateRename).
+
+Tests that depend on VS Code APIs (decorations, document links, hover, rename tracker event handling) are not unit-tested — they require the extension host and are verified via F5 manual testing.
 
 ---
 
@@ -417,12 +600,18 @@ Tests that depend on VS Code APIs (decorations, links, hover, rename) are not un
 
 1. **Same-directory only** — target files are always resolved relative to the source file's directory. Cross-directory linking would require a path resolution strategy.
 
-2. **Rename detection by position** — the `(line, startPosition)` key works when edits happen inside a wikilink. Edits that shift the wikilink's position (e.g. inserting text before it on the same line) are not detected as renames. This is correct behaviour but worth noting.
+2. **Rename detection by position** — the `(line, start_col)` key works when edits happen inside a wikilink. Edits that shift the wikilink's position (e.g. inserting text before it on the same line) are not detected as renames. This is correct behaviour but worth noting.
 
-3. **Large workspaces** — `updateLinksInWorkspace()` opens every `.md`/`.markdown` file in the workspace. For very large note collections, this could be slow. A `workspace.findTextInFiles` pre-filter could reduce the set of files to open.
+3. **Large workspaces** — `updateLinksInWorkspace()` opens every `.md`/`.markdown` file in the workspace. For very large note collections, this could be slow. A `workspace.findTextInFiles` pre-filter could reduce the set of files to open. The index could also be used to narrow the search to files that actually contain the old link.
 
-4. **Concurrent edits** — the rename tracker processes one document at a time. Edits to other documents while a rename dialog is shown are captured by the snapshot refresh in the `finally` block.
+4. **Concurrent edits** — the rename tracker processes one document at a time. Edits to other documents while a rename dialog is shown are handled by the index refresh in `refreshIndexAfterRename()`.
 
 5. **Sanitisation duplication** — the invalid-filename-character regex exists in both `Wikilink.ts` and `WikilinkRenameTracker.ts`. A shared utility would reduce the risk of divergence.
 
 6. **Segment computation performance** — the character-by-character scan is O(n × m). For lines with many wikilinks, a sorted-endpoint sweep-line approach would be O(n log n). This has not been necessary in practice.
+
+7. **Aliases** — the `aliases` table is created but not yet populated. A future iteration will allow pages to have alternative names that resolve to the same file.
+
+8. **Backlink panel** — a dedicated tree view or webview showing all incoming links for the active file. The index already has the data; only the UI needs building.
+
+9. **Tags** — `#tag` syntax support with index-backed queries is planned for a future iteration.

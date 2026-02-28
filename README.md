@@ -2,6 +2,23 @@
 
 A VS Code extension for navigating and managing markdown files using wikilinks. Link pages together with `[[double bracket]]` syntax, navigate between them with a click, and keep filenames in sync when you rename a link.
 
+## Getting started
+
+### Initialise a workspace
+
+AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** — you'll see a status bar item inviting you to initialise.
+
+To initialise:
+
+1. Open the Command Palette (`Ctrl+Shift+P`)
+2. Run **AS Notes: Initialise Workspace**
+
+This creates the `.asnotes/` directory, builds a SQLite index of all markdown files, and activates all features. The index file (`.asnotes/index.db`) is excluded from git by an auto-generated `.gitignore`.
+
+### Rebuild the index
+
+If the index becomes stale or corrupted, run **AS Notes: Rebuild Index** from the Command Palette. This drops and recreates the entire index with a progress indicator.
+
 ## Features
 
 ### Wikilink highlighting
@@ -41,6 +58,7 @@ Hover over any wikilink to see:
 
 - The target filename (e.g. `My Page.md`)
 - Whether the file already exists or will be created on click
+- The number of backlinks (other pages that link to this target)
 
 ### Link rename synchronisation
 
@@ -53,6 +71,8 @@ A single confirmation dialog covers all affected nesting levels. For example, ed
 
 You can decline the rename — the link text change is kept but files and other links are left untouched.
 
+Rename detection is backed by the persistent index — the extension compares the last-indexed link state with the current document to detect changes accurately.
+
 ### Case-insensitive file matching
 
 `[[my page]]` will find and open `My Page.md` regardless of the operating system. On case-sensitive filesystems (Linux), a directory scan finds the matching file. On Windows and macOS this is handled natively by the filesystem.
@@ -64,6 +84,26 @@ Characters that are invalid in filenames (`/ ? < > \ : * | "`) are replaced with
 ```markdown
 [[What is 1/2 + 1/4?]]  →  What is 1_2 + 1_4_.md
 ```
+
+### Persistent index
+
+AS Notes maintains a SQLite database (`.asnotes/index.db`) that indexes all markdown files in the workspace. The index tracks:
+
+- **Pages** — file paths, filenames, titles (extracted from the first `# heading`)
+- **Links** — every wikilink in every file, with line, column, nesting depth, and parent references
+- **Backlinks** — reverse lookups for hover tooltips
+
+The index is kept up-to-date automatically:
+
+- On file save, create, delete, or rename
+- On editor switch (captures unsaved edits)
+- Via a configurable periodic background scan
+
+## Settings
+
+| Setting | Default | Description |
+|---|---|---|
+| `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 
 ## Supported file types
 
@@ -114,20 +154,23 @@ Press **F5** in VS Code to launch the Extension Development Host with the extens
 
 ### Testing
 
-Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offset-based lookup, and non-overlapping segment computation. Run with `npm test`.
+Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offset-based lookup, segment computation, index service CRUD, title extraction, rename detection data flow, and nested link indexing. Run with `npm test`.
 
 ## Architecture
 
 | File | Purpose |
 |---|---|
-| `src/extension.ts` | Extension entry point — registers all providers and commands |
+| `src/extension.ts` | Entry point — activation model (passive/full mode), commands, index triggers |
 | `src/Wikilink.ts` | Model class — positions, page name, filename sanitisation |
 | `src/WikilinkService.ts` | Stack-based parser, innermost-offset lookup, segment computation |
 | `src/WikilinkDecorationManager.ts` | Editor decorations (default + active highlight) |
 | `src/WikilinkDocumentLinkProvider.ts` | Ctrl+Click navigation via non-overlapping segments |
-| `src/WikilinkHoverProvider.ts` | Hover tooltips with target file existence status |
+| `src/WikilinkHoverProvider.ts` | Hover tooltips with target file existence, backlink count |
 | `src/WikilinkFileService.ts` | File resolution, case-insensitive matching, creation |
-| `src/WikilinkRenameTracker.ts` | Rename detection, confirmation dialog, workspace-wide updates |
+| `src/WikilinkRenameTracker.ts` | Rename detection (index-backed), confirmation dialog, workspace-wide updates |
+| `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, nesting detection |
+| `src/IndexScanner.ts` | VS Code filesystem scanning — file indexing, full scan, stale scan |
+| `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
 | `src/test/` | Unit tests (vitest) |
 
 For a deep dive into the technical design, see [docs/TECHNICAL.md](docs/TECHNICAL.md).
