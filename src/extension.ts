@@ -10,6 +10,8 @@ import { WikilinkRenameTracker } from './WikilinkRenameTracker.js';
 import { IndexService } from './IndexService.js';
 import { IndexScanner } from './IndexScanner.js';
 import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
+import { wikilinkPlugin, type WikilinkResolverFn } from './MarkdownItWikilinkPlugin.js';
+import { getPathDistance } from './PathUtils.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -41,7 +43,7 @@ let extensionContext: vscode.ExtensionContext | undefined;
 
 // ── Activation ─────────────────────────────────────────────────────────────
 
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<{ extendMarkdownIt: (md: any) => any }> {
     extensionContext = context;
 
     // Status bar — always present
@@ -56,19 +58,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.commands.registerCommand('as-notes.rebuildIndex', () => rebuildIndex()),
     );
 
+    // Build the API return value (markdown-it plugin) before mode setup
+    // so it's available regardless of which code path we take.
+    // CRITICAL: This must always be returned, even if enterFullMode() fails,
+    // so that VS Code's markdown preview can pick up the wikilink plugin.
+    const apiReturn = { extendMarkdownIt: createExtendMarkdownIt() };
+
     // Check for .asnotes/ in workspace root
     const workspaceRoot = getWorkspaceRoot();
     if (!workspaceRoot) {
         setPassiveMode('No workspace folder open');
-        return;
+        return apiReturn;
     }
 
     const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
     if (fs.existsSync(asnotesDir)) {
-        await enterFullMode(context, workspaceRoot);
+        // Fire-and-forget: don't block activation on full mode setup.
+        // VS Code's markdown preview awaits activate() before calling
+        // extendMarkdownIt — if we block here on DB init + stale scan,
+        // the preview hangs waiting and never renders wikilinks.
+        enterFullMode(context, workspaceRoot).catch(err => {
+            console.error('as-notes: failed to enter full mode, falling back to passive', err);
+            setPassiveMode('Index initialisation failed');
+        });
     } else {
         setPassiveMode();
     }
+
+    return apiReturn;
 }
 
 export function deactivate(): void {
@@ -505,4 +522,95 @@ function isMarkdown(doc: vscode.TextDocument): boolean {
 function isMarkdownUri(uri: vscode.Uri): boolean {
     const ext = path.extname(uri.fsPath).toLowerCase();
     return ext === '.md' || ext === '.markdown';
+}
+
+// ── Markdown preview plugin ────────────────────────────────────────────────
+
+/**
+ * Create the `extendMarkdownIt` function returned by `activate()`.
+ *
+ * The returned function registers a markdown-it inline rule that transforms
+ * `[[wikilinks]]` into clickable `<a>` links in the markdown preview. When
+ * the index is available, links use subfolder and alias resolution. Otherwise,
+ * they fall back to same-directory relative links.
+ */
+function createExtendMarkdownIt(): (md: any) => any {
+    const wikilinkService = new WikilinkService();
+    console.log('as-notes: createExtendMarkdownIt() called');
+
+    const resolver: WikilinkResolverFn = (pageFileName, env) => {
+        const sourcePath = getSourcePathFromEnv(env);
+
+        if (indexService?.isOpen && sourcePath) {
+            const targetFilename = `${pageFileName}.md`;
+
+            // Direct filename match
+            const directMatches = indexService.findPagesByFilename(targetFilename);
+            if (directMatches.length >= 1) {
+                let target = directMatches[0];
+                if (directMatches.length > 1) {
+                    // Disambiguate: same-directory preference, then closest folder
+                    const sourceDir = path.dirname(sourcePath).replace(/\\/g, '/');
+                    let bestDistance = Infinity;
+                    for (const candidate of directMatches) {
+                        const candidateDir = path.dirname(candidate.path).replace(/\\/g, '/');
+                        if (candidateDir === sourceDir) { target = candidate; break; }
+                        const d = getPathDistance(sourceDir, candidateDir);
+                        if (d < bestDistance) { bestDistance = d; target = candidate; }
+                    }
+                }
+                return relativeLink(sourcePath, target.path);
+            }
+
+            // Alias match
+            const aliasPage = indexService.resolveAlias(pageFileName);
+            if (aliasPage) {
+                return relativeLink(sourcePath, aliasPage.path);
+            }
+        }
+
+        // Fallback: same-directory relative link
+        return encodeURIComponent(`${pageFileName}.md`);
+    };
+
+    return (md: any) => {
+        console.log('as-notes: extendMarkdownIt() invoked by VS Code markdown preview');
+        wikilinkPlugin(md, { wikilinkService, resolver });
+        return md;
+    };
+}
+
+/**
+ * Extract the workspace-relative source path from the markdown-it render environment.
+ * VS Code populates `env.currentDocument` with the URI of the file being previewed.
+ */
+function getSourcePathFromEnv(env: Record<string, any>): string | undefined {
+    const doc = env?.currentDocument;
+    if (!doc) return undefined;
+
+    // vscode.Uri object (standard VS Code ≥1.72)
+    if (typeof doc === 'object' && 'fsPath' in doc) {
+        return vscode.workspace.asRelativePath(doc as vscode.Uri, false);
+    }
+
+    // URI string fallback
+    if (typeof doc === 'string') {
+        try {
+            return vscode.workspace.asRelativePath(vscode.Uri.parse(doc), false);
+        } catch {
+            return undefined;
+        }
+    }
+
+    return undefined;
+}
+
+/**
+ * Compute a relative link from a source file to a target file, URI-encoded
+ * for use in an HTML href attribute.
+ */
+function relativeLink(sourcePath: string, targetPath: string): string {
+    const sourceDir = path.dirname(sourcePath);
+    const relative = path.relative(sourceDir, targetPath).replace(/\\/g, '/');
+    return relative.split('/').map(s => encodeURIComponent(s)).join('/');
 }

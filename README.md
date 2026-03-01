@@ -1,10 +1,18 @@
 # AS Notes
 
-A VS Code extension for navigating and managing markdown files using wikilinks. Link pages together with `[[double bracket]]` syntax, navigate between them with a click, and keep filenames in sync when you rename a link.
+AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
+
+## Wikilinks
+
+- Logseq / Roam / Obsidian style wikilinks in the VS Code editor
+- Markdown wikilinks include nested link handling e.g. `[[[[AS Notes]] Page]]`
+- Wikilinks navigate the user to the target page regardless of location in folder structure e.g. `[[[[AS Notes]] Page]]` -> `[[AS Notes]] Page.md`
+- Renames for wikilinks automatically update other existing links and will rename the page to which the link refers to keep names in sync
+
 
 ## VS Code Marketplace
 
-AS Notes is available at: https://marketplace.visualstudio.com/items?itemName=AppSoftwareLtd.as-notes
+AS Notes via the Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes
 
 ## Getting started
 

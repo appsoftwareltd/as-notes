@@ -1,0 +1,24 @@
+/* Wikilink styling for VS Code markdown preview */
+
+.wikilink {
+    color: #4080bf;
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+}
+
+.wikilink:hover {
+    color: #2060a0;
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+}
+
+/* Dark theme */
+.vscode-dark .wikilink,
+.vscode-high-contrast .wikilink {
+    color: #6796e6;
+}
+
+.vscode-dark .wikilink:hover,
+.vscode-high-contrast .wikilink:hover {
+    color: #85b1ff;
+}

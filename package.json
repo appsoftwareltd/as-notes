@@ -68,7 +68,11 @@
                     "description": "Interval in seconds between automatic background scans for file changes. Set to 0 to disable periodic scanning."
                 }
             }
-        }
+        },
+        "markdown.markdownItPlugins": true,
+        "markdown.previewStyles": [
+            "./media/wikilink-preview.css"
+        ]
     },
     "scripts": {
         "vscode:prepublish": "npm run build",
@@ -83,6 +87,7 @@
         "@types/sql.js": "^1.4.9",
         "@types/vscode": "^1.85.0",
         "esbuild": "^0.24.0",
+        "markdown-it": "^14.1.1",
         "typescript": "^5.7.0",
         "vitest": "^3.0.0"
     },
