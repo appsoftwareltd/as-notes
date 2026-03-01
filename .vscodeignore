@@ -5,8 +5,12 @@ agents/**
 src/**
 !dist/**
 node_modules/**
+docs/**
 .gitignore
 tsconfig.json
 vitest.config.ts
+build.mjs
+package-lock.json
 AGENTS.md
 AGENTS.md.sync
+images/README.md

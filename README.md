@@ -1,6 +1,10 @@
-# as-notes
+# AS Notes
 
 A VS Code extension for navigating and managing markdown files using wikilinks. Link pages together with `[[double bracket]]` syntax, navigate between them with a click, and keep filenames in sync when you rename a link.
+
+## VS Code Marketplace
+
+AS Notes is available at: https://marketplace.visualstudio.com/items?itemName=AppSoftwareLtd.as-notes
 
 ## Getting started
 
@@ -234,3 +238,14 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/test/` | Unit tests (vitest) |
 
 For a deep dive into the technical design, see [docs/TECHNICAL.md](docs/TECHNICAL.md).
+
+## Publishing
+
+```
+npx @vscode/vsce package
+npx @vscode/vsce login appsoftwareltd
+ 
+(Enter PAT token if auth expired)
+
+npx @vscode/vsce publish
+```
