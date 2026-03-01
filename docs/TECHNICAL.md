@@ -64,6 +64,9 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Source file context](#source-file-context)
   - [Preview CSS](#preview-css)
   - [Limitations of preview links](#limitations-of-preview-links)
+- [Todo toggle](#todo-toggle)
+  - [TodoToggleService](#todotoggleservice)
+  - [Command registration](#command-registration)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
@@ -862,6 +865,39 @@ Links use a dotted bottom border (solid on hover) instead of underline, and `tex
 
 ---
 
+## Todo toggle
+
+The todo toggle feature cycles a markdown line through three states: plain text → unchecked todo → done todo → plain text. It operates independently of the wikilink index and works in both passive and full modes.
+
+### TodoToggleService
+
+`TodoToggleService` (`src/TodoToggleService.ts`) is a pure-logic module with no VS Code dependencies. It exports a single function:
+
+```typescript
+toggleTodoLine(lineText: string): string
+```
+
+The function uses regex matching to detect the current state and return the toggled line. Detection order matters — done todos are checked before unchecked todos to avoid the `[x]` pattern matching as a list item:
+
+1. **Done todo** — `/^(\s*)([-*])\s+\[(?:x|X)\]\s?(.*)/` → strip bullet and checkbox, return `indent + rest`
+2. **Unchecked todo** — `/^(\s*)([-*])\s+\[ \]\s?(.*)/` → replace `[ ]` with `[x]`
+3. **List item** (bullet without checkbox) — `/^(\s*)([-*])\s+(.*)/` → insert `[ ] ` after the bullet
+4. **Plain text** — everything else → prepend `- [ ] ` after leading whitespace
+
+Leading whitespace (indentation) is captured and preserved in all cases. Both `-` and `*` bullets are supported. Both `[x]` and `[X]` are recognised as done.
+
+### Command registration
+
+The `as-notes.toggleTodo` command is registered globally in `extension.ts` (not behind the full-mode guard), so it works even before the workspace is initialised. The command handler:
+
+1. Gets the active text editor
+2. Collects unique line numbers from all cursor positions (deduplicating lines that have multiple cursors)
+3. Applies `toggleTodoLine()` to each line via `editor.edit()`
+
+The keybinding defaults to `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
+
+---
+
 ## Filename sanitisation
 
 The regex `/ ? < > \ : * | "` is applied to `pageName` to produce `pageFileName`. The replacement character is `_`.
@@ -880,7 +916,7 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 `extension.ts` is the entry point. On activation (`onLanguage:markdown`):
 
 1. Creates a status bar item (always visible in both modes)
-2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`
+2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`, `as-notes.toggleTodo`
 3. Checks for `.asnotes/` directory in workspace root
 4. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
    - Opens the SQLite database
@@ -902,7 +938,7 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests use vitest and are split across five test files:
+Tests use vitest and are split across eight test files:
 
 ### `WikilinkService.test.ts` (23 tests)
 
@@ -953,6 +989,18 @@ Tests use vitest and are split across five test files:
 4. **Completion item building** (4 tests) — page items with stem labels, alias items with canonical info, sort order (pages before aliases), duplicate filename disambiguation.
 
 Tests that depend on VS Code APIs (decorations, document links, hover, rename tracker event handling) are not unit-tested — they require the extension host and are verified via F5 manual testing.
+
+### `TodoToggleService.test.ts` (17 tests)
+
+1. **Plain text → unchecked** (4 tests) — plain text, indented text, empty line, whitespace-only line.
+
+2. **Unchecked → done** (3 tests) — basic, indented, `*` bullet.
+
+3. **Done → plain** (4 tests) — basic, uppercase `X`, indented, `*` bullet.
+
+4. **List items** (3 tests) — `-` list item gains checkbox, `*` list item gains checkbox, indented list item.
+
+5. **Full cycle** (3 tests) — plain → unchecked → done → plain, same with existing list item, same with indentation.
 
 ---
 

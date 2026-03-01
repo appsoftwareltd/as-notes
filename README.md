@@ -9,10 +9,14 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 - Wikilinks navigate the user to the target page regardless of location in folder structure e.g. `[[[[AS Notes]] Page]]` -> `[[AS Notes]] Page.md`
 - Renames for wikilinks automatically update other existing links and will rename the page to which the link refers to keep names in sync
 
+## Compatibility With Other Markdown Based PKMS
+
+Due to the similarity in file structure, you may find that you can use this extension helpful in editing and navigating PKMS created with other wikilink capable PKMS systems such as Obsidian and Logseq. Note however that there are variations in format - Obsidian for example does not facilitate nested wikilinks like AS Code and Logseq. AS Code does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
 
 ## VS Code Marketplace
 
 AS Notes via the Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes
+
 
 ## Getting started
 
@@ -167,6 +171,24 @@ The index is kept up-to-date automatically:
 - On editor switch (captures unsaved edits)
 - Via a configurable periodic background scan
 
+### Todo toggle
+
+Press **Ctrl+Shift+Enter** (Cmd+Shift+Enter on macOS) on any line in a markdown file to cycle through todo states:
+
+| Current state | After toggle |
+|---|---|
+| `buy milk` | `- [ ] buy milk` |
+| `- [ ] buy milk` | `- [x] buy milk` |
+| `- [x] buy milk` | `buy milk` |
+
+**List-aware:** existing list items (`- some text` or `* some text`) gain a checkbox without being re-wrapped — `- some text` becomes `- [ ] some text`.
+
+**Indentation preserved:** the toggle works correctly on indented lines, keeping leading whitespace intact for nested lists.
+
+**Multi-cursor:** with multiple cursors active, each cursor's line is toggled independently.
+
+The keybinding is configurable — open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`) and search for "AS Notes: Toggle Todo" to change it.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -220,6 +242,8 @@ npm run lint
 
 Press **F5** in VS Code to launch the Extension Development Host with the extension loaded.
 
+Note that it is OK to have the extension installed via the marketplace and debug at the same time. The debug version will take precedence and override the marketplace install behaviour.
+
 ### Testing
 
 Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offset-based lookup, segment computation, index service CRUD, title extraction, rename detection data flow, and nested link indexing. Run with `npm test`.
@@ -247,9 +271,11 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 
 For a deep dive into the technical design, see [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
-## Publishing
+### Publishing
 
 ```
+# Bump package version
+
 npx @vscode/vsce package
 npx @vscode/vsce login appsoftwareltd
  

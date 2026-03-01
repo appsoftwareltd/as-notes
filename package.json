@@ -56,6 +56,18 @@
             {
                 "command": "as-notes.rebuildIndex",
                 "title": "AS Notes: Rebuild Index"
+            },
+            {
+                "command": "as-notes.toggleTodo",
+                "title": "AS Notes: Toggle Todo"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "as-notes.toggleTodo",
+                "key": "ctrl+shift+enter",
+                "mac": "cmd+shift+enter",
+                "when": "editorLangId == markdown"
             }
         ],
         "configuration": {

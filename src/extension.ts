@@ -12,6 +12,7 @@ import { IndexScanner } from './IndexScanner.js';
 import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
 import { wikilinkPlugin, type WikilinkResolverFn } from './MarkdownItWikilinkPlugin.js';
 import { getPathDistance } from './PathUtils.js';
+import { toggleTodoLine } from './TodoToggleService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -57,6 +58,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.rebuildIndex', () => rebuildIndex()),
     );
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.toggleTodo', () => toggleTodoCommand()),
+    );
 
     // Build the API return value (markdown-it plugin) before mode setup
     // so it's available regardless of which code path we take.
@@ -96,6 +100,24 @@ export function deactivate(): void {
     }
     clearPeriodicScan();
     disposeFullMode();
+}
+
+// ── Todo toggle ────────────────────────────────────────────────────────────
+
+function toggleTodoCommand(): void {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) { return; }
+
+    // Collect unique line numbers across all selections/cursors
+    const lineNumbers = [...new Set(editor.selections.map(sel => sel.active.line))];
+
+    editor.edit(editBuilder => {
+        for (const lineNum of lineNumbers) {
+            const line = editor.document.lineAt(lineNum);
+            const toggled = toggleTodoLine(line.text);
+            editBuilder.replace(line.range, toggled);
+        }
+    });
 }
 
 // ── Passive mode ───────────────────────────────────────────────────────────
