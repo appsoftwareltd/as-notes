@@ -209,11 +209,15 @@ In full mode, these events keep the index current:
 | `onDidSaveTextDocument` | Re-index saved file | Catches content changes |
 | `onDidChangeTextDocument` | Re-index live buffer (debounced 500 ms) | Surfaces new wikilinks for autocomplete without saving |
 | `onDidCreateFiles` | Index new file | New pages enter the index |
-| `onDidDeleteFiles` | Remove from DB | Cascade-deletes links |
-| `onDidRenameFiles` | Remove old + index new | Path updates |
+| `onDidDeleteFiles` | Remove from DB (or `staleScan` for folders) | Cascade-deletes links |
+| `onDidRenameFiles` | Remove old + index new (or `staleScan` for folders) | Path updates |
 | `onDidChangeActiveTextEditor` | Re-index departing file from editor buffer | Captures unsaved edits (e.g. new aliases) |
 
 All handlers except `onDidChangeTextDocument` persist the DB after updating.
+
+**Folder moves and deletes:** When the VS Code file explorer moves or renames a folder, `onDidRenameFiles` fires with the **folder** URI — not with the individual `.md` file URIs inside. The same applies to `onDidDeleteFiles` for folder deletes. An extension-based `isMarkdownUri` check on the event URIs is therefore insufficient to detect these operations.
+
+Both handlers detect non-markdown URIs in the event and respond by running `indexScanner.staleScan()`. The stale scan compares every file on disk against the DB: files no longer on disk are removed (old paths after a folder delete or move), and files not yet indexed are added (files at their new location after a folder move). The individual per-file handling for bare `.md` file events is still applied as a fast path before the stale scan guard.
 
 **Buffer read on editor switch:** The `onDidChangeActiveTextEditor` handler reads from the VS Code `TextDocument` buffer (`doc.getText()`) rather than from disk. This ensures that unsaved edits — such as newly added aliases in front matter — are captured in the index immediately when the user navigates away. If the document has already been closed (no longer in `workspace.textDocuments`), it falls back to reading from disk via `IndexScanner.indexFile()`.
 

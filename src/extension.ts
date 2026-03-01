@@ -219,11 +219,24 @@ async function enterFullMode(
 
     // On file delete
     fullModeDisposables.push(
-        vscode.workspace.onDidDeleteFiles((e) => {
+        vscode.workspace.onDidDeleteFiles(async (e) => {
+            let hasFolderDelete = false;
             for (const fileUri of e.files) {
                 if (isMarkdownUri(fileUri)) {
                     const relativePath = vscode.workspace.asRelativePath(fileUri, false);
                     indexService!.removePage(relativePath);
+                } else {
+                    // A folder (or other non-markdown item) was deleted — individual
+                    // file URIs inside are not surfaced by VS Code. Run a stale scan
+                    // to remove any orphaned index entries.
+                    hasFolderDelete = true;
+                }
+            }
+            if (hasFolderDelete) {
+                try {
+                    await indexScanner!.staleScan();
+                } catch (err) {
+                    console.warn('as-notes: stale scan after folder delete failed:', err);
                 }
             }
             if (!safeSaveToFile()) { return; }
@@ -234,10 +247,14 @@ async function enterFullMode(
     // On file rename
     fullModeDisposables.push(
         vscode.workspace.onDidRenameFiles(async (e) => {
+            let hasFolderRename = false;
             for (const { oldUri, newUri } of e.files) {
                 if (isMarkdownUri(oldUri)) {
                     const oldPath = vscode.workspace.asRelativePath(oldUri, false);
                     indexService!.removePage(oldPath);
+                } else {
+                    // A folder was renamed/moved — individual file URIs are not surfaced.
+                    hasFolderRename = true;
                 }
                 if (isMarkdownUri(newUri)) {
                     try {
@@ -245,6 +262,15 @@ async function enterFullMode(
                     } catch (err) {
                         console.warn('as-notes: failed to index renamed file:', err);
                     }
+                }
+            }
+            if (hasFolderRename) {
+                // A stale scan reconciles old paths (orphaned in DB) and new paths
+                // (files now at their moved location but not yet indexed).
+                try {
+                    await indexScanner!.staleScan();
+                } catch (err) {
+                    console.warn('as-notes: stale scan after folder rename failed:', err);
                 }
             }
             if (!safeSaveToFile()) { return; }
