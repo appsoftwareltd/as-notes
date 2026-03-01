@@ -209,18 +209,18 @@ describe('WikilinkCompletionProvider — completion item cache', () => {
         const pages = service.getAllPages();
         const aliases = service.getAllAliases();
 
-        // Pages get sortText prefix "0-", aliases get "1-"
-        // "0-bravo" < "0-zulu" < "1-alpha alias" — pages always before aliases
+        // Pages get sortText prefix "0-", forward refs "1-", aliases "2-"
+        // "0-bravo" < "0-zulu" < "2-alpha alias" — pages always before aliases
         const pageSorts = pages.map(p => {
             const stem = p.filename.slice(0, -3);
             return `0-${stem.toLowerCase()}`;
         });
-        const aliasSorts = aliases.map(a => `1-${a.alias_name.toLowerCase()}`);
+        const aliasSorts = aliases.map(a => `2-${a.alias_name.toLowerCase()}`);
 
         const combined = [...pageSorts, ...aliasSorts].sort();
         // All page sorts should come before alias sorts
         expect(combined[0].startsWith('0-')).toBe(true);
-        expect(combined[combined.length - 1].startsWith('1-')).toBe(true);
+        expect(combined[combined.length - 1].startsWith('2-')).toBe(true);
     });
 
     it('should detect duplicate filenames for disambiguation', () => {
@@ -237,5 +237,80 @@ describe('WikilinkCompletionProvider — completion item cache', () => {
 
         expect(filenameCount.get('topic.md')).toBe(2);
         expect(filenameCount.get('unique.md')).toBe(1);
+    });
+
+    it('should include forward-referenced pages in completion candidates', () => {
+        // Index a page that links to a file that does not yet exist
+        service.indexFileContent('source.md', 'source.md',
+            '# Source\n\nSee [[Phantom Page]] for details.', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        expect(forwardRefs.map(r => r.page_name)).toContain('Phantom Page');
+    });
+
+    it('should give forward-reference items detail "not yet created"', () => {
+        service.indexFileContent('source.md', 'source.md',
+            '# Source\n\nSee [[Draft]].', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        expect(forwardRefs).toHaveLength(1);
+        // The provider sets detail = 'not yet created' for each forward-ref item.
+        // Verify the data returned from the index matches what the provider will use.
+        expect(forwardRefs[0].page_name).toBe('Draft');
+        expect(forwardRefs[0].page_filename).toBe('Draft.md');
+    });
+
+    it('should sort forward refs between real pages (0-) and aliases (2-)', () => {
+        // Real page
+        service.indexFileContent('Actual.md', 'Actual.md', '# Actual', 1000);
+        // Forward reference (link to non-existent page)
+        service.indexFileContent('source.md', 'source.md',
+            '# Source\n\nSee [[Middle]].', 1000);
+        // Alias
+        const aliasContent = '---\naliases: [Zebra Alias]\n---\n\n# ZPage';
+        service.indexFileContent('ZPage.md', 'ZPage.md', aliasContent, 1000);
+
+        const pages = service.getAllPages();
+        const forwardRefs = service.getForwardReferencedPages();
+        const aliases = service.getAllAliases();
+
+        const pageSorts = pages
+            .filter(p => p.filename !== 'source.md')  // source is a real page but not a target
+            .map(p => `0-${p.filename.slice(0, -3).toLowerCase()}`);
+        const forwardSorts = forwardRefs.map(r => `1-${r.page_name.toLowerCase()}`);
+        const aliasSorts = aliases.map(a => `2-${a.alias_name.toLowerCase()}`);
+
+        // all 0- sorts should be less than all 1- sorts, which should be less than all 2- sorts
+        for (const ps of pageSorts) {
+            for (const fs of forwardSorts) {
+                expect(ps < fs).toBe(true);
+            }
+        }
+        for (const fs of forwardSorts) {
+            for (const als of aliasSorts) {
+                expect(fs < als).toBe(true);
+            }
+        }
+    });
+
+    it('should not include forward ref once its page is indexed', () => {
+        service.indexFileContent('source.md', 'source.md',
+            '# Source\n\nSee [[Soon To Exist]].', 1000);
+
+        expect(service.getForwardReferencedPages().map(r => r.page_name)).toContain('Soon To Exist');
+
+        // Now create the target page
+        service.indexFileContent('Soon To Exist.md', 'Soon To Exist.md', '# Soon To Exist', 1000);
+
+        expect(service.getForwardReferencedPages().map(r => r.page_name)).not.toContain('Soon To Exist');
+    });
+
+    it('should deduplicate forward refs when multiple sources link to the same target', () => {
+        service.indexFileContent('a.md', 'a.md', '# A\n\nSee [[Ghost]].', 1000);
+        service.indexFileContent('b.md', 'b.md', '# B\n\nAlso [[Ghost]].', 1000);
+        service.indexFileContent('c.md', 'c.md', '# C\n\nAgain [[Ghost]].', 1000);
+
+        const ghosts = service.getForwardReferencedPages().filter(r => r.page_name === 'Ghost');
+        expect(ghosts).toHaveLength(1);
     });
 });

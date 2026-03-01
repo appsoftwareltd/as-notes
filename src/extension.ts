@@ -30,12 +30,20 @@ let indexScanner: IndexScanner | undefined;
 /** Periodic scan interval handle. */
 let periodicScanHandle: ReturnType<typeof setInterval> | undefined;
 
+/** Debounce handle for the live-buffer re-index on text change. */
+let completionDebounceHandle: ReturnType<typeof setTimeout> | undefined;
+
 /** Completion provider instance — alive while in full mode. */
 let completionProvider: WikilinkCompletionProvider | undefined;
+
+/** Stored extension context — needed for mode transitions. */
+let extensionContext: vscode.ExtensionContext | undefined;
 
 // ── Activation ─────────────────────────────────────────────────────────────
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    extensionContext = context;
+
     // Status bar — always present
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
     context.subscriptions.push(statusBarItem);
@@ -64,10 +72,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-    // Persist DB before shutdown
+    // Persist DB before shutdown (only if .asnotes/ still exists)
     if (indexService?.isOpen) {
-        indexService.saveToFile();
-        indexService.close();
+        safeSaveToFile();
+        indexService?.close();
     }
     clearPeriodicScan();
     disposeFullMode();
@@ -160,11 +168,35 @@ async function enterFullMode(
             if (!isMarkdown(doc)) { return; }
             try {
                 await indexScanner!.indexFile(doc.uri);
-                indexService!.saveToFile();
+                if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
             } catch (err) {
                 console.warn('as-notes: failed to index on save:', err);
             }
+        }),
+    );
+
+    // On text change: debounced re-index of the live buffer so that newly
+    // typed wikilinks (forward references) appear in autocomplete immediately
+    // without requiring a save or editor switch.
+    fullModeDisposables.push(
+        vscode.workspace.onDidChangeTextDocument((e) => {
+            if (!isMarkdown(e.document)) { return; }
+            if (completionDebounceHandle !== undefined) {
+                clearTimeout(completionDebounceHandle);
+            }
+            completionDebounceHandle = setTimeout(() => {
+                completionDebounceHandle = undefined;
+                const doc = e.document;
+                // Skip re-indexing while a rename check is pending for this document.
+                // The rename tracker needs the stale index state to detect the change;
+                // refreshIndexAfterRename will re-index the file once the rename completes.
+                if (renameTracker.hasPendingEdit(doc.uri.toString())) { return; }
+                const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+                const filename = path.basename(doc.uri.fsPath);
+                indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
+                completionProvider?.refresh();
+            }, 500);
         }),
     );
 
@@ -180,7 +212,7 @@ async function enterFullMode(
                     }
                 }
             }
-            indexService!.saveToFile();
+            if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
         }),
     );
@@ -194,7 +226,7 @@ async function enterFullMode(
                     indexService!.removePage(relativePath);
                 }
             }
-            indexService!.saveToFile();
+            if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
         }),
     );
@@ -215,7 +247,7 @@ async function enterFullMode(
                     }
                 }
             }
-            indexService!.saveToFile();
+            if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
         }),
     );
@@ -241,7 +273,7 @@ async function enterFullMode(
                         // Document already closed — fall back to disk read
                         await indexScanner!.indexFile(previousEditorUri);
                     }
-                    indexService!.saveToFile();
+                    if (!safeSaveToFile()) { return; }
                     completionProvider?.refresh();
                 } catch {
                     // File may have been closed/deleted
@@ -278,10 +310,48 @@ async function enterFullMode(
 }
 
 function disposeFullMode(): void {
+    if (completionDebounceHandle !== undefined) {
+        clearTimeout(completionDebounceHandle);
+        completionDebounceHandle = undefined;
+    }
     for (const d of fullModeDisposables) {
         d.dispose();
     }
     fullModeDisposables = [];
+}
+
+/**
+ * Tear down full mode and switch to passive mode.
+ * Called when `.asnotes/` is detected as missing during a save attempt.
+ */
+function exitFullMode(): void {
+    clearPeriodicScan();
+    if (indexService?.isOpen) {
+        indexService.close();
+    }
+    indexService = undefined;
+    indexScanner = undefined;
+    completionProvider = undefined;
+    disposeFullMode();
+    setPassiveMode();
+    console.log('as-notes: .asnotes/ directory removed — switched to passive mode');
+}
+
+/**
+ * Check that `.asnotes/` still exists before persisting the database.
+ * If the directory has been deleted, tear down full mode and switch to passive.
+ * Returns true if the save succeeded, false if we exited full mode.
+ */
+function safeSaveToFile(): boolean {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) { return false; }
+    const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
+    if (!fs.existsSync(asnotesDir)) {
+        exitFullMode();
+        return false;
+    }
+    indexService?.saveToFile();
+    return true;
 }
 
 // ── Commands ───────────────────────────────────────────────────────────────
@@ -378,7 +448,7 @@ function startPeriodicScan(): void {
         try {
             const summary = await indexScanner.staleScan();
             if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
-                indexService.saveToFile();
+                if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 const pageCount = indexService.getAllPages().length;
                 statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;

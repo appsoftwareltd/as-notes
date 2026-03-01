@@ -87,6 +87,15 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         }
     }
 
+    /**
+     * Returns true if there is an unresolved pending edit for the given document key.
+     * Used by the completion debounce in extension.ts to avoid overwriting the
+     * index baseline before checkForRenames has had a chance to run.
+     */
+    hasPendingEdit(docKey: string): boolean {
+        return this.pendingEdit?.docKey === docKey;
+    }
+
     // ── Change detection ───────────────────────────────────────────────
 
     private onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
@@ -106,6 +115,16 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         const relativePath = vscode.workspace.asRelativePath(event.document.uri, false);
         const page = this.indexService.getPageByPath(relativePath);
         if (!page) {
+            return;
+        }
+
+        // If every content change inserts text ending with ']]', this is a
+        // completion-provider insertion (our CompletionItems always end with ']]').
+        // In that case, do not set pendingEdit — the inserted text is not a rename.
+        const isCompletionInsert = event.contentChanges.length > 0 &&
+            event.contentChanges.every(c => c.text.endsWith(']]'));
+        if (isCompletionInsert) {
+            this.pendingEdit = undefined;
             return;
         }
 

@@ -58,6 +58,7 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             this.dirty = false;
         }
 
+
         // Set the replacement range: from after the [[ to just past the matching ]]
         // (or to the cursor if no ]] exists yet).
         const rangeStart = new vscode.Position(position.line, bracketCol + 2);
@@ -123,6 +124,18 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             this.cachedItems.push(item);
         }
 
+        // Forward-reference completion items (pages linked to but not yet created).
+        // Sort between real pages (0-) and aliases (2-).
+        const forwardRefs = this.indexService.getForwardReferencedPages();
+        for (const ref of forwardRefs) {
+            const item = new vscode.CompletionItem(ref.page_name, vscode.CompletionItemKind.File);
+            item.detail = 'not yet created';
+            item.sortText = `1-${ref.page_name.toLowerCase()}`;
+            item.filterText = ref.page_name;
+            item.insertText = `${ref.page_name}]]`;
+            this.cachedItems.push(item);
+        }
+
         // Alias completion items
         for (const alias of aliases) {
             const canonicalStem = alias.canonical_filename.endsWith('.md')
@@ -132,8 +145,8 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             const item = new vscode.CompletionItem(alias.alias_name, vscode.CompletionItemKind.Reference);
             item.detail = `→ ${canonicalStem}`;
 
-            // Sort aliases after pages (1-prefix)
-            item.sortText = `1-${alias.alias_name.toLowerCase()}`;
+            // Sort aliases after forward refs (2-prefix)
+            item.sortText = `2-${alias.alias_name.toLowerCase()}`;
             item.filterText = alias.alias_name;
             item.insertText = `${alias.alias_name}]]`;
 

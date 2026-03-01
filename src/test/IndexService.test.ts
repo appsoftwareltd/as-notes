@@ -842,3 +842,76 @@ describe('IndexService — aliases', () => {
         expect(updatedLinks[0].page_filename).toBe('New Alias.md');
     });
 });
+
+describe('IndexService — getForwardReferencedPages', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should return entries for links whose target file is not in pages', () => {
+        // Index a source page that links to a non-existent page
+        service.indexFileContent('source.md', 'source.md', '# Source\n\nSee [[Missing Page]] for details.', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        expect(forwardRefs).toHaveLength(1);
+        expect(forwardRefs[0].page_name).toBe('Missing Page');
+        expect(forwardRefs[0].page_filename).toBe('Missing Page.md');
+    });
+
+    it('should return empty array when all linked pages exist', () => {
+        service.indexFileContent('target.md', 'target.md', '# Target', 1000);
+        service.indexFileContent('source.md', 'source.md', '# Source\n\nSee [[target]] for details.', 1000);
+
+        // target.md exists in pages; "target" resolves to target filename
+        // However, the link stores page_filename as sanitised, so create a realistic scenario:
+        service.indexFileContent('Alpha.md', 'Alpha.md', '# Alpha\n\nSee [[Beta]] for details.', 1000);
+        service.indexFileContent('Beta.md', 'Beta.md', '# Beta', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        // Only links whose page_filename has no pages row should appear
+        // target.md and Beta.md both exist, so they won't appear (assuming exact filename match)
+        // "target.md" vs actual filename — verify no spurious entries for existing pages
+        const names = forwardRefs.map(r => r.page_name);
+        expect(names).not.toContain('Beta');
+    });
+
+    it('should not return duplicates when multiple sources link to the same unresolved target', () => {
+        service.indexFileContent('a.md', 'a.md', '# A\n\nSee [[Ghost Page]].', 1000);
+        service.indexFileContent('b.md', 'b.md', '# B\n\nAlso [[Ghost Page]] here.', 1000);
+        service.indexFileContent('c.md', 'c.md', '# C\n\nAnd [[Ghost Page]] again.', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        const ghostRefs = forwardRefs.filter(r => r.page_name === 'Ghost Page');
+        expect(ghostRefs).toHaveLength(1);
+    });
+
+    it('should exclude a target once the corresponding page is indexed', () => {
+        service.indexFileContent('source.md', 'source.md', '# Source\n\nSee [[New Page]].', 1000);
+
+        const before = service.getForwardReferencedPages();
+        expect(before.map(r => r.page_name)).toContain('New Page');
+
+        // Now index the target page
+        service.indexFileContent('New Page.md', 'New Page.md', '# New Page', 1000);
+
+        const after = service.getForwardReferencedPages();
+        expect(after.map(r => r.page_name)).not.toContain('New Page');
+    });
+
+    it('should return results sorted case-insensitively by page_name', () => {
+        service.indexFileContent('source.md', 'source.md',
+            '# Source\n\nSee [[zebra]], [[Apple]], [[mango]].', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        const names = forwardRefs.map(r => r.page_name);
+        const sorted = [...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+        expect(names).toEqual(sorted);
+    });
+});

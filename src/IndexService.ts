@@ -156,14 +156,15 @@ export class IndexService {
 
     /**
      * Persist the in-memory database to the file at `dbPath`.
+     * If the parent directory does not exist (e.g. `.asnotes/` was deleted),
+     * the write is silently skipped — the directory should only be created
+     * by the explicit init command.
      */
     saveToFile(): void {
         if (!this.db) { return; }
-        const data = this.db.export();
         const dir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        if (!fs.existsSync(dir)) { return; }
+        const data = this.db.export();
         fs.writeFileSync(this.dbPath, Buffer.from(data));
     }
 
@@ -608,6 +609,31 @@ export class IndexService {
             alias_filename: row[3] as string,
             canonical_path: row[4] as string,
             canonical_filename: row[5] as string,
+        }));
+    }
+
+    /**
+     * Get all "forward-referenced" pages — link targets that are referenced by at
+     * least one wikilink but have no corresponding entry in the `pages` table (i.e.
+     * the file has not been created yet).
+     *
+     * These are returned as distinct (page_name, page_filename) pairs, sorted
+     * case-insensitively by page_name, and are useful for surfacing unresolved
+     * links as autocomplete candidates before the file is created.
+     */
+    getForwardReferencedPages(): { page_name: string; page_filename: string }[] {
+        this.ensureOpen();
+        const result = this.db!.exec(
+            `SELECT DISTINCT l.page_name, l.page_filename
+             FROM links l
+             LEFT JOIN pages p ON p.filename = l.page_filename
+             WHERE p.id IS NULL
+             ORDER BY l.page_name COLLATE NOCASE`,
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            page_name: row[0] as string,
+            page_filename: row[1] as string,
         }));
     }
 

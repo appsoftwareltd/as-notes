@@ -30,6 +30,7 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Completion items](#completion-items)
   - [Nested wikilinks and front matter](#nested-wikilinks-and-front-matter)
   - [Caching strategy](#caching-strategy)
+  - [Completion and rename tracking interaction](#completion-and-rename-tracking-interaction)
 - [Wikilink parsing](#wikilink-parsing)
   - [Stack-based bracket matching](#stack-based-bracket-matching)
   - [The Wikilink model](#the-wikilink-model)
@@ -163,7 +164,16 @@ sql.js operates entirely in memory. The database is persisted to disk (`saveToFi
 - After each periodic scan that detects changes
 - On extension deactivation (before the extension host shuts down)
 
-The `saveToFile()` method exports the in-memory database to a `Buffer` and writes it atomically to `.asnotes/index.db`.
+The `saveToFile()` method exports the in-memory database to a `Buffer` and writes it atomically to `.asnotes/index.db`. If the `.asnotes/` directory does not exist (e.g. the user deleted it), the write is silently skipped — the directory is only created by the explicit init command.
+
+**Safe save and mode transition:** All index update triggers in `extension.ts` use a `safeSaveToFile()` wrapper that checks for the `.asnotes/` directory before persisting. If the directory has been deleted while the extension is running, `safeSaveToFile()` calls `exitFullMode()` which:
+
+1. Stops the periodic scanner
+2. Closes the in-memory database
+3. Disposes all registered providers (decorations, links, hover, rename tracker, completions)
+4. Switches the status bar to passive mode
+
+This allows users to "uninitialise" a workspace by simply deleting the `.asnotes/` directory — the extension detects the deletion on the next trigger and cleanly transitions to passive mode. Direct `saveToFile()` calls (without the guard) are only used in `initWorkspace()`, `rebuildIndex()`, and the `enterFullMode()` stale scan, where the directory’s existence is guaranteed.
 
 ---
 
@@ -197,14 +207,17 @@ In full mode, these events keep the index current:
 | Event | Handler | Action |
 |---|---|---|
 | `onDidSaveTextDocument` | Re-index saved file | Catches content changes |
+| `onDidChangeTextDocument` | Re-index live buffer (debounced 500 ms) | Surfaces new wikilinks for autocomplete without saving |
 | `onDidCreateFiles` | Index new file | New pages enter the index |
 | `onDidDeleteFiles` | Remove from DB | Cascade-deletes links |
 | `onDidRenameFiles` | Remove old + index new | Path updates |
 | `onDidChangeActiveTextEditor` | Re-index departing file from editor buffer | Captures unsaved edits (e.g. new aliases) |
 
-All handlers persist the DB after updating.
+All handlers except `onDidChangeTextDocument` persist the DB after updating.
 
 **Buffer read on editor switch:** The `onDidChangeActiveTextEditor` handler reads from the VS Code `TextDocument` buffer (`doc.getText()`) rather than from disk. This ensures that unsaved edits — such as newly added aliases in front matter — are captured in the index immediately when the user navigates away. If the document has already been closed (no longer in `workspace.textDocuments`), it falls back to reading from disk via `IndexScanner.indexFile()`.
+
+**Debounced live-buffer re-index:** The `onDidChangeTextDocument` handler re-indexes the current document from its editor buffer 500 ms after the last keystroke. This ensures that a wikilink like `[[New Topic]]` typed on line 1 is immediately available for autocomplete when the user starts typing `[[New` on line 2 — without needing to save or navigate away first. Because this is a transient in-memory update (no `.asnotes/index.db` write), it is fast and does not call `safeSaveToFile()`. The debounce prevents re-indexing on every single keystroke. The debounce timer is cancelled in `disposeFullMode()` to prevent a stale callback firing after full mode has been torn down.
 
 ### Periodic scanning
 
@@ -371,6 +384,27 @@ The provider maintains a cached array of `CompletionItem[]` objects. The cache i
 - **Filtering:** VS Code handles client-side filtering of the cached list as the user types — no per-keystroke DB queries.
 
 This approach ensures the completion list is always up to date without redundant database access.
+
+### Completion and rename tracking interaction
+
+When the user types inside a wikilink, two things happen on every keystroke:
+
+1. `WikilinkRenameTracker.onDocumentChanged` — records `pendingEdit` (the outermost wikilink position the cursor is inside). This edit state is cleared and rename detection runs when the cursor exits the wikilink.
+2. The 500 ms `onDidChangeTextDocument` debounce in `extension.ts` — re-indexes the live buffer into the in-memory DB so that newly typed forward references appear in autocomplete immediately.
+
+These two behaviours interact at the index: rename detection (`checkForRenames`) works by comparing the **current DB state** (the last-indexed link positions and names) against the live document. If the debounce fires and re-indexes the document before the cursor exits the wikilink, the DB is updated to reflect the edited name. When `checkForRenames` later runs after cursor exit, it compares the edited name in the DB against the same name in the live document — no difference is detected, and the rename dialog is never shown.
+
+**Guard:** The debounce callback in `extension.ts` checks `renameTracker.hasPendingEdit(doc.uri.toString())` before calling `indexFileContent`. If a pending edit is active for that document, the re-index is skipped for that tick. `WikilinkRenameTracker` exposes:
+
+```typescript
+hasPendingEdit(docKey: string): boolean
+```
+
+This returns `true` while `pendingEdit` is set for the given document URI. Once `checkForRenames` completes — either by detecting no change or by performing the rename via `refreshIndexAfterRename` — the pending edit is cleared and subsequent debounce ticks can re-index normally.
+
+**`checkForRenames` scans the full document.** It reads all link rows for the page from the DB (via `getLinksForPage`) and builds an `(line, start_col) → LinkRow` map. It then parses every line in the live document, comparing `page_name` for each position. Any position that exists in both the DB and the live parse with a different `page_name` is a rename candidate. This is a full-document comparison — it does not limit itself to the link the cursor was editing.
+
+Manual renames continue to work normally: `pendingEdit` is set on any document change (not just completions), and `checkForRenames` is invoked on cursor exit or editor switch.
 
 ---
 
@@ -732,6 +766,8 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 5. **Passive mode** (no `.asnotes/`): status bar only, no providers
 
 All full-mode registrations are tracked in `fullModeDisposables[]` and pushed to `context.subscriptions`. The `deactivate()` function persists the database and cleans up.
+
+Additionally, `extension.ts` registers the `as-notes.completionAccepted` command, which the completion provider's items use to clear the rename tracker's `pendingEdit` after a completion is applied (see [Completion and rename tracking interaction](#completion-and-rename-tracking-interaction)).
 
 The markdown document selector is `{ language: 'markdown' }`, which VS Code maps to `.md` and `.markdown` files (configured in `package.json` under `contributes.languages`).
 
