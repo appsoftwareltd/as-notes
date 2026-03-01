@@ -590,6 +590,28 @@ export class IndexService {
     }
 
     /**
+     * Get all aliases in the index, joined with their canonical page info.
+     */
+    getAllAliases(): (AliasRow & { canonical_path: string; canonical_filename: string })[] {
+        this.ensureOpen();
+        const result = this.db!.exec(
+            `SELECT a.id, a.canonical_page_id, a.alias_name, a.alias_filename, p.path, p.filename
+             FROM aliases a
+             JOIN pages p ON a.canonical_page_id = p.id
+             ORDER BY a.alias_name`,
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            id: row[0] as number,
+            canonical_page_id: row[1] as number,
+            alias_name: row[2] as string,
+            alias_filename: row[3] as string,
+            canonical_path: row[4] as string,
+            canonical_filename: row[5] as string,
+        }));
+    }
+
+    /**
      * Resolve an alias name to its canonical page. Returns the page row or undefined.
      * Case-insensitive match on alias_name.
      */

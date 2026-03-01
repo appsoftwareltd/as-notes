@@ -738,6 +738,37 @@ describe('IndexService — aliases', () => {
         expect(noMatch).toHaveLength(0);
     });
 
+    it('should get all aliases with canonical page info', () => {
+        const page1 = '---\naliases:\n  - Alpha\n  - Beta\n---\n\n# Page One';
+        service.indexFileContent('page1.md', 'page1.md', page1, 1000);
+
+        const page2 = '---\naliases: [Gamma]\n---\n\n# Page Two';
+        service.indexFileContent('sub/page2.md', 'page2.md', page2, 1000);
+
+        // Page with no aliases
+        service.indexFileContent('plain.md', 'plain.md', '# Plain', 1000);
+
+        const allAliases = service.getAllAliases();
+        expect(allAliases).toHaveLength(3);
+
+        // Should be sorted alphabetically by alias_name
+        expect(allAliases[0].alias_name).toBe('Alpha');
+        expect(allAliases[0].canonical_filename).toBe('page1.md');
+        expect(allAliases[0].canonical_path).toBe('page1.md');
+
+        expect(allAliases[1].alias_name).toBe('Beta');
+        expect(allAliases[1].canonical_filename).toBe('page1.md');
+
+        expect(allAliases[2].alias_name).toBe('Gamma');
+        expect(allAliases[2].canonical_filename).toBe('page2.md');
+        expect(allAliases[2].canonical_path).toBe('sub/page2.md');
+    });
+
+    it('should return empty array from getAllAliases when no aliases exist', () => {
+        service.indexFileContent('page.md', 'page.md', '# No aliases here', 1000);
+        expect(service.getAllAliases()).toHaveLength(0);
+    });
+
     it('should remove aliases when page is removed', () => {
         const content = '---\naliases: [My Alias]\n---\n\n# Page';
         service.indexFileContent('page.md', 'page.md', content, 1000);

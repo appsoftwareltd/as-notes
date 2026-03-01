@@ -25,6 +25,11 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Index-based global resolution](#index-based-global-resolution)
   - [Disambiguation algorithm](#disambiguation-algorithm)
   - [Path distance calculation](#path-distance-calculation)
+- [Wikilink autocomplete](#wikilink-autocomplete)
+  - [Trigger detection](#trigger-detection)
+  - [Completion items](#completion-items)
+  - [Nested wikilinks and front matter](#nested-wikilinks-and-front-matter)
+  - [Caching strategy](#caching-strategy)
 - [Wikilink parsing](#wikilink-parsing)
   - [Stack-based bracket matching](#stack-based-bracket-matching)
   - [The Wikilink model](#the-wikilink-model)
@@ -65,7 +70,7 @@ The extension is built with:
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (62 tests across 2 test files)
+- **vitest 3.x** for unit tests (145 tests across 5 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
@@ -195,9 +200,11 @@ In full mode, these events keep the index current:
 | `onDidCreateFiles` | Index new file | New pages enter the index |
 | `onDidDeleteFiles` | Remove from DB | Cascade-deletes links |
 | `onDidRenameFiles` | Remove old + index new | Path updates |
-| `onDidChangeActiveTextEditor` | Re-index departing file | Captures unsaved edits |
+| `onDidChangeActiveTextEditor` | Re-index departing file from editor buffer | Captures unsaved edits (e.g. new aliases) |
 
 All handlers persist the DB after updating.
+
+**Buffer read on editor switch:** The `onDidChangeActiveTextEditor` handler reads from the VS Code `TextDocument` buffer (`doc.getText()`) rather than from disk. This ensures that unsaved edits — such as newly added aliases in front matter — are captured in the index immediately when the user navigates away. If the document has already been closed (no longer in `workspace.textDocuments`), it falls back to reading from disk via `IndexScanner.indexFile()`.
 
 ### Periodic scanning
 
@@ -308,11 +315,62 @@ notes/a    ↔ notes/b    → 2 (one up, one down)
 ```
 
 The algorithm:
+
 1. Split both paths into segments (forward slashes).
 2. Find the common prefix length.
 3. Distance = (steps up from A to common ancestor) + (steps down from ancestor to B).
 
 Comparison is case-insensitive to match the case-insensitive filename resolution used elsewhere.
+
+---
+
+## Wikilink autocomplete
+
+The `WikilinkCompletionProvider` provides autocomplete suggestions when the user types `[[` in a markdown file. It uses VS Code's `CompletionItemProvider` API.
+
+### Trigger detection
+
+The provider is registered with `[` as the trigger character. When it fires, it examines the text before the cursor to find an unclosed `[[` pair:
+
+1. `findInnermostOpenBracket()` scans the text using a stack-based bracket tracker.
+2. Each `[[` pushes onto the stack; each `]]` pops.
+3. If the stack is non-empty, the last entry is the innermost unclosed `[[`.
+4. If the stack is empty (no unclosed `[[`), no completions are returned.
+
+This means single `[` brackets do not trigger completions, and fully closed wikilinks (like `[[Page]]`) do not re-trigger.
+
+**Close-bracket consumption:** After finding the open `[[`, the provider also scans forward from the cursor using `findMatchingCloseBracket()` to detect an existing `]]` that closes the current wikilink. If found, the replacement range extends past the `]]`, so the inserted `PageName]]` replaces both the typed text and the existing closing brackets. This prevents orphan `]]` pairs after completion (e.g. `[[PageName]]]]`). The function uses depth tracking: nested `[[` increase depth, `]]` decrease it, and the match is found when depth reaches −1.
+
+### Completion items
+
+Items are built from two sources in the index:
+
+| Source | Kind | Label | Detail | Sort prefix |
+|---|---|---|---|---|
+| Page | File | Filename stem (no `.md`) | Subfolder path (if ambiguous) | `0-` |
+| Alias | Reference | Alias name | `→ CanonicalPage` | `1-` |
+
+The `sortText` prefix ensures pages always appear before aliases in the list. Both page and alias items set `insertText` to `Name]]` — selecting an item auto-closes the wikilink.
+
+**Disambiguation:** when multiple pages share the same filename (e.g. `notes/Topic.md` and `archive/Topic.md`), the subfolder path is shown in the `detail` field so the user can distinguish them.
+
+### Nested wikilinks and front matter
+
+**Nested wikilinks:** when the user types `[[` inside an existing unclosed `[[...`, the bracket tracker detects the inner `[[` and scopes the replacement range to start after it. This allows the inner wikilink to be completed independently while the outer link remains open.
+
+**Front matter suppression:** `isLineInsideFrontMatter()` checks whether the cursor is between the first two `---` lines. If so, no completions are returned — front matter aliases are plain strings, not wikilinks.
+
+All three pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, and `isLineInsideFrontMatter()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
+
+### Caching strategy
+
+The provider maintains a cached array of `CompletionItem[]` objects. The cache is rebuilt from the index only when marked dirty.
+
+- **Dirty flag:** set via `refresh()` after any index update (file save, create, delete, rename, periodic scan, rebuild).
+- **Rebuild:** queries `IndexService.getAllPages()` and `IndexService.getAllAliases()`, builds items once.
+- **Filtering:** VS Code handles client-side filtering of the cached list as the user types — no per-keystroke DB queries.
+
+This approach ensures the completion list is always up to date without redundant database access.
 
 ---
 
@@ -681,7 +739,7 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests use vitest and are split across four test files:
+Tests use vitest and are split across five test files:
 
 ### `WikilinkService.test.ts` (23 tests)
 
@@ -699,7 +757,7 @@ Tests use vitest and are split across four test files:
 
 3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
 
-### `IndexService.test.ts` (54 tests)
+### `IndexService.test.ts` (56 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
@@ -715,11 +773,21 @@ Tests use vitest and are split across four test files:
 
 7. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation, `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow.
 
-8. **Aliases** (15 tests) — alias storage from front matter, re-indexing replaces aliases, no-front-matter edge case, `resolveAlias()` success and failure, case-insensitive resolution, `resolvePageByFilename()` direct vs alias match, backlink count including aliases, `updateAliasRename()` for alias record and link references, `findPagesByFilename()` for subfolder resolution, cascade delete on page removal, filename sanitisation, `getPageById()`.
+8. **Aliases** (15 tests) — alias storage from front matter, re-indexing replaces aliases, no-front-matter edge case, `resolveAlias()` success and failure, case-insensitive resolution, `resolvePageByFilename()` direct vs alias match, backlink count including aliases, `updateAliasRename()` for alias record and link references, `findPagesByFilename()` for subfolder resolution, cascade delete on page removal, filename sanitisation, `getPageById()`, `getAllAliases()` with canonical page info, empty aliases.
 
 ### `WikilinkFileService.test.ts` (10 tests)
 
 1. **Path distance** (10 tests) — same directory (0), nested subdirectory (1), sibling directories (2), root to deep (3), deep to root (3), divergent paths, case-insensitive comparison, deeply nested to root, same prefix different branch, single segment root.
+
+### `WikilinkCompletionProvider.test.ts` (30 tests)
+
+1. **Bracket detection** (11 tests) — no brackets, simple `[[`, after text, with text typed, already closed, nested innermost detection, inner closed leaving outer open, all brackets closed, multiple unclosed, partially closed, single `[`.
+
+2. **Close-bracket detection** (9 tests) — no `]]`, `]]` at start, `]]` with text before, `]]` with text after, nested `[[...]]` skipped to find outer `]]`, only nested pairs (no outer close), immediate `]]` after nested pair, deeply nested brackets, `]]` with trailing wikilinks.
+
+3. **Front matter detection** (6 tests) — no front matter, inside front matter, after front matter, unclosed front matter, empty document, first line not `---`.
+
+4. **Completion item building** (4 tests) — page items with stem labels, alias items with canonical info, sort order (pages before aliases), duplicate filename disambiguation.
 
 Tests that depend on VS Code APIs (decorations, document links, hover, rename tracker event handling) are not unit-tested — they require the extension host and are verified via F5 manual testing.
 

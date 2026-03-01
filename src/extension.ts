@@ -9,6 +9,7 @@ import { WikilinkHoverProvider } from './WikilinkHoverProvider.js';
 import { WikilinkRenameTracker } from './WikilinkRenameTracker.js';
 import { IndexService } from './IndexService.js';
 import { IndexScanner } from './IndexScanner.js';
+import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -28,6 +29,9 @@ let indexScanner: IndexScanner | undefined;
 
 /** Periodic scan interval handle. */
 let periodicScanHandle: ReturnType<typeof setInterval> | undefined;
+
+/** Completion provider instance — alive while in full mode. */
+let completionProvider: WikilinkCompletionProvider | undefined;
 
 // ── Activation ─────────────────────────────────────────────────────────────
 
@@ -128,6 +132,12 @@ async function enterFullMode(
     );
     fullModeDisposables.push(renameTracker);
 
+    // Completion provider — wikilink autocomplete triggered by [[
+    completionProvider = new WikilinkCompletionProvider(indexService);
+    fullModeDisposables.push(
+        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
+    );
+
     // Navigation command
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.navigateWikilink', async (args: {
@@ -151,6 +161,7 @@ async function enterFullMode(
             try {
                 await indexScanner!.indexFile(doc.uri);
                 indexService!.saveToFile();
+                completionProvider?.refresh();
             } catch (err) {
                 console.warn('as-notes: failed to index on save:', err);
             }
@@ -170,6 +181,7 @@ async function enterFullMode(
                 }
             }
             indexService!.saveToFile();
+            completionProvider?.refresh();
         }),
     );
 
@@ -183,6 +195,7 @@ async function enterFullMode(
                 }
             }
             indexService!.saveToFile();
+            completionProvider?.refresh();
         }),
     );
 
@@ -203,17 +216,33 @@ async function enterFullMode(
                 }
             }
             indexService!.saveToFile();
+            completionProvider?.refresh();
         }),
     );
 
-    // On active editor change: re-index the file being left
+    // On active editor change: re-index the file being left from the editor
+    // buffer (not disk) so unsaved edits (e.g. new aliases in front matter)
+    // are captured immediately.
     let previousEditorUri: vscode.Uri | undefined;
     fullModeDisposables.push(
         vscode.window.onDidChangeActiveTextEditor(async (editor) => {
             if (previousEditorUri && isMarkdownUri(previousEditorUri)) {
                 try {
-                    await indexScanner!.indexFile(previousEditorUri);
+                    const doc = vscode.workspace.textDocuments.find(
+                        d => d.uri.toString() === previousEditorUri!.toString(),
+                    );
+                    if (doc) {
+                        const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+                        const filename = path.basename(doc.uri.fsPath);
+                        const content = doc.getText();
+                        const stat = await vscode.workspace.fs.stat(doc.uri);
+                        indexService!.indexFileContent(relativePath, filename, content, stat.mtime);
+                    } else {
+                        // Document already closed — fall back to disk read
+                        await indexScanner!.indexFile(previousEditorUri);
+                    }
                     indexService!.saveToFile();
+                    completionProvider?.refresh();
                 } catch {
                     // File may have been closed/deleted
                 }
@@ -324,6 +353,7 @@ async function rebuildIndex(): Promise<void> {
             indexService!.resetSchema();
             const result = await indexScanner!.fullScan(progress, token);
             indexService!.saveToFile();
+            completionProvider?.refresh();
 
             // Update status bar
             const pageCount = indexService!.getAllPages().length;
@@ -349,6 +379,7 @@ function startPeriodicScan(): void {
             const summary = await indexScanner.staleScan();
             if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
                 indexService.saveToFile();
+                completionProvider?.refresh();
                 const pageCount = indexService.getAllPages().length;
                 statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
             }

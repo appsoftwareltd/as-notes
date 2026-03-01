@@ -130,6 +130,16 @@ Wikilinks resolve globally across the workspace, not just in the current directo
 1. A file in the **same directory** as the source always wins
 2. Otherwise, the **closest folder** is preferred (measured by directory distance)
 
+### Wikilink autocomplete
+
+Type `[[` in any markdown file to trigger an autocomplete popup listing all indexed pages and aliases. As you type, the list filters in real time.
+
+- **Page suggestions** show the page name (without `.md`). When multiple pages share the same name in different subfolders, the folder path is shown for disambiguation.
+- **Alias suggestions** show the alias name with an arrow indicating the canonical page (e.g. `→ ActualPage`).
+- **Auto-close** — selecting a suggestion inserts the page name and closes the wikilink with `]]`.
+- **Nested wikilinks** — typing `[[` inside an existing unclosed `[[...` starts a new autocompletion scoped to the inner brackets.
+- Completions are **suppressed inside front matter** blocks (between `---` fences).
+
 ### Persistent index
 
 AS Notes maintains a SQLite database (`.asnotes/index.db`) that indexes all markdown files in the workspace. The index tracks:
@@ -214,6 +224,8 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/WikilinkHoverProvider.ts` | Hover tooltips with target file existence, alias indicator, backlink count |
 | `src/WikilinkFileService.ts` | File resolution — index-aware global matching, alias resolution, subfolder disambiguation |
 | `src/WikilinkRenameTracker.ts` | Rename detection (index-backed), alias vs direct rename classification, workspace-wide updates |
+| `src/WikilinkCompletionProvider.ts` | Wikilink autocomplete — `[[` trigger, page + alias suggestions, auto-close, nested link support |
+| `src/CompletionUtils.ts` | Pure utilities for completion logic — bracket detection, front matter detection |
 | `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, alias management, nesting detection |
 | `src/IndexScanner.ts` | VS Code filesystem scanning — file indexing, full scan, stale scan |
 | `src/FrontMatterService.ts` | Lightweight YAML front matter parser — alias extraction, in-place alias updates |
