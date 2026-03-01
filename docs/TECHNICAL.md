@@ -55,6 +55,15 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Multi-level rename execution](#multi-level-rename-execution)
   - [Post-rename index refresh](#post-rename-index-refresh)
   - [Re-entrancy guard](#re-entrancy-guard)
+- [Markdown preview rendering](#markdown-preview-rendering)
+  - [Plugin registration](#plugin-registration)
+  - [Non-blocking activation](#non-blocking-activation)
+  - [Inline rule](#inline-rule)
+  - [Nested link handling in preview](#nested-link-handling-in-preview)
+  - [Link resolver](#link-resolver)
+  - [Source file context](#source-file-context)
+  - [Preview CSS](#preview-css)
+  - [Limitations of preview links](#limitations-of-preview-links)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
@@ -736,6 +745,120 @@ This explicit refresh prevents a stale-index window where the next edit event co
 ### Re-entrancy guard
 
 The `isProcessing` flag prevents document-change events fired by the rename operation itself (file renames, workspace edits) from being treated as new user edits. It is set to `true` before any rename work begins and cleared in the `finally` block.
+
+---
+
+## Markdown preview rendering
+
+VS Code's built-in markdown preview is extensible via the `contributes` contribution point `markdown.markdownItPlugins`. When this flag is set in `package.json`, VS Code calls the `extendMarkdownIt(md)` function returned by `activate()` during preview initialisation, passing the markdown-it instance used to render preview HTML.
+
+The implementation lives in `src/MarkdownItWikilinkPlugin.ts` (the plugin itself) and `createExtendMarkdownIt()` in `src/extension.ts` (the resolver and wiring).
+
+### Plugin registration
+
+`package.json` declares two contribution points under the flat dotted-key format that VS Code requires:
+
+```json
+"contributes": {
+    "markdown.markdownItPlugins": true,
+    "markdown.previewStyles": [
+        "./media/wikilink-preview.css"
+    ]
+}
+```
+
+**Critical:** These must be flat dotted keys at the top level of `contributes` (e.g. `"markdown.markdownItPlugins"`), not nested under a `"markdown"` object. VS Code's markdown extension looks up the dotted key literally; a nested structure is silently ignored and the plugin is never loaded.
+
+`activate()` returns `{ extendMarkdownIt }` — the function VS Code calls with the markdown-it instance. This is constructed via `createExtendMarkdownIt()` which closes over a `WikilinkService` instance and the resolver function.
+
+### Non-blocking activation
+
+`activate()` must return the `extendMarkdownIt` API immediately. VS Code's markdown preview extension awaits `activate()` before calling the plugin. If `activate()` blocks on slow async work (e.g. database initialisation, stale scan), the preview hangs indefinitely.
+
+To solve this, `enterFullMode()` is launched fire-and-forget:
+
+```typescript
+enterFullMode(context, workspaceRoot).catch(err => {
+    console.error('as-notes: failed to enter full mode', err);
+    setPassiveMode('Index initialisation failed');
+});
+```
+
+The `apiReturn` object containing `extendMarkdownIt` is returned synchronously on the next line. The preview plugin begins working immediately with fallback same-directory links. Once the index finishes loading in the background, subsequent preview renders gain full subfolder and alias resolution.
+
+### Inline rule
+
+`wikilinkPlugin()` registers a custom inline rule on the markdown-it instance using `md.inline.ruler.before('link', 'wikilink', ...)`. Registering **before** the built-in `link` rule is critical — it prevents markdown-it from interpreting bracket characters as standard link syntax (e.g. `[[Page **Name**]]` would otherwise be parsed as nested emphasis inside brackets).
+
+The inline rule (`wikilinkInlineRule`) operates as follows:
+
+1. **Quick bail** — checks that the current position starts with `[[` and that there are at least 5 characters remaining (`[[x]]`).
+2. **Outermost close scan** — `findOutermostClose()` scans forward from the opening `[[`, tracking nesting depth. Each `[[` increments depth; each `]]` decrements. When depth returns to zero, the position of the final `]` is returned. This correctly skips nested `[[...]]` pairs.
+3. **Silent mode** — when markdown-it calls with `silent: true` (probing whether the rule matches), the function returns `true` without producing tokens.
+4. **Token emission** — the full wikilink text is parsed with `WikilinkService.extractWikilinks()`, then segmented with `computeLinkSegments()`. For each segment, three tokens are pushed: `link_open` (with `href` and `class="wikilink"` attributes), `text` (display text with brackets stripped), and `link_close`.
+5. **Advance position** — `state.pos` is moved past the closing `]]` so markdown-it does not re-process the consumed characters.
+
+### Nested link handling in preview
+
+HTML does not allow nested `<a>` elements. For `[[Outer [[Inner]] text]]`, the plugin uses the same `computeLinkSegments()` approach as the editor's decorations and document links, producing three **adjacent** `<a>` elements:
+
+```html
+<a href="Outer%20%5B%5BInner%5D%5D%20text.md" class="wikilink">Outer </a>
+<a href="Inner.md" class="wikilink">Inner</a>
+<a href="Outer%20%5B%5BInner%5D%5D%20text.md" class="wikilink"> text</a>
+```
+
+Bracket delimiters (`[[`, `]]`) are stripped from display text by `stripBrackets()`, which iteratively removes leading `[[` pairs and trailing `]]` pairs. Each segment is independently clickable and navigates to the correct target.
+
+### Link resolver
+
+The resolver function (closure created in `createExtendMarkdownIt()`) maps a sanitised page filename to a relative href. It follows the same resolution order used elsewhere in the extension:
+
+1. **Direct filename match** — `indexService.findPagesByFilename()`. If multiple matches exist, disambiguation uses same-directory preference then closest-folder tiebreak via `getPathDistance()`.
+2. **Alias match** — `indexService.resolveAlias()` for alias-to-canonical page resolution.
+3. **Fallback** — `encodeURIComponent(pageFileName + '.md')`, a same-directory relative link.
+
+The fallback fires when the index is not yet loaded (non-blocking activation) or in passive mode (no `.asnotes/` directory). This ensures wikilinks always render as clickable links, even before the index is ready.
+
+When the index resolves a target to a different subfolder, `relativeLink()` computes the correct relative path from source to target:
+
+```typescript
+function relativeLink(sourcePath: string, targetPath: string): string {
+    const sourceDir = path.dirname(sourcePath);
+    const relative = path.relative(sourceDir, targetPath).replace(/\\/g, '/');
+    return relative.split('/').map(s => encodeURIComponent(s)).join('/');
+}
+```
+
+Each path segment is individually URI-encoded so that spaces and special characters are handled correctly.
+
+### Source file context
+
+The resolver needs to know which file is being previewed in order to compute relative paths. VS Code (≥1.72) populates `state.env.currentDocument` with the URI of the source file during markdown-it rendering.
+
+`getSourcePathFromEnv()` extracts the workspace-relative source path from this environment:
+
+- If `currentDocument` is a `vscode.Uri` object (has `fsPath`), `workspace.asRelativePath()` converts it.
+- If it's a URI string, it's parsed first with `vscode.Uri.parse()`.
+- If not available, `undefined` is returned and the resolver falls back to same-directory links.
+
+### Preview CSS
+
+`media/wikilink-preview.css` is declared via `contributes.markdown.previewStyles` and loaded into the markdown preview webview. It styles the `.wikilink` class applied to all rendered wikilink `<a>` elements:
+
+| Theme | Colour | Hover colour |
+|---|---|---|
+| Light | `#4080bf` | `#2060a0` |
+| Dark / High contrast | `#6796e6` | `#85b1ff` |
+
+Links use a dotted bottom border (solid on hover) instead of underline, and `text-decoration: none` to override the default link underline.
+
+### Limitations of preview links
+
+- **Read-only** — the preview plugin only reads from the index; it never writes. No database mutations occur during rendering.
+- **No auto-creation** — clicking a link to a non-existent page in preview mode shows VS Code's default "file not found" behaviour. The auto-creation logic in `WikilinkFileService.navigateToFile()` is not triggered because preview link clicks are handled by VS Code's built-in markdown preview link handler, not the extension's command URI.
+- **Preview-to-preview navigation** — VS Code's built-in markdown preview natively handles clicks on relative `.md` links by opening the target file in preview mode. This gives "stay in preview" navigation for free.
+- **Stale resolution** — if the index has not finished loading (during the brief window between activation and background `enterFullMode()` completion), links use fallback same-directory resolution. The next preview re-render (triggered by document changes or manual refresh) picks up the fully-resolved paths.
 
 ---
 
