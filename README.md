@@ -260,6 +260,8 @@ Press **F5** in VS Code to launch the Extension Development Host with the extens
 
 Note that it is OK to have the extension installed via the marketplace and debug at the same time. The debug version will take precedence and override the marketplace install behaviour.
 
+VS Code remembers the last folder opened in the Extension Development Host and reopens it automatically. The demo knowledge base at https://github.com/appsoftwareltd/as-notes-demo-notes is designed to cover common usage scenarios. 
+
 ### Testing
 
 Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offset-based lookup, segment computation, index service CRUD, title extraction, rename detection data flow, and nested link indexing. Run with `npm test`.
