@@ -677,9 +677,12 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
         console.warn('as-notes: failed to index new journal file:', err);
     }
 
-    // Open the new journal file
+    // Open the new journal file with cursor at end of content
     const doc = await vscode.workspace.openTextDocument(journalUri);
-    await vscode.window.showTextDocument(doc);
+    const editor = await vscode.window.showTextDocument(doc);
+    const endPos = doc.lineAt(doc.lineCount - 1).range.end;
+    editor.selection = new vscode.Selection(endPos, endPos);
+    editor.revealRange(new vscode.Range(endPos, endPos));
 }
 
 // ── Periodic scanning ──────────────────────────────────────────────────────

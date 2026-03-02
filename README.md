@@ -2,6 +2,8 @@
 
 AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
 
+[![AS Notes demo](https://img.youtube.com/vi/CXXXJB_06Ng/maxresdefault.jpg)](https://youtu.be/CXXXJB_06Ng)
+
 ## Main Features
 
 ### Wikilinks
@@ -11,7 +13,7 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 - Wikilinks navigate the user to the target page regardless of location in folder structure e.g. `[[[[AS Notes]] Page]]` -> `[[AS Notes]] Page.md`
 - Renames for wikilinks automatically update other existing links and will rename the page to which the link refers to keep names in sync
 
-## TODO Management
+### TODO Management
 
 This extension will automate the adding / toggling of markdown TODOs e.g:
 
@@ -24,6 +26,14 @@ Marker for todo removed
 Use `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
 
 > **Note:** Todo toggling requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
+
+### Daily Journal
+
+Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal page.
+
+Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from a `journal_template.md` template — edit it to add your own sections and prompts. The `YYYY-MM-DD` placeholder in the template is replaced with today's date on creation.
+
+> **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
 ### Compatibility With Other Markdown Based PKMS
 
@@ -356,3 +366,11 @@ git push origin main --tags
 ```
 
 Pushing the tag triggers the [Release workflow](.github/workflows/release.yml), which creates a GitHub Release automatically with auto-generated release notes and the VS Code Marketplace install link.
+
+## Disclaimer
+
+This software is provided "as is", without warranty of any kind, express or implied. The authors and contributors accept no responsibility or liability for any loss, corruption, or damage to data, files, or systems arising from the use or misuse of this extension, including but not limited to operations that create, rename, move, or modify files in your workspace.
+
+**You are solely responsible for maintaining backups of your data.** It is strongly recommended to use version control (e.g. git) or another backup strategy for any notes or files you manage with this extension.
+
+This extension is licensed under the [MIT License](LICENSE).
