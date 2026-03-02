@@ -13,6 +13,7 @@ import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
 import { wikilinkPlugin, type WikilinkResolverFn } from './MarkdownItWikilinkPlugin.js';
 import { getPathDistance } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
+import { TaskPanelProvider } from './TaskPanelProvider.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -39,6 +40,9 @@ let completionDebounceHandle: ReturnType<typeof setTimeout> | undefined;
 /** Completion provider instance — alive while in full mode. */
 let completionProvider: WikilinkCompletionProvider | undefined;
 
+/** Task panel provider instance — alive while in full mode. */
+let taskPanelProvider: TaskPanelProvider | undefined;
+
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
 
@@ -57,9 +61,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     );
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.rebuildIndex', () => rebuildIndex()),
-    );
-    context.subscriptions.push(
-        vscode.commands.registerCommand('as-notes.toggleTodo', () => toggleTodoCommand()),
     );
 
     // Build the API return value (markdown-it plugin) before mode setup
@@ -117,6 +118,14 @@ function toggleTodoCommand(): void {
             const toggled = toggleTodoLine(line.text);
             editBuilder.replace(line.range, toggled);
         }
+    }).then(success => {
+        if (!success || !indexService?.isOpen) { return; }
+        // Re-index from the live buffer so the tasks table is updated immediately
+        const doc = editor.document;
+        const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+        const filename = path.basename(doc.uri.fsPath);
+        indexService.indexFileContent(relativePath, filename, doc.getText(), Date.now());
+        taskPanelProvider?.refresh();
     });
 }
 
@@ -185,6 +194,68 @@ async function enterFullMode(
         vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
     );
 
+    // Todo toggle — requires full mode (index needed for task panel sync)
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleTodo', () => toggleTodoCommand()),
+    );
+
+    // Task panel — TreeView in explorer sidebar
+    taskPanelProvider = new TaskPanelProvider(indexService);
+    const taskTreeView = vscode.window.createTreeView('as-notes-tasks', {
+        treeDataProvider: taskPanelProvider,
+        showCollapseAll: true,
+    });
+    fullModeDisposables.push(taskTreeView);
+
+    // Set context key so the view/keybinding `when` clauses activate
+    vscode.commands.executeCommand('setContext', 'as-notes.fullMode', true);
+
+    // Task panel commands
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleTaskPanel', () => {
+            vscode.commands.executeCommand('as-notes-tasks.focus');
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleShowTodoOnly', () => {
+            taskPanelProvider?.toggleShowTodoOnly();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.navigateToTask', async (pagePath: string, line: number) => {
+            const workspaceRoot = getWorkspaceRoot();
+            if (!workspaceRoot) { return; }
+            const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
+            const doc = await vscode.workspace.openTextDocument(fileUri);
+            const editor = await vscode.window.showTextDocument(doc);
+            const position = new vscode.Position(line, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+        }),
+    );
+
+    // Toggle a task's done/todo state directly from the panel (no focus steal)
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleTaskFromPanel', async (item: { kind: string; task: { line: number }; pagePath: string }) => {
+            if (!item || item.kind !== 'task') { return; }
+            const workspaceRoot = getWorkspaceRoot();
+            if (!workspaceRoot) { return; }
+            const fileUri = vscode.Uri.joinPath(workspaceRoot, item.pagePath);
+            try {
+                const doc = await vscode.workspace.openTextDocument(fileUri);
+                const lineText = doc.lineAt(item.task.line).text;
+                const toggled = toggleTodoLine(lineText);
+                const edit = new vscode.WorkspaceEdit();
+                edit.replace(doc.uri, doc.lineAt(item.task.line).range, toggled);
+                await vscode.workspace.applyEdit(edit);
+                await doc.save();
+                // onDidSaveTextDocument trigger handles re-index + panel refresh
+            } catch (err) {
+                console.warn('as-notes: failed to toggle task from panel:', err);
+            }
+        }),
+    );
+
     // Navigation command
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.navigateWikilink', async (args: {
@@ -209,6 +280,7 @@ async function enterFullMode(
                 await indexScanner!.indexFile(doc.uri);
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
+                taskPanelProvider?.refresh();
             } catch (err) {
                 console.warn('as-notes: failed to index on save:', err);
             }
@@ -235,6 +307,7 @@ async function enterFullMode(
                 const filename = path.basename(doc.uri.fsPath);
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
                 completionProvider?.refresh();
+                taskPanelProvider?.refresh();
             }, 500);
         }),
     );
@@ -253,6 +326,7 @@ async function enterFullMode(
             }
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
+            taskPanelProvider?.refresh();
         }),
     );
 
@@ -280,6 +354,7 @@ async function enterFullMode(
             }
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
+            taskPanelProvider?.refresh();
         }),
     );
 
@@ -314,6 +389,7 @@ async function enterFullMode(
             }
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
+            taskPanelProvider?.refresh();
         }),
     );
 
@@ -340,6 +416,7 @@ async function enterFullMode(
                     }
                     if (!safeSaveToFile()) { return; }
                     completionProvider?.refresh();
+                    taskPanelProvider?.refresh();
                 } catch {
                     // File may have been closed/deleted
                 }
@@ -383,6 +460,8 @@ function disposeFullMode(): void {
         d.dispose();
     }
     fullModeDisposables = [];
+    vscode.commands.executeCommand('setContext', 'as-notes.fullMode', false);
+    taskPanelProvider = undefined;
 }
 
 /**
@@ -489,6 +568,7 @@ async function rebuildIndex(): Promise<void> {
             const result = await indexScanner!.fullScan(progress, token);
             indexService!.saveToFile();
             completionProvider?.refresh();
+            taskPanelProvider?.refresh();
 
             // Update status bar
             const pageCount = indexService!.getAllPages().length;
@@ -515,6 +595,7 @@ function startPeriodicScan(): void {
             if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
+                taskPanelProvider?.refresh();
                 const pageCount = indexService.getAllPages().length;
                 statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
             }

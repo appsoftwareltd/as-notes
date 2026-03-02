@@ -67,6 +67,10 @@ This document explains the internal architecture, algorithms, and design decisio
 - [Todo toggle](#todo-toggle)
   - [TodoToggleService](#todotoggleservice)
   - [Command registration](#command-registration)
+- [Tasks panel](#tasks-panel)
+  - [Tasks table](#tasks-table)
+  - [TaskPanelProvider](#taskpanelprovider)
+  - [Sync strategy](#sync-strategy)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
@@ -83,7 +87,7 @@ The extension is built with:
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (145 tests across 5 test files)
+- **vitest 3.x** for unit tests (190 tests across 7 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
@@ -135,9 +139,18 @@ CREATE TABLE aliases (
     alias_name TEXT NOT NULL,
     alias_filename TEXT NOT NULL
 );
+
+CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY,
+    source_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    line INTEGER NOT NULL,          -- 0-based line number
+    text TEXT NOT NULL,             -- task text without bullet/checkbox
+    done INTEGER NOT NULL DEFAULT 0,-- 0 = unchecked, 1 = done
+    line_text TEXT NOT NULL          -- full original line text
+);
 ```
 
-Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`.
+Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`.
 
 ### Content indexing and nesting
 
@@ -867,7 +880,7 @@ Links use a dotted bottom border (solid on hover) instead of underline, and `tex
 
 ## Todo toggle
 
-The todo toggle feature cycles a markdown line through three states: plain text → unchecked todo → done todo → plain text. It operates independently of the wikilink index and works in both passive and full modes.
+The todo toggle feature cycles a markdown line through three states: plain text → unchecked todo → done todo → plain text. It requires full mode (`.asnotes/` directory present) because the toggle command is registered inside `enterFullMode()` to integrate with the task panel and index.
 
 ### TodoToggleService
 
@@ -888,13 +901,69 @@ Leading whitespace (indentation) is captured and preserved in all cases. Both `-
 
 ### Command registration
 
-The `as-notes.toggleTodo` command is registered globally in `extension.ts` (not behind the full-mode guard), so it works even before the workspace is initialised. The command handler:
+The `as-notes.toggleTodo` command is registered inside `enterFullMode()` (behind the full-mode guard), so it only works when the workspace is initialised with `.asnotes/`. In passive mode, the keybinding is a no-op because the command does not exist. The command handler:
 
 1. Gets the active text editor
 2. Collects unique line numbers from all cursor positions (deduplicating lines that have multiple cursors)
 3. Applies `toggleTodoLine()` to each line via `editor.edit()`
 
 The keybinding defaults to `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
+
+---
+
+## Tasks panel
+
+The Tasks panel is a TreeView in the Explorer sidebar that displays all todo items across the workspace, grouped by page. It requires full mode (`.asnotes/` directory) and is gated behind the `as-notes.fullMode` context key.
+
+### Tasks table
+
+`IndexService.indexFileContent()` parses tasks from file content alongside links and aliases. Two regex patterns detect task lines:
+
+- **Unchecked:** `/^\s*[-*]\s+\[ \]\s+(.*)/` — matches `- [ ] task text` and `* [ ] task text`
+- **Done:** `/^\s*[-*]\s+\[(?:x|X)\]\s+(.*)/` — matches `- [x] task text` and `* [X] task text`
+
+Task rows are replaced atomically on each re-index (all tasks for the page are deleted, then new ones inserted). The `ON DELETE CASCADE` on `source_page_id` ensures tasks are cleaned up when a page is removed.
+
+Query methods:
+
+- `getTasksForPage(pageId, todoOnly?)` — returns tasks for a specific page, optionally filtered to unchecked only
+- `getPagesWithTasks(todoOnly?)` — returns pages that have tasks, with task counts
+- `getTaskCounts()` — returns total, done, and undone counts
+
+### TaskPanelProvider
+
+`TaskPanelProvider` (`src/TaskPanelProvider.ts`) implements `vscode.TreeDataProvider<TaskTreeItem>` with a discriminated union of two item types:
+
+- **PageGroupItem** — collapsible parent node representing a page, showing the page title and task count in the description. Uses `vscode.ThemeIcon.File` icon.
+- **TaskItem** — leaf node representing a single task. Uses `$(circle)` for unchecked and `$(pass)` for done tasks. Includes a `command` property that opens the file and scrolls to the task's line.
+
+Key behaviour:
+
+- `showTodoOnly` (default: `true`) — when enabled, only unchecked tasks and pages containing them are shown
+- `toggleShowTodoOnly()` — flips the filter and fires `onDidChangeTreeData`
+- `refresh()` — fires `onDidChangeTreeData` to trigger a UI rebuild from the index
+
+The tree view is created via `vscode.window.createTreeView('as-notes-tasks', ...)` in `enterFullMode()` and is visible only when `as-notes.fullMode` is set.
+
+### Inline task toggle
+
+Each task item in the panel has an inline action button (`$(check)` icon) that toggles the task's done/todo state without stealing focus from the active editor. This is implemented via a `view/item/context` menu entry with `"group": "inline"`, scoped to `viewItem == taskItem`.
+
+The `as-notes.toggleTaskFromPanel` command handler:
+
+1. Receives the `TaskItem` as an argument (VS Code passes the tree item to inline action commands)
+2. Opens the document silently via `vscode.workspace.openTextDocument()` — no editor is shown
+3. Reads the line text at the stored line number and applies `toggleTodoLine()`
+4. Applies the edit via `WorkspaceEdit` + `vscode.workspace.applyEdit()`
+5. Saves the document via `doc.save()`
+
+The existing `onDidSaveTextDocument` trigger handles re-indexing and panel refresh automatically. The user's active editor remains untouched — clicking the toggle button does not navigate to or reveal the file.
+
+### Sync strategy
+
+The task panel refreshes whenever the index changes. Rather than maintaining separate task-specific listeners, every existing index trigger (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) calls `taskPanelProvider?.refresh()` alongside `completionProvider?.refresh()`.
+
+The `toggleTodoCommand` additionally re-indexes the current buffer after the edit completes (via `.then()` on `editor.edit()`), then refreshes the task panel. This ensures the panel reflects the toggle immediately without waiting for the next save or debounced update.
 
 ---
 
@@ -916,17 +985,18 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 `extension.ts` is the entry point. On activation (`onLanguage:markdown`):
 
 1. Creates a status bar item (always visible in both modes)
-2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`, `as-notes.toggleTodo`
+2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`
 3. Checks for `.asnotes/` directory in workspace root
 4. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
+   - Sets the `as-notes.fullMode` context key (controls view/keybinding `when` clauses)
    - Opens the SQLite database
    - Runs a stale scan to catch external changes
    - Creates shared `WikilinkService`, `WikilinkFileService`, `IndexService`, `IndexScanner`
-   - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`
-   - Registers the `as-notes.navigateWikilink` command
+   - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask` commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
-5. **Passive mode** (no `.asnotes/`): status bar only, no providers
+5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared
 
 All full-mode registrations are tracked in `fullModeDisposables[]` and pushed to `context.subscriptions`. The `deactivate()` function persists the database and cleans up.
 
@@ -956,11 +1026,11 @@ Tests use vitest and are split across eight test files:
 
 3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
 
-### `IndexService.test.ts` (56 tests)
+### `IndexService.test.ts` (67 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
-2. **Schema** (2 tests) — table creation verification, `isOpen` state.
+2. **Schema** (2 tests) — table creation verification (including tasks table), `isOpen` state.
 
 3. **Page CRUD** (6 tests) — insert, upsert, query, delete, cascade.
 
@@ -973,6 +1043,8 @@ Tests use vitest and are split across eight test files:
 7. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation, `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow.
 
 8. **Aliases** (15 tests) — alias storage from front matter, re-indexing replaces aliases, no-front-matter edge case, `resolveAlias()` success and failure, case-insensitive resolution, `resolvePageByFilename()` direct vs alias match, backlink count including aliases, `updateAliasRename()` for alias record and link references, `findPagesByFilename()` for subfolder resolution, cascade delete on page removal, filename sanitisation, `getPageById()`, `getAllAliases()` with canonical page info, empty aliases.
+
+9. **Task indexing** (11 tests) — unchecked and done task indexing, re-index replacement, todoOnly filter, pages with tasks grouped by count, task counts, cascade delete on page removal, indented tasks, `*` bullet tasks, non-todo exclusion, empty tasks, `line_text` storage.
 
 ### `WikilinkFileService.test.ts` (10 tests)
 

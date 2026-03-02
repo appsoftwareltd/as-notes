@@ -54,6 +54,15 @@ export interface ScanSummary {
     unchanged: number;
 }
 
+export interface TaskRow {
+    id: number;
+    source_page_id: number;
+    line: number;
+    text: string;
+    done: number;
+    line_text: string;
+}
+
 // ── Schema ─────────────────────────────────────────────────────────────────
 
 const SCHEMA_SQL = `
@@ -92,6 +101,17 @@ CREATE INDEX IF NOT EXISTS idx_links_page_name ON links(page_name);
 CREATE INDEX IF NOT EXISTS idx_aliases_alias_name ON aliases(alias_name);
 CREATE INDEX IF NOT EXISTS idx_aliases_canonical ON aliases(canonical_page_id);
 CREATE INDEX IF NOT EXISTS idx_pages_path ON pages(path);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY,
+    source_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    line INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    line_text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source_page_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
 `;
 
 // ── Title extraction ───────────────────────────────────────────────────────
@@ -224,6 +244,7 @@ export class IndexService {
         if (page) {
             this.db!.run(`DELETE FROM links WHERE source_page_id = ?`, [page.id]);
             this.db!.run(`DELETE FROM aliases WHERE canonical_page_id = ?`, [page.id]);
+            this.db!.run(`DELETE FROM tasks WHERE source_page_id = ?`, [page.id]);
             this.db!.run(`DELETE FROM pages WHERE id = ?`, [page.id]);
         }
     }
@@ -406,6 +427,7 @@ export class IndexService {
 
         this.setLinksForPageWithNesting(pageId, content);
         this.indexAliasesFromContent(pageId, content);
+        this.indexTasksFromContent(pageId, content);
 
         return pageId;
     }
@@ -776,6 +798,113 @@ export class IndexService {
         }));
     }
 
+    // ── Tasks ──────────────────────────────────────────────────────────────
+
+    /** Matches an unchecked todo: optional indent, `-` or `*`, `[ ]`, then content. */
+    private static readonly TASK_UNCHECKED = /^(\s*)([-*])\s+\[ \]\s?(.*)/;
+
+    /** Matches a done todo: optional indent, `-` or `*`, `[x]` or `[X]`, then content. */
+    private static readonly TASK_DONE = /^(\s*)([-*])\s+\[(?:x|X)\]\s?(.*)/;
+
+    /**
+     * Parse and store tasks from file content for a given page.
+     * Clears existing tasks for the page before inserting new ones.
+     */
+    private indexTasksFromContent(pageId: number, content: string): void {
+        this.ensureOpen();
+        this.db!.run(`DELETE FROM tasks WHERE source_page_id = ?`, [pageId]);
+
+        const lines = content.split(/\r?\n/);
+        for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+            const lineText = lines[lineNum];
+
+            // Check done first (same order as TodoToggleService)
+            const doneMatch = lineText.match(IndexService.TASK_DONE);
+            if (doneMatch) {
+                const text = doneMatch[3];
+                this.db!.run(
+                    `INSERT INTO tasks (source_page_id, line, text, done, line_text) VALUES (?, ?, ?, ?, ?)`,
+                    [pageId, lineNum, text, 1, lineText],
+                );
+                continue;
+            }
+
+            const uncheckedMatch = lineText.match(IndexService.TASK_UNCHECKED);
+            if (uncheckedMatch) {
+                const text = uncheckedMatch[3];
+                this.db!.run(
+                    `INSERT INTO tasks (source_page_id, line, text, done, line_text) VALUES (?, ?, ?, ?, ?)`,
+                    [pageId, lineNum, text, 0, lineText],
+                );
+            }
+        }
+    }
+
+    /**
+     * Get all tasks for a given page, optionally filtered to undone only.
+     */
+    getTasksForPage(pageId: number, todoOnly?: boolean): TaskRow[] {
+        this.ensureOpen();
+        const sql = todoOnly
+            ? `SELECT id, source_page_id, line, text, done, line_text FROM tasks WHERE source_page_id = ? AND done = 0 ORDER BY line`
+            : `SELECT id, source_page_id, line, text, done, line_text FROM tasks WHERE source_page_id = ? ORDER BY line`;
+        const result = this.db!.exec(sql, [pageId]);
+        if (result.length === 0) { return []; }
+        return this.mapTaskRows(result[0].values);
+    }
+
+    /**
+     * Get all pages that have at least one task, with task counts.
+     * Optionally filter to pages with undone tasks only.
+     */
+    getPagesWithTasks(todoOnly?: boolean): { page: PageRow; taskCount: number }[] {
+        this.ensureOpen();
+        const whereClause = todoOnly ? `WHERE t.done = 0` : '';
+        const result = this.db!.exec(
+            `SELECT p.id, p.path, p.filename, p.title, p.mtime, p.indexed_at, COUNT(t.id) as task_count
+             FROM tasks t
+             JOIN pages p ON t.source_page_id = p.id
+             ${whereClause}
+             GROUP BY p.id
+             ORDER BY p.title COLLATE NOCASE`,
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            page: {
+                id: row[0] as number,
+                path: row[1] as string,
+                filename: row[2] as string,
+                title: row[3] as string,
+                mtime: row[4] as number,
+                indexed_at: row[5] as number,
+            },
+            taskCount: row[6] as number,
+        }));
+    }
+
+    /**
+     * Get aggregate task counts across the entire workspace.
+     */
+    getTaskCounts(): { total: number; done: number; undone: number } {
+        this.ensureOpen();
+        const totalResult = this.db!.exec(`SELECT COUNT(*) FROM tasks`);
+        const doneResult = this.db!.exec(`SELECT COUNT(*) FROM tasks WHERE done = 1`);
+        const total = totalResult.length > 0 ? totalResult[0].values[0][0] as number : 0;
+        const done = doneResult.length > 0 ? doneResult[0].values[0][0] as number : 0;
+        return { total, done, undone: total - done };
+    }
+
+    private mapTaskRows(rows: unknown[][]): TaskRow[] {
+        return rows.map(row => ({
+            id: row[0] as number,
+            source_page_id: row[1] as number,
+            line: row[2] as number,
+            text: row[3] as string,
+            done: row[4] as number,
+            line_text: row[5] as string,
+        }));
+    }
+
     // ── Schema management ──────────────────────────────────────────────────
 
     /**
@@ -783,6 +912,7 @@ export class IndexService {
      */
     resetSchema(): void {
         this.ensureOpen();
+        this.db!.run(`DROP TABLE IF EXISTS tasks`);
         this.db!.run(`DROP TABLE IF EXISTS aliases`);
         this.db!.run(`DROP TABLE IF EXISTS links`);
         this.db!.run(`DROP TABLE IF EXISTS pages`);

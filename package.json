@@ -60,6 +60,20 @@
             {
                 "command": "as-notes.toggleTodo",
                 "title": "AS Notes: Toggle Todo"
+            },
+            {
+                "command": "as-notes.toggleTaskPanel",
+                "title": "AS Notes: Toggle Task Panel"
+            },
+            {
+                "command": "as-notes.toggleShowTodoOnly",
+                "title": "AS Notes: Toggle Show TODO Only",
+                "icon": "$(filter)"
+            },
+            {
+                "command": "as-notes.toggleTaskFromPanel",
+                "title": "AS Notes: Toggle Task",
+                "icon": "$(check)"
             }
         ],
         "keybindings": [
@@ -68,6 +82,12 @@
                 "key": "ctrl+shift+enter",
                 "mac": "cmd+shift+enter",
                 "when": "editorLangId == markdown"
+            },
+            {
+                "command": "as-notes.toggleTaskPanel",
+                "key": "ctrl+alt+t",
+                "mac": "cmd+alt+t",
+                "when": "as-notes.fullMode"
             }
         ],
         "configuration": {
@@ -84,7 +104,32 @@
         "markdown.markdownItPlugins": true,
         "markdown.previewStyles": [
             "./media/wikilink-preview.css"
-        ]
+        ],
+        "views": {
+            "explorer": [
+                {
+                    "id": "as-notes-tasks",
+                    "name": "AS Notes Tasks",
+                    "when": "as-notes.fullMode"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "as-notes.toggleShowTodoOnly",
+                    "when": "view == as-notes-tasks",
+                    "group": "navigation"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "as-notes.toggleTaskFromPanel",
+                    "when": "view == as-notes-tasks && viewItem == taskItem",
+                    "group": "inline"
+                }
+            ]
+        }
     },
     "scripts": {
         "vscode:prepublish": "npm run build",

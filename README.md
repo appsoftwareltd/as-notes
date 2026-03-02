@@ -23,6 +23,8 @@ Marker for todo removed
 
 Use `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
 
+> **Note:** Todo toggling requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
+
 ### Compatibility With Other Markdown Based PKMS
 
 Due to the similarity in file structure, you may find that you can use this extension helpful in editing and navigating PKMS created with other wikilink capable PKMS systems such as Obsidian and Logseq. Note however that there are variations in format - Obsidian for example does not facilitate nested wikilinks like AS Code and Logseq. AS Code does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
@@ -205,6 +207,16 @@ Press **Ctrl+Shift+Enter** (Cmd+Shift+Enter on macOS) on any line in a markdown 
 
 The keybinding is configurable — open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`) and search for "AS Notes: Toggle Todo" to change it.
 
+### Tasks panel
+
+The **AS Notes Tasks** panel appears in the Explorer sidebar when the workspace is initialised. It provides a tree view of all todo items across your markdown files, grouped by page.
+
+- **Show TODO only** (default: on) — filters the list to show only unchecked (`- [ ]`) tasks. Toggle this with the filter icon in the panel title bar or via the **AS Notes: Toggle Show TODO Only** command.
+- **Click to navigate** — clicking a task opens the file and scrolls to the exact line.
+- **Inline toggle** — each task has a check button that toggles its done/todo state directly from the panel, without stealing focus from your active editor.
+- **Keyboard shortcut** — press `Ctrl+Alt+T` (Cmd+Alt+T on macOS) to toggle the task panel's visibility.
+- **Live sync** — the panel refreshes automatically on file save, edit, create, delete, rename, todo toggle, and periodic background scans.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -280,10 +292,12 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/WikilinkRenameTracker.ts` | Rename detection (index-backed), alias vs direct rename classification, workspace-wide updates |
 | `src/WikilinkCompletionProvider.ts` | Wikilink autocomplete — `[[` trigger, page + alias suggestions, auto-close, nested link support |
 | `src/CompletionUtils.ts` | Pure utilities for completion logic — bracket detection, front matter detection |
-| `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, alias management, nesting detection |
+| `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, alias management, task indexing, nesting detection |
 | `src/IndexScanner.ts` | VS Code filesystem scanning — file indexing, full scan, stale scan |
 | `src/FrontMatterService.ts` | Lightweight YAML front matter parser — alias extraction, in-place alias updates |
 | `src/PathUtils.ts` | Pure utilities — path distance calculation, filename sanitisation |
+| `src/TodoToggleService.ts` | Pure todo toggle logic — three-state cycle (plain / unchecked / done) |
+| `src/TaskPanelProvider.ts` | Explorer tree view — task list grouped by page, todo-only filter, click-to-navigate |
 | `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
 | `src/test/` | Unit tests (vitest) |
 

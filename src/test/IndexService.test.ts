@@ -59,6 +59,7 @@ describe('IndexService — schema', () => {
         expect(tables).toContain('pages');
         expect(tables).toContain('links');
         expect(tables).toContain('aliases');
+        expect(tables).toContain('tasks');
     });
 
     it('should report isOpen correctly', () => {
@@ -936,5 +937,145 @@ describe('IndexService — getForwardReferencedPages', () => {
         const forwardRefs = service.getForwardReferencedPages();
         const names = forwardRefs.map(r => r.page_name);
         expect(names).not.toContain('plants');
+    });
+});
+
+// ── Task indexing ──────────────────────────────────────────────────────────
+
+describe('IndexService — task indexing', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should index unchecked and done tasks from file content', () => {
+        const content = '# Tasks\n\n- [ ] Buy milk\n- [x] Write docs\n- [X] Ship feature\nPlain text line';
+        service.indexFileContent('tasks.md', 'tasks.md', content, 1000);
+
+        const page = service.getPageByPath('tasks.md');
+        const tasks = service.getTasksForPage(page!.id);
+
+        expect(tasks).toHaveLength(3);
+        expect(tasks[0]).toMatchObject({ line: 2, text: 'Buy milk', done: 0 });
+        expect(tasks[1]).toMatchObject({ line: 3, text: 'Write docs', done: 1 });
+        expect(tasks[2]).toMatchObject({ line: 4, text: 'Ship feature', done: 1 });
+    });
+
+    it('should replace old tasks on re-index', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# Tasks\n\n- [ ] Old task', 1000);
+        const page = service.getPageByPath('tasks.md');
+        expect(service.getTasksForPage(page!.id)).toHaveLength(1);
+
+        service.indexFileContent('tasks.md', 'tasks.md', '# Tasks\n\n- [ ] New task one\n- [x] New task two', 2000);
+        const tasks = service.getTasksForPage(page!.id);
+        expect(tasks).toHaveLength(2);
+        expect(tasks[0].text).toBe('New task one');
+        expect(tasks[1].text).toBe('New task two');
+    });
+
+    it('should filter tasks with todoOnly parameter', () => {
+        const content = '# Tasks\n\n- [ ] Undone task\n- [x] Done task\n- [ ] Another undone';
+        service.indexFileContent('tasks.md', 'tasks.md', content, 1000);
+
+        const page = service.getPageByPath('tasks.md');
+        const allTasks = service.getTasksForPage(page!.id, false);
+        expect(allTasks).toHaveLength(3);
+
+        const todoOnly = service.getTasksForPage(page!.id, true);
+        expect(todoOnly).toHaveLength(2);
+        expect(todoOnly.every(t => t.done === 0)).toBe(true);
+    });
+
+    it('should return pages with tasks and counts', () => {
+        service.indexFileContent('a.md', 'a.md', '# A\n\n- [ ] Task 1\n- [x] Task 2', 1000);
+        service.indexFileContent('b.md', 'b.md', '# B\n\n- [ ] Task 3', 1000);
+        service.indexFileContent('c.md', 'c.md', '# C\n\nNo tasks here', 1000);
+
+        const allPages = service.getPagesWithTasks(false);
+        expect(allPages).toHaveLength(2);
+        const pageA = allPages.find(p => p.page.filename === 'a.md');
+        const pageB = allPages.find(p => p.page.filename === 'b.md');
+        expect(pageA!.taskCount).toBe(2);
+        expect(pageB!.taskCount).toBe(1);
+
+        const todoOnlyPages = service.getPagesWithTasks(true);
+        expect(todoOnlyPages).toHaveLength(2);
+        const todoA = todoOnlyPages.find(p => p.page.filename === 'a.md');
+        expect(todoA!.taskCount).toBe(1); // only the undone task
+    });
+
+    it('should return correct task counts', () => {
+        service.indexFileContent('a.md', 'a.md', '# A\n\n- [ ] Task 1\n- [x] Task 2', 1000);
+        service.indexFileContent('b.md', 'b.md', '# B\n\n- [ ] Task 3\n- [ ] Task 4', 1000);
+
+        const counts = service.getTaskCounts();
+        expect(counts.total).toBe(4);
+        expect(counts.done).toBe(1);
+        expect(counts.undone).toBe(3);
+    });
+
+    it('should cascade-delete tasks when page is removed', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# Tasks\n\n- [ ] Task 1\n- [x] Task 2', 1000);
+        const page = service.getPageByPath('tasks.md');
+        expect(service.getTasksForPage(page!.id)).toHaveLength(2);
+
+        service.removePage('tasks.md');
+        expect(service.getTaskCounts().total).toBe(0);
+    });
+
+    it('should parse indented tasks correctly', () => {
+        const content = '# Tasks\n\n  - [ ] Indented unchecked\n    - [x] Deep indented done';
+        service.indexFileContent('tasks.md', 'tasks.md', content, 1000);
+
+        const page = service.getPageByPath('tasks.md');
+        const tasks = service.getTasksForPage(page!.id);
+        expect(tasks).toHaveLength(2);
+        expect(tasks[0]).toMatchObject({ text: 'Indented unchecked', done: 0 });
+        expect(tasks[1]).toMatchObject({ text: 'Deep indented done', done: 1 });
+    });
+
+    it('should parse tasks with * bullet correctly', () => {
+        const content = '# Tasks\n\n* [ ] Star unchecked\n* [x] Star done';
+        service.indexFileContent('tasks.md', 'tasks.md', content, 1000);
+
+        const page = service.getPageByPath('tasks.md');
+        const tasks = service.getTasksForPage(page!.id);
+        expect(tasks).toHaveLength(2);
+        expect(tasks[0]).toMatchObject({ text: 'Star unchecked', done: 0 });
+        expect(tasks[1]).toMatchObject({ text: 'Star done', done: 1 });
+    });
+
+    it('should not store lines without todo markers as tasks', () => {
+        const content = '# Tasks\n\nPlain text\n- List item\n* Another list\n## Heading';
+        service.indexFileContent('tasks.md', 'tasks.md', content, 1000);
+
+        const page = service.getPageByPath('tasks.md');
+        const tasks = service.getTasksForPage(page!.id);
+        expect(tasks).toHaveLength(0);
+    });
+
+    it('should produce empty tasks for file with no todos', () => {
+        const content = '# No Tasks\n\nJust regular content here.\n\n- A list item\n- Another one';
+        service.indexFileContent('notasks.md', 'notasks.md', content, 1000);
+
+        const page = service.getPageByPath('notasks.md');
+        const tasks = service.getTasksForPage(page!.id);
+        expect(tasks).toHaveLength(0);
+        expect(service.getTaskCounts().total).toBe(0);
+    });
+
+    it('should store original line text', () => {
+        const content = '# Tasks\n\n    - [ ] Indented task with context';
+        service.indexFileContent('tasks.md', 'tasks.md', content, 1000);
+
+        const page = service.getPageByPath('tasks.md');
+        const tasks = service.getTasksForPage(page!.id);
+        expect(tasks[0].line_text).toBe('    - [ ] Indented task with context');
     });
 });
