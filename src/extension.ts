@@ -15,6 +15,12 @@ import { getPathDistance } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 import { TaskPanelProvider } from './TaskPanelProvider.js';
 import { BacklinkPanelProvider } from './BacklinkPanelProvider.js';
+import {
+    computeJournalPaths,
+    applyTemplate,
+    DEFAULT_TEMPLATE,
+    TEMPLATE_FILENAME,
+} from './JournalService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -236,6 +242,14 @@ async function enterFullMode(
             backlinkPanelProvider?.show();
         }),
     );
+
+    // Daily journal command
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.openDailyJournal', () =>
+            openDailyJournal(workspaceRoot),
+        ),
+    );
+
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.navigateToTask', async (pagePath: string, line: number) => {
             const workspaceRoot = getWorkspaceRoot();
@@ -602,6 +616,70 @@ async function rebuildIndex(): Promise<void> {
             );
         },
     );
+}
+
+// ── Daily journal ──────────────────────────────────────────────────────────
+
+async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
+    const config = vscode.workspace.getConfiguration('as-notes');
+    const journalFolder = config.get<string>('journalFolder', 'journals');
+
+    const paths = computeJournalPaths(
+        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        journalFolder,
+        new Date(),
+    );
+
+    const journalUri = vscode.Uri.file(paths.journalFilePath);
+
+    // If journal file already exists, just open it
+    try {
+        await vscode.workspace.fs.stat(journalUri);
+        const doc = await vscode.workspace.openTextDocument(journalUri);
+        await vscode.window.showTextDocument(doc);
+        return;
+    } catch {
+        // File does not exist — proceed with creation
+    }
+
+    // Ensure the journal folder exists
+    const folderUri = vscode.Uri.file(paths.journalFolderPath);
+    await vscode.workspace.fs.createDirectory(folderUri);
+
+    // Ensure the template file exists; create with default content if missing
+    const templateUri = vscode.Uri.file(paths.templateFilePath);
+    let templateContent: string;
+    try {
+        const bytes = await vscode.workspace.fs.readFile(templateUri);
+        templateContent = Buffer.from(bytes).toString('utf-8');
+    } catch {
+        // Template doesn't exist — create it with the default
+        templateContent = DEFAULT_TEMPLATE;
+        await vscode.workspace.fs.writeFile(templateUri, Buffer.from(templateContent, 'utf-8'));
+    }
+
+    // Apply template and create the journal file
+    const content = applyTemplate(templateContent, new Date());
+    await vscode.workspace.fs.writeFile(journalUri, Buffer.from(content, 'utf-8'));
+
+    // Index the new file immediately
+    try {
+        await indexScanner!.indexFile(journalUri);
+        safeSaveToFile();
+        completionProvider?.refresh();
+        taskPanelProvider?.refresh();
+        backlinkPanelProvider?.refresh();
+
+        // Update status bar with new page count
+        const pageCount = indexService!.getAllPages().length;
+        statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
+    } catch (err) {
+        console.warn('as-notes: failed to index new journal file:', err);
+    }
+
+    // Open the new journal file
+    const doc = await vscode.workspace.openTextDocument(journalUri);
+    await vscode.window.showTextDocument(doc);
 }
 
 // ── Periodic scanning ──────────────────────────────────────────────────────

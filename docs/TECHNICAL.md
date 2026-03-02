@@ -77,6 +77,10 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Message protocol](#message-protocol)
   - [Styling](#styling)
   - [Sync strategy](#sync-strategy-1)
+- [Daily journal](#daily-journal)
+  - [JournalService](#journalservice)
+  - [Command flow](#command-flow)
+  - [Template system](#template-system)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
@@ -93,7 +97,7 @@ The extension is built with:
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (197 tests across 7 test files)
+- **vitest 3.x** for unit tests (219 tests across 8 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
@@ -1012,6 +1016,50 @@ The backlink panel follows the same sync pattern as the task panel and completio
 
 ---
 
+## Daily journal
+
+The daily journal provides a shortcut to create or open a dated markdown file. One file per day, stored in a configurable folder.
+
+### JournalService
+
+`src/JournalService.ts` is a pure-logic module with no VS Code imports, fully testable:
+
+- **`formatJournalFilename(date)`** — returns `YYYY_MM_DD.md` (underscores for filesystem compatibility)
+- **`formatJournalDate(date)`** — returns `YYYY-MM-DD` (hyphens for display in content)
+- **`applyTemplate(templateContent, date)`** — replaces all literal `YYYY-MM-DD` occurrences in the template string with the formatted date
+- **`normaliseJournalFolder(folder)`** — strips leading/trailing slashes and whitespace; returns empty string for blank input (meaning workspace root)
+- **`computeJournalPaths(workspaceRoot, journalFolder, date)`** — returns `{ journalFilePath, templateFilePath, journalFolderPath }` with fully resolved paths
+- **`DEFAULT_TEMPLATE`** — the constant `# YYYY-MM-DD\n`, used when no template file exists
+- **`TEMPLATE_FILENAME`** — the constant `journal_template.md`
+
+### Command flow
+
+The `as-notes.openDailyJournal` command is registered in `enterFullMode()` (requires full mode). The flow:
+
+1. Read the `as-notes.journalFolder` setting (default: `"journals"`)
+2. Compute paths via `computeJournalPaths()` using today's date
+3. **If the journal file exists** — open it in the editor and return
+4. **If the journal file does not exist:**
+   a. Create the journal folder via `workspace.fs.createDirectory()` (no-op if it exists)
+   b. Check for `journal_template.md` — if missing, create it with `DEFAULT_TEMPLATE`
+   c. Read the template, apply date substitution via `applyTemplate()`
+   d. Write the new journal file
+   e. Index the file immediately (`indexScanner.indexFile()` + `safeSaveToFile()`) and refresh all providers (completion, tasks, backlinks)
+   f. Update the status bar page count
+   g. Open the new file in the editor
+
+Keybinding: `Ctrl+Alt+J` / `Cmd+Alt+J`, scoped to `as-notes.fullMode`.
+
+### Template system
+
+The template file (`journal_template.md`) lives inside the journal folder. It is a regular markdown file that the user can freely edit to add sections, prompts, front matter, or any other content.
+
+The only special token is the literal string `YYYY-MM-DD` — every occurrence is replaced with the actual date when a new journal file is created. The filename uses underscores (`YYYY_MM_DD.md`) but the content date uses hyphens (`YYYY-MM-DD`).
+
+The template file is indexed like any other markdown file. If the user deletes it, it is silently recreated with the default content on the next journal creation.
+
+---
+
 ## Filename sanitisation
 
 The regex `/ ? < > \ : * | "` is applied to `pageName` to produce `pageFileName`. The replacement character is `_`.
@@ -1118,6 +1166,16 @@ Tests that depend on VS Code APIs (decorations, document links, hover, rename tr
 4. **List items** (3 tests) — `-` list item gains checkbox, `*` list item gains checkbox, indented list item.
 
 5. **Full cycle** (3 tests) — plain → unchecked → done → plain, same with existing list item, same with indentation.
+
+### `JournalService.test.ts` (22 tests)
+
+1. **Date formatting** (5 tests) — `formatJournalFilename()` produces `YYYY_MM_DD.md` with zero-padding; `formatJournalDate()` produces `YYYY-MM-DD` with zero-padding.
+
+2. **Template substitution** (4 tests) — single placeholder, multiple placeholders, no placeholder (unchanged), default template.
+
+3. **Folder normalisation** (7 tests) — clean input, leading slashes, trailing slashes, both, backslashes, blank, whitespace-only, nested paths.
+
+4. **Path construction** (4 tests) — default folder, custom folder, empty folder (workspace root), folder with extra slashes.
 
 ---
 
