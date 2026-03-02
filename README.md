@@ -2,7 +2,7 @@
 
 AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
 
-(Click for Youtube video demo)
+(Click for 1 minute Youtube video demo)
 
 [![AS Notes demo](https://img.youtube.com/vi/liRULtb8Rm8/maxresdefault.jpg)](https://youtu.be/liRULtb8Rm8)
 
