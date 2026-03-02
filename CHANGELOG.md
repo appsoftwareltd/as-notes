@@ -2,6 +2,13 @@
 
 All notable changes to AS Notes will be documented here.
 
+## [1.0.5] — 2026-03-02
+
+### Added
+
+- Backlinks panel
+- TODO panel
+
 ## [1.0.4] — 2026-03-02
 
 ### Added

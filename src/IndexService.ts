@@ -63,6 +63,11 @@ export interface TaskRow {
     line_text: string;
 }
 
+export interface BacklinkEntry {
+    link: LinkRow;
+    sourcePage: PageRow;
+}
+
 // ── Schema ─────────────────────────────────────────────────────────────────
 
 const SCHEMA_SQL = `
@@ -752,6 +757,64 @@ export class IndexService {
         );
         if (countResult.length === 0) { return 0; }
         return countResult[0].values[0][0] as number;
+    }
+
+    /**
+     * Get all backlinks for a page, including links that target it via aliases.
+     * Returns full LinkRow + source PageRow pairs for rich display.
+     */
+    getBacklinksIncludingAliases(pageId: number): BacklinkEntry[] {
+        this.ensureOpen();
+        // Get the page's own filename
+        const pageResult = this.db!.exec(
+            `SELECT filename FROM pages WHERE id = ?`, [pageId],
+        );
+        if (pageResult.length === 0 || pageResult[0].values.length === 0) { return []; }
+        const filename = pageResult[0].values[0][0] as string;
+
+        // Get alias filenames for this page
+        const aliasResult = this.db!.exec(
+            `SELECT alias_filename FROM aliases WHERE canonical_page_id = ?`, [pageId],
+        );
+        const aliasFilenames: string[] = aliasResult.length > 0
+            ? aliasResult[0].values.map(r => r[0] as string)
+            : [];
+
+        // Query links matching any of these filenames, joined with source page
+        const allFilenames = [filename, ...aliasFilenames];
+        const placeholders = allFilenames.map(() => '?').join(', ');
+        const result = this.db!.exec(
+            `SELECT l.id, l.source_page_id, l.page_name, l.page_filename, l.line, l.start_col, l.end_col, l.context, l.parent_link_id, l.depth,
+                    p.id, p.path, p.filename, p.title, p.mtime, p.indexed_at
+             FROM links l
+             JOIN pages p ON l.source_page_id = p.id
+             WHERE l.page_filename IN (${placeholders})
+             ORDER BY p.title COLLATE NOCASE, l.line, l.start_col`,
+            allFilenames,
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            link: {
+                id: row[0] as number,
+                source_page_id: row[1] as number,
+                page_name: row[2] as string,
+                page_filename: row[3] as string,
+                line: row[4] as number,
+                start_col: row[5] as number,
+                end_col: row[6] as number,
+                context: row[7] as string | null,
+                parent_link_id: row[8] as number | null,
+                depth: row[9] as number,
+            },
+            sourcePage: {
+                id: row[10] as number,
+                path: row[11] as string,
+                filename: row[12] as string,
+                title: row[13] as string,
+                mtime: row[14] as number,
+                indexed_at: row[15] as number,
+            },
+        }));
     }
 
     /**

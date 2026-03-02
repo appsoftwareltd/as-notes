@@ -1079,3 +1079,99 @@ describe('IndexService — task indexing', () => {
         expect(tasks[0].line_text).toBe('    - [ ] Indented task with context');
     });
 });
+
+describe('IndexService — getBacklinksIncludingAliases', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should return direct backlinks with source page metadata', () => {
+        service.indexFileContent('Target Page.md', 'Target Page.md', '# Target Page', 1000);
+        service.indexFileContent('linker.md', 'linker.md', '# Linker\n\nSee [[Target Page]]\n', 1000);
+
+        const targetPage = service.getPageByPath('Target Page.md')!;
+        const entries = service.getBacklinksIncludingAliases(targetPage.id);
+
+        expect(entries).toHaveLength(1);
+        expect(entries[0].link.page_name).toBe('Target Page');
+        expect(entries[0].link.context).toBe('See [[Target Page]]');
+        expect(entries[0].sourcePage.title).toBe('Linker');
+        expect(entries[0].sourcePage.path).toBe('linker.md');
+    });
+
+    it('should return alias backlinks alongside direct backlinks', () => {
+        const aliasContent = '---\naliases: [Shortcut]\n---\n\n# Target Page';
+        service.indexFileContent('target.md', 'target.md', aliasContent, 1000);
+        service.indexFileContent('linker1.md', 'linker1.md', '# Linker 1\n\nSee [[target]]\n', 1000);
+        service.indexFileContent('linker2.md', 'linker2.md', '# Linker 2\n\nSee [[Shortcut]]\n', 1000);
+
+        const targetPage = service.getPageByPath('target.md')!;
+        const entries = service.getBacklinksIncludingAliases(targetPage.id);
+
+        expect(entries).toHaveLength(2);
+        const pageNames = entries.map(e => e.sourcePage.title).sort();
+        expect(pageNames).toEqual(['Linker 1', 'Linker 2']);
+    });
+
+    it('should return empty array when no backlinks exist', () => {
+        service.indexFileContent('lonely.md', 'lonely.md', '# Lonely Page', 1000);
+
+        const page = service.getPageByPath('lonely.md')!;
+        const entries = service.getBacklinksIncludingAliases(page.id);
+
+        expect(entries).toHaveLength(0);
+    });
+
+    it('should return empty array for non-existent page id', () => {
+        const entries = service.getBacklinksIncludingAliases(9999);
+        expect(entries).toHaveLength(0);
+    });
+
+    it('should include correct line and column data for highlighting', () => {
+        service.indexFileContent('Target.md', 'Target.md', '# Target', 1000);
+        service.indexFileContent('linker.md', 'linker.md', '# Linker\n\nPrefix [[Target]] suffix\n', 1000);
+
+        const targetPage = service.getPageByPath('Target.md')!;
+        const entries = service.getBacklinksIncludingAliases(targetPage.id);
+
+        expect(entries).toHaveLength(1);
+        expect(entries[0].link.line).toBe(2);
+        expect(entries[0].link.start_col).toBeGreaterThanOrEqual(0);
+        expect(entries[0].link.end_col).toBeGreaterThan(entries[0].link.start_col);
+        expect(entries[0].link.context).toBe('Prefix [[Target]] suffix');
+    });
+
+    it('should order results by page title then line number', () => {
+        service.indexFileContent('Target.md', 'Target.md', '# Target', 1000);
+        service.indexFileContent('beta.md', 'beta.md', '# Beta\n\n[[Target]] first\n\n[[Target]] second\n', 1000);
+        service.indexFileContent('alpha.md', 'alpha.md', '# Alpha\n\n[[Target]] here\n', 1000);
+
+        const targetPage = service.getPageByPath('Target.md')!;
+        const entries = service.getBacklinksIncludingAliases(targetPage.id);
+
+        expect(entries).toHaveLength(3);
+        expect(entries[0].sourcePage.title).toBe('Alpha');
+        expect(entries[1].sourcePage.title).toBe('Beta');
+        expect(entries[2].sourcePage.title).toBe('Beta');
+        expect(entries[1].link.line).toBeLessThan(entries[2].link.line);
+    });
+
+    it('should handle mixed direct and alias backlinks from the same page', () => {
+        const aliasContent = '---\naliases: [Alias]\n---\n\n# Target';
+        service.indexFileContent('target.md', 'target.md', aliasContent, 1000);
+        service.indexFileContent('linker.md', 'linker.md', '# Linker\n\n[[target]] and [[Alias]]\n', 1000);
+
+        const targetPage = service.getPageByPath('target.md')!;
+        const entries = service.getBacklinksIncludingAliases(targetPage.id);
+
+        expect(entries).toHaveLength(2);
+        expect(entries.every(e => e.sourcePage.path === 'linker.md')).toBe(true);
+    });
+});

@@ -217,6 +217,17 @@ The **AS Notes Tasks** panel appears in the Explorer sidebar when the workspace 
 - **Keyboard shortcut** — press `Ctrl+Alt+T` (Cmd+Alt+T on macOS) to toggle the task panel's visibility.
 - **Live sync** — the panel refreshes automatically on file save, edit, create, delete, rename, todo toggle, and periodic background scans.
 
+### Backlinks panel
+
+The **Backlinks** panel shows all incoming links to the active markdown file. Open it with `Ctrl+Alt+B` (Cmd+Alt+B on macOS), or click the references icon in the editor title bar.
+
+- **Rich context** — each backlink displays the surrounding line text with the wikilink highlighted, making it easy to understand _how_ a page is referenced.
+- **Grouped by page** — backlinks are grouped by source file with the page title as a header, showing the file path underneath.
+- **Click to navigate** — click any backlink entry to jump directly to the source file and line.
+- **Alias-aware** — includes links that target the page via its aliases, not just direct filename references.
+- **Live sync** — the panel auto-updates when you switch files, save, or when the index changes.
+- **Editor-side display** — opens beside your active editor (like Markdown Preview), giving you a spacious view of backlink context.
+
 ## Settings
 
 | Setting | Default | Description |
@@ -298,6 +309,7 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/PathUtils.ts` | Pure utilities — path distance calculation, filename sanitisation |
 | `src/TodoToggleService.ts` | Pure todo toggle logic — three-state cycle (plain / unchecked / done) |
 | `src/TaskPanelProvider.ts` | Explorer tree view — task list grouped by page, todo-only filter, click-to-navigate |
+| `src/BacklinkPanelProvider.ts` | Webview panel — backlinks display with context, grouped by source page, click-to-navigate |
 | `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
 | `src/test/` | Unit tests (vitest) |
 

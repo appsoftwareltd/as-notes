@@ -14,6 +14,7 @@ import { wikilinkPlugin, type WikilinkResolverFn } from './MarkdownItWikilinkPlu
 import { getPathDistance } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 import { TaskPanelProvider } from './TaskPanelProvider.js';
+import { BacklinkPanelProvider } from './BacklinkPanelProvider.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -42,6 +43,9 @@ let completionProvider: WikilinkCompletionProvider | undefined;
 
 /** Task panel provider instance — alive while in full mode. */
 let taskPanelProvider: TaskPanelProvider | undefined;
+
+/** Backlink panel provider instance — alive while in full mode. */
+let backlinkPanelProvider: BacklinkPanelProvider | undefined;
 
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -126,6 +130,7 @@ function toggleTodoCommand(): void {
         const filename = path.basename(doc.uri.fsPath);
         indexService.indexFileContent(relativePath, filename, doc.getText(), Date.now());
         taskPanelProvider?.refresh();
+        backlinkPanelProvider?.refresh();
     });
 }
 
@@ -221,6 +226,16 @@ async function enterFullMode(
             taskPanelProvider?.toggleShowTodoOnly();
         }),
     );
+
+    // Backlink panel
+    backlinkPanelProvider = new BacklinkPanelProvider(indexService, workspaceRoot);
+    fullModeDisposables.push(backlinkPanelProvider);
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.showBacklinks', () => {
+            backlinkPanelProvider?.show();
+        }),
+    );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.navigateToTask', async (pagePath: string, line: number) => {
             const workspaceRoot = getWorkspaceRoot();
@@ -281,6 +296,7 @@ async function enterFullMode(
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                backlinkPanelProvider?.refresh();
             } catch (err) {
                 console.warn('as-notes: failed to index on save:', err);
             }
@@ -308,6 +324,7 @@ async function enterFullMode(
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                backlinkPanelProvider?.refresh();
             }, 500);
         }),
     );
@@ -327,6 +344,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            backlinkPanelProvider?.refresh();
         }),
     );
 
@@ -355,6 +373,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            backlinkPanelProvider?.refresh();
         }),
     );
 
@@ -390,6 +409,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            backlinkPanelProvider?.refresh();
         }),
     );
 
@@ -417,6 +437,7 @@ async function enterFullMode(
                     if (!safeSaveToFile()) { return; }
                     completionProvider?.refresh();
                     taskPanelProvider?.refresh();
+                    backlinkPanelProvider?.refresh();
                 } catch {
                     // File may have been closed/deleted
                 }
@@ -462,6 +483,7 @@ function disposeFullMode(): void {
     fullModeDisposables = [];
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', false);
     taskPanelProvider = undefined;
+    backlinkPanelProvider = undefined;
 }
 
 /**
@@ -569,6 +591,7 @@ async function rebuildIndex(): Promise<void> {
             indexService!.saveToFile();
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            backlinkPanelProvider?.refresh();
 
             // Update status bar
             const pageCount = indexService!.getAllPages().length;
@@ -596,6 +619,7 @@ function startPeriodicScan(): void {
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                backlinkPanelProvider?.refresh();
                 const pageCount = indexService.getAllPages().length;
                 statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
             }

@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management",
     "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "publisher": "appsoftwareltd",
     "license": "MIT",
     "icon": "images/icon.png",
@@ -74,6 +74,11 @@
                 "command": "as-notes.toggleTaskFromPanel",
                 "title": "AS Notes: Toggle Task",
                 "icon": "$(check)"
+            },
+            {
+                "command": "as-notes.showBacklinks",
+                "title": "AS Notes: Show Backlinks",
+                "icon": "$(references)"
             }
         ],
         "keybindings": [
@@ -87,6 +92,12 @@
                 "command": "as-notes.toggleTaskPanel",
                 "key": "ctrl+alt+t",
                 "mac": "cmd+alt+t",
+                "when": "as-notes.fullMode"
+            },
+            {
+                "command": "as-notes.showBacklinks",
+                "key": "ctrl+alt+b",
+                "mac": "cmd+alt+b",
                 "when": "as-notes.fullMode"
             }
         ],
@@ -115,6 +126,13 @@
             ]
         },
         "menus": {
+            "editor/title": [
+                {
+                    "command": "as-notes.showBacklinks",
+                    "when": "as-notes.fullMode && editorLangId == markdown",
+                    "group": "navigation"
+                }
+            ],
             "view/title": [
                 {
                     "command": "as-notes.toggleShowTodoOnly",

@@ -71,6 +71,12 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Tasks table](#tasks-table)
   - [TaskPanelProvider](#taskpanelprovider)
   - [Sync strategy](#sync-strategy)
+- [Backlinks panel](#backlinks-panel)
+  - [BacklinkPanelProvider](#backlinkpanelprovider)
+  - [Data flow](#data-flow)
+  - [Message protocol](#message-protocol)
+  - [Styling](#styling)
+  - [Sync strategy](#sync-strategy-1)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
@@ -87,7 +93,7 @@ The extension is built with:
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (190 tests across 7 test files)
+- **vitest 3.x** for unit tests (197 tests across 7 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
@@ -967,6 +973,45 @@ The `toggleTodoCommand` additionally re-indexes the current buffer after the edi
 
 ---
 
+## Backlinks panel
+
+The backlinks panel displays all incoming links to the currently active markdown file. It uses a `WebviewPanel` that opens beside the active editor (like Markdown Preview), providing rich HTML rendering of backlink context.
+
+### BacklinkPanelProvider
+
+`BacklinkPanelProvider` (`src/BacklinkPanelProvider.ts`) manages the webview panel lifecycle:
+
+- **`show()`** — creates a new `WebviewPanel` in `ViewColumn.Beside` with `preserveFocus: true` (so the editor keeps focus), or reveals an existing one. Uses `retainContextWhenHidden: true` to preserve state when the panel is not visible.
+- **`update(uri)`** — called when the active editor changes. Queries the index for the given file's backlinks and renders the HTML.
+- **`refresh()`** — re-renders the current file's backlinks. Called by all index update triggers (same set as task panel and completion provider).
+- **`dispose()`** — cleans up the panel and listeners.
+
+### Data flow
+
+1. The provider resolves the active file's workspace-relative path via `vscode.workspace.asRelativePath()`
+2. Looks up the page in the index via `IndexService.getPageByPath()`
+3. Queries `IndexService.getBacklinksIncludingAliases(pageId)` which returns `BacklinkEntry[]` — each containing a full `LinkRow` (with `context`, `line`, `start_col`, `end_col`) and the source `PageRow` (with `title`, `path`)
+4. Groups entries by source page
+5. Renders HTML with backlinks grouped under page headers, context lines with the wikilink text highlighted, and line numbers
+
+The `getBacklinksIncludingAliases()` method collects the page's own filename plus all alias filenames and queries links matching any of them in a single `IN (...)` clause, joined with the `pages` table for source page metadata. Results are ordered by page title (case-insensitive), then line number and column.
+
+### Message protocol
+
+The webview communicates with the extension via `postMessage`:
+
+- **`navigate`** — sent when the user clicks a backlink entry or page header. Payload: `{ command: 'navigate', pagePath: string, line: number }`. The provider opens the file in `ViewColumn.One` and scrolls to the line.
+
+### Styling
+
+The HTML uses VS Code CSS variables (`--vscode-foreground`, `--vscode-editor-background`, `--vscode-list-hoverBackground`, etc.) for automatic light/dark theme support. Context lines use the editor's monospace font. Wikilink text within context is highlighted with `--vscode-textLink-foreground`. Hover states provide visual feedback on clickable elements.
+
+### Sync strategy
+
+The backlink panel follows the same sync pattern as the task panel and completion provider. All index update triggers (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) call `backlinkPanelProvider?.refresh()`. Additionally, `onDidChangeActiveTextEditor` calls `backlinkPanelProvider?.update(uri)` to show backlinks for the newly active file.
+
+---
+
 ## Filename sanitisation
 
 The regex `/ ? < > \ : * | "` is applied to `pageName` to produce `pageFileName`. The replacement character is `_`.
@@ -992,8 +1037,8 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
    - Opens the SQLite database
    - Runs a stale scan to catch external changes
    - Creates shared `WikilinkService`, `WikilinkFileService`, `IndexService`, `IndexScanner`
-   - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`
-   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask` commands
+   - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`, `BacklinkPanelProvider`
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask`, `as-notes.showBacklinks` commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
 5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared
@@ -1088,6 +1133,6 @@ Tests that depend on VS Code APIs (decorations, document links, hover, rename tr
 
 5. **Segment computation performance** — the character-by-character scan is O(n × m). For lines with many wikilinks, a sorted-endpoint sweep-line approach would be O(n log n). This has not been necessary in practice.
 
-6. **Backlink panel** — a dedicated tree view or webview showing all incoming links for the active file. The index already has the data; only the UI needs building.
+6. ~~**Backlink panel**~~ — implemented. See [Backlinks panel](#backlinks-panel).
 
 7. **Tags** — `#tag` syntax support with index-backed queries is planned for a future iteration.
