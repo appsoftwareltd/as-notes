@@ -8,12 +8,19 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 
 ## Main Features
 
+- Privacy focused - does not send your data anywhere
+- Version control friendly (Git etc)
+- Lightweight indexing of your notes (local sqlite3 WASM)
+- Automatic wikilink / file rename tracking
+
 ### Wikilinks
 
 - Logseq / Roam / Obsidian style wikilinks in the VS Code editor
 - Markdown wikilinks include nested link handling e.g. `[[[[AS Notes]] Page]]`
 - Wikilinks navigate the user to the target page regardless of location in folder structure e.g. `[[[[AS Notes]] Page]]` -> `[[AS Notes]] Page.md`
 - Renames for wikilinks automatically update other existing links and will rename the page to which the link refers to keep names in sync
+
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/wikilinks.png" alt="AS Notes backlinks wikilinks" style="max-height:200px; margin-top: 10px">
 
 ### TODO Management
 
@@ -27,7 +34,15 @@ Marker for todo removed
 
 Use `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
 
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/todopanel.png" alt="AS Notes todo panel" style="max-height:130px; margin-top: 10px; margin-bottom: 10px;">
+
 > **Note:** Todo toggling requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
+
+### Backlinks Panel
+
+`Ctrl+Alt+B` (Windows/Linux) / `Cmd+Alt+B` (macOS)
+
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/backlinks.png" alt="AS Notes backlinks panel" style="max-height:400px; margin-top: 10px">
 
 ### Daily Journal
 
@@ -375,4 +390,6 @@ This software is provided "as is", without warranty of any kind, express or impl
 
 **You are solely responsible for maintaining backups of your data.** It is strongly recommended to use version control (e.g. git) or another backup strategy for any notes or files you manage with this extension.
 
-This extension is licensed under the [MIT License](LICENSE).
+This extension is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](LICENSE).
+
+You are free to use, share, and adapt this extension for **non-commercial purposes** with attribution. Commercial use requires a separate commercial license. See [LICENSE](LICENSE) for full terms or contact us https://www.appsoftware.com/contact.

@@ -2,6 +2,12 @@
 
 All notable changes to AS Notes will be documented here.
 
+## [1.0.7] — 2026-03-02
+
+### Added
+
+- Documentation / README
+
 ## [1.0.6] — 2026-03-02
 
 ### Added
