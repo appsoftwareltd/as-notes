@@ -15,16 +15,15 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 
 ### Wikilinks
 
-- Logseq / Roam / Obsidian style wikilinks in the VS Code editor
-- Markdown wikilinks include nested link handling e.g. `[[[[AS Notes]] Page]]`
-- Wikilinks navigate the user to the target page regardless of location in folder structure e.g. `[[[[AS Notes]] Page]]` -> `[[AS Notes]] Page.md`
-- Renames for wikilinks automatically update other existing links and will rename the page to which the link refers to keep names in sync
+- Logseq / Roam / Obsidian style `[[wikilinks]]` with nested link support e.g. `[[[[AS Notes]] Page]]`
+- Links resolve to the target page anywhere in your workspace
+- Renaming a link updates the target file and all matching references across the workspace
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/wikilinks.png" alt="AS Notes backlinks wikilinks" style="max-height:200px; margin-top: 10px">
 
-### TODO Management
+### Task Management
 
-This extension will automate the adding / toggling of markdown TODOs e.g:
+Toggle markdown TODOs with a keyboard shortcut:
 
 ```
 - [ ] Marker for todo added
@@ -32,7 +31,7 @@ This extension will automate the adding / toggling of markdown TODOs e.g:
 Marker for todo removed
 ```
 
-Use `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
+`Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS). Keybinding is configurable.
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/todopanel.png" alt="AS Notes todo panel" style="max-height:130px; margin-top: 10px; margin-bottom: 10px;">
 
@@ -52,18 +51,18 @@ Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
-### Compatibility With Other Markdown Based PKMS
+### Compatibility With Other Markdown PKMS
 
-Due to the similarity in file structure, you may find that you can use this extension helpful in editing and navigating PKMS created with other wikilink capable PKMS systems such as Obsidian and Logseq. Note however that there are variations in format - Obsidian for example does not facilitate nested wikilinks like AS Code and Logseq. AS Code does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
+AS Notes can work with knowledge bases created in Obsidian or Logseq due to similar file structures. There are format differences — Obsidian does not support nested wikilinks, and AS Notes does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
 
 ## VS Code Marketplace
 
-AS Notes via the Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes
+https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes
 
 
 ## Getting started
 
-If you would like a sample knowledge base to work with, you can clone https://github.com/appsoftwareltd/as-notes-demo-notes, following the instructions in that repository to initialise AS Notes.
+For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-demo-notes and follow the instructions there to initialise.
 
 ### Initialise a workspace
 
@@ -107,11 +106,11 @@ Nesting works to arbitrary depth. The extension always identifies the innermost 
 
 ### Click navigation
 
-**Ctrl+Click** (Cmd+Click on macOS) on any wikilink to open the target `.md` file. The target is always resolved in the same directory as the file containing the link.
+**Ctrl+Click** (Cmd+Click on macOS) on any wikilink to open the target `.md` file. Links resolve globally across the workspace (see [Subfolder link resolution](#subfolder-link-resolution)).
 
 ### Auto-create missing pages
 
-If you navigate to a page that doesn't exist, the extension creates it automatically and shows a notification. This lets you create forward-references to pages you intend to write later.
+Navigating to a page that doesn't exist creates it automatically, so you can write forward-references before the target page exists.
 
 ### Hover tooltips
 
@@ -123,24 +122,22 @@ Hover over any wikilink to see:
 
 ### Link rename synchronisation
 
-When you edit the text of a wikilink and then move your cursor outside it (or switch to another file), the extension detects the change and offers to:
+When you edit a wikilink's text and move your cursor away (or switch files), AS Notes detects the change and offers to:
 
 1. **Rename the corresponding `.md` file** (if it exists)
 2. **Update every matching link** across all markdown files in the workspace
 
 A single confirmation dialog covers all affected nesting levels. For example, editing `[[Inner]]` inside `[[Outer [[Inner]] text]]` offers to rename both the inner and outer pages.
 
-You can decline the rename — the link text change is kept but files and other links are left untouched.
-
-Rename detection is backed by the persistent index — the extension compares the last-indexed link state with the current document to detect changes accurately.
+You can decline — the link text change is kept but files and other links are left untouched.
 
 ### Case-insensitive file matching
 
-`[[my page]]` will find and open `My Page.md` regardless of the operating system. On case-sensitive filesystems (Linux), a directory scan finds the matching file. On Windows and macOS this is handled natively by the filesystem.
+`[[my page]]` resolves to `My Page.md` regardless of OS. On case-sensitive filesystems (Linux), a directory scan finds the match. On Windows and macOS the filesystem handles it natively.
 
 ### Filename sanitisation
 
-Characters that are invalid in filenames (`/ ? < > \ : * | "`) are replaced with `_` in the target filename. For example:
+Invalid filename characters (`/ ? < > \ : * | "`) are replaced with `_`:
 
 ```markdown
 [[What is 1/2 + 1/4?]]  →  What is 1_2 + 1_4_.md
@@ -168,13 +165,10 @@ aliases: [Short Name, Another Name]
 
 Linking to `[[Short Name]]` or `[[Another Name]]` navigates to the page that declares those aliases — no extra file is created.
 
-**Hover tooltips** show alias resolution: hovering over `[[Short Name]]` displays `Short Name.md → ActualPage.md` and an alias indicator.
-
-**Rename tracking** is alias-aware. Editing an alias link (e.g. changing `[[Short Name]]` to `[[New Name]]`) offers to update the front matter on the canonical page and all matching references across the workspace. No file is renamed.
-
-**Backlink counts** include both direct and alias references. A page with two aliases counts links to all three names.
-
-Alias values are plain strings. Any accidental `[[` or `]]` brackets are stripped automatically.
+- **Hover tooltips** show alias resolution: `Short Name.md → ActualPage.md`
+- **Rename tracking** is alias-aware — editing an alias link offers to update front matter and all matching references
+- **Backlink counts** include both direct and alias references
+- Alias values are plain strings; accidental `[[` / `]]` brackets are stripped automatically
 
 ### Subfolder link resolution
 
@@ -193,13 +187,13 @@ Wikilinks resolve globally across the workspace, not just in the current directo
 
 ### Wikilink autocomplete
 
-Type `[[` in any markdown file to trigger an autocomplete popup listing all indexed pages and aliases. As you type, the list filters in real time.
+Type `[[` in any markdown file to trigger autocomplete, listing all indexed pages and aliases. The list filters as you type.
 
-- **Page suggestions** show the page name (without `.md`). When multiple pages share the same name in different subfolders, the folder path is shown for disambiguation.
-- **Alias suggestions** show the alias name with an arrow indicating the canonical page (e.g. `→ ActualPage`).
-- **Auto-close** — selecting a suggestion inserts the page name and closes the wikilink with `]]`.
-- **Nested wikilinks** — typing `[[` inside an existing unclosed `[[...` starts a new autocompletion scoped to the inner brackets.
-- Completions are **suppressed inside front matter** blocks (between `---` fences).
+- **Page suggestions** show the page name (without `.md`), with folder paths for disambiguation when names collide
+- **Alias suggestions** show the alias with an arrow to the canonical page (e.g. `→ ActualPage`)
+- **Auto-close** — selecting a suggestion inserts the name and appends `]]`
+- **Nested wikilinks** — `[[` inside an unclosed `[[...` starts a new autocompletion for the inner link
+- Completions are **suppressed inside front matter** blocks
 
 ### Persistent index
 
@@ -226,13 +220,10 @@ Press **Ctrl+Shift+Enter** (Cmd+Shift+Enter on macOS) on any line in a markdown 
 | `- [ ] buy milk` | `- [x] buy milk` |
 | `- [x] buy milk` | `buy milk` |
 
-**List-aware:** existing list items (`- some text` or `* some text`) gain a checkbox without being re-wrapped — `- some text` becomes `- [ ] some text`.
-
-**Indentation preserved:** the toggle works correctly on indented lines, keeping leading whitespace intact for nested lists.
-
-**Multi-cursor:** with multiple cursors active, each cursor's line is toggled independently.
-
-The keybinding is configurable — open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`) and search for "AS Notes: Toggle Todo" to change it.
+- **List-aware:** `- some text` becomes `- [ ] some text` (no re-wrapping)
+- **Indentation preserved:** works correctly on indented/nested lines
+- **Multi-cursor:** each cursor's line is toggled independently
+- **Configurable keybinding:** search for "AS Notes: Toggle Todo" in **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`)
 
 ### Tasks panel
 
@@ -248,8 +239,8 @@ The **AS Notes Tasks** panel appears in the Explorer sidebar when the workspace 
 
 The **Backlinks** panel shows all incoming links to the active markdown file. Open it with `Ctrl+Alt+B` (Cmd+Alt+B on macOS), or click the references icon in the editor title bar.
 
-- **Rich context** — each backlink displays the surrounding line text with the wikilink highlighted, making it easy to understand _how_ a page is referenced.
-- **Grouped by page** — backlinks are grouped by source file with the page title as a header, showing the file path underneath.
+- **Rich context** — each backlink shows the surrounding line with the wikilink highlighted.
+- **Grouped by page** — organised by source file with page title and path.
 - **Click to navigate** — click any backlink entry to jump directly to the source file and line.
 - **Alias-aware** — includes links that target the page via its aliases, not just direct filename references.
 - **Live sync** — the panel auto-updates when you switch files, save, or when the index changes.
@@ -260,12 +251,11 @@ The **Backlinks** panel shows all incoming links to the active markdown file. Op
 Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal. The extension creates a dated markdown file in a dedicated journal folder — one file per day.
 
 - **Filename format:** `YYYY_MM_DD.md` (e.g. `2026_03_02.md`)
-- **Journal folder:** defaults to `journals/` in your workspace root. Change it with the `as-notes.journalFolder` setting.
-- **Template-based:** new journal files are created from `journal_template.md` in the journal folder. The placeholder `YYYY-MM-DD` in the template is replaced with the current date.
-- **Auto-setup:** on first use, the journal folder and template file are created automatically. The default template is simply `# YYYY-MM-DD`.
-- **Customisable template:** edit `journal_template.md` to add your own sections, prompts, or front matter. Every future journal page will use your custom template.
-- **Instant indexing:** new journal files are indexed immediately, so wikilink completion and backlinks work without delay.
-- **Idempotent:** pressing the shortcut again on the same day simply opens the existing file.
+- **Journal folder:** defaults to `journals/` (configurable via `as-notes.journalFolder`)
+- **Template-based:** new files are created from `journal_template.md`, with `YYYY-MM-DD` replaced by the current date. Edit the template to customise future pages.
+- **Auto-setup:** the journal folder and default template are created on first use
+- **Instant indexing:** new journal files are indexed immediately for wikilink completion and backlinks
+- **Idempotent:** pressing the shortcut again on the same day opens the existing file
 
 ## Settings
 
@@ -321,9 +311,9 @@ npm run lint
 
 Press **F5** in VS Code to launch the Extension Development Host with the extension loaded.
 
-Note that it is OK to have the extension installed via the marketplace and debug at the same time. The debug version will take precedence and override the marketplace install behaviour.
+The debug version takes precedence over the marketplace install, so both can coexist.
 
-VS Code remembers the last folder opened in the Extension Development Host and reopens it automatically. The demo knowledge base at https://github.com/appsoftwareltd/as-notes-demo-notes is designed to cover common usage scenarios. 
+VS Code remembers the last folder opened in the Extension Development Host. The [demo knowledge base](https://github.com/appsoftwareltd/as-notes-demo-notes) is designed to cover common usage scenarios.
 
 ### Testing
 
