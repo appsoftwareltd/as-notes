@@ -2,14 +2,28 @@
 
 AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
 
-## Wikilinks
+## Main Features
+
+### Wikilinks
 
 - Logseq / Roam / Obsidian style wikilinks in the VS Code editor
 - Markdown wikilinks include nested link handling e.g. `[[[[AS Notes]] Page]]`
 - Wikilinks navigate the user to the target page regardless of location in folder structure e.g. `[[[[AS Notes]] Page]]` -> `[[AS Notes]] Page.md`
 - Renames for wikilinks automatically update other existing links and will rename the page to which the link refers to keep names in sync
 
-## Compatibility With Other Markdown Based PKMS
+## TODO Management
+
+This extension will automate the adding / toggling of markdown TODOs e.g:
+
+```
+- [ ] Marker for todo added
+- [x] Marker for todo marked done
+Marker for todo removed
+```
+
+Use `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS), scoped to `editorLangId == markdown`. It is user-configurable via VS Code's standard keybinding settings.
+
+### Compatibility With Other Markdown Based PKMS
 
 Due to the similarity in file structure, you may find that you can use this extension helpful in editing and navigating PKMS created with other wikilink capable PKMS systems such as Obsidian and Logseq. Note however that there are variations in format - Obsidian for example does not facilitate nested wikilinks like AS Code and Logseq. AS Code does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
 
@@ -19,6 +33,8 @@ AS Notes via the Visual Studio Marketplace: https://marketplace.visualstudio.com
 
 
 ## Getting started
+
+If you would like a sample knowledge base to work with, you can clone https://github.com/appsoftwareltd/as-notes-demo-notes, following the instructions in that repository to initialise AS Notes.
 
 ### Initialise a workspace
 
@@ -273,17 +289,27 @@ For a deep dive into the technical design, see [docs/TECHNICAL.md](docs/TECHNICA
 
 ### Publishing
 
-```
-# Bump package version in `package.json`
+Releases are published to the VS Code Marketplace manually, then a GitHub Release is created automatically when a version tag is pushed.
 
+**Step 1 — bump the version**
+
+Update `version` in `package.json` and add an entry to `CHANGELOG.md`.
+
+**Step 2 — publish to the VS Code Marketplace**
+
+```bash
 npx @vscode/vsce package
-npx @vscode/vsce login appsoftwareltd
- 
-(Enter PAT token if auth expired)
-
+npx @vscode/vsce login appsoftwareltd   # enter PAT token if auth expired
 npx @vscode/vsce publish
+```
 
-git commit -m "Release v1.0.0
-git tag v1.0.0
+**Step 3 — tag and push**
+
+```bash
+git add package.json CHANGELOG.md README.md
+git commit -m "Release v1.x.x"   # change version
+git tag v1.x.x                   # change version
 git push origin main --tags
 ```
+
+Pushing the tag triggers the [Release workflow](.github/workflows/release.yml), which creates a GitHub Release automatically with auto-generated release notes and the VS Code Marketplace install link.
