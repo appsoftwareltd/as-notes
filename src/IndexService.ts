@@ -627,7 +627,9 @@ export class IndexService {
             `SELECT DISTINCT l.page_name, l.page_filename
              FROM links l
              LEFT JOIN pages p ON p.filename = l.page_filename
+             LEFT JOIN aliases a ON LOWER(a.alias_filename) = LOWER(l.page_filename)
              WHERE p.id IS NULL
+               AND a.id IS NULL
              ORDER BY l.page_name COLLATE NOCASE`,
         );
         if (result.length === 0) { return []; }

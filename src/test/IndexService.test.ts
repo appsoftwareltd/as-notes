@@ -914,4 +914,27 @@ describe('IndexService — getForwardReferencedPages', () => {
         const sorted = [...names].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
         expect(names).toEqual(sorted);
     });
+
+    it('should exclude links that resolve to an alias', () => {
+        // "Plant.md" exists and has "Plants" as an alias.
+        // "source.md" links to [[Plants]].
+        // Plants.md does NOT exist in pages, but "Plants" is a known alias.
+        // Forward references should NOT include "Plants".
+        service.indexFileContent('Plant.md', 'Plant.md', '---\naliases:\n  - Plants\n---\n# Plant', 1000);
+        service.indexFileContent('source.md', 'source.md', '# Source\n\nSee [[Plants]] and [[Missing Page]].', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        const names = forwardRefs.map(r => r.page_name);
+        expect(names).not.toContain('Plants');
+        expect(names).toContain('Missing Page');
+    });
+
+    it('should exclude alias links case-insensitively', () => {
+        service.indexFileContent('Plant.md', 'Plant.md', '---\naliases:\n  - Plants\n---\n# Plant', 1000);
+        service.indexFileContent('source.md', 'source.md', '# Source\n\nSee [[plants]].', 1000);
+
+        const forwardRefs = service.getForwardReferencedPages();
+        const names = forwardRefs.map(r => r.page_name);
+        expect(names).not.toContain('plants');
+    });
 });
