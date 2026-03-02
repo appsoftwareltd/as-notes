@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management",
     "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "publisher": "appsoftwareltd",
     "license": "MIT",
     "icon": "images/icon.png",
@@ -79,6 +79,10 @@
                 "command": "as-notes.showBacklinks",
                 "title": "AS Notes: Show Backlinks",
                 "icon": "$(references)"
+            },
+            {
+                "command": "as-notes.openDailyJournal",
+                "title": "AS Notes: Open Daily Journal"
             }
         ],
         "keybindings": [
@@ -99,6 +103,12 @@
                 "key": "ctrl+alt+b",
                 "mac": "cmd+alt+b",
                 "when": "as-notes.fullMode"
+            },
+            {
+                "command": "as-notes.openDailyJournal",
+                "key": "ctrl+alt+j",
+                "mac": "cmd+alt+j",
+                "when": "as-notes.fullMode"
             }
         ],
         "configuration": {
@@ -109,6 +119,11 @@
                     "default": 300,
                     "minimum": 30,
                     "description": "Interval in seconds between automatic background scans for file changes. Set to 0 to disable periodic scanning."
+                },
+                "as-notes.journalFolder": {
+                    "type": "string",
+                    "default": "journals",
+                    "description": "Folder for daily journal files, relative to workspace root."
                 }
             }
         },

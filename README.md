@@ -228,11 +228,24 @@ The **Backlinks** panel shows all incoming links to the active markdown file. Op
 - **Live sync** — the panel auto-updates when you switch files, save, or when the index changes.
 - **Editor-side display** — opens beside your active editor (like Markdown Preview), giving you a spacious view of backlink context.
 
+### Daily journal
+
+Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal. The extension creates a dated markdown file in a dedicated journal folder — one file per day.
+
+- **Filename format:** `YYYY_MM_DD.md` (e.g. `2026_03_02.md`)
+- **Journal folder:** defaults to `journals/` in your workspace root. Change it with the `as-notes.journalFolder` setting.
+- **Template-based:** new journal files are created from `journal_template.md` in the journal folder. The placeholder `YYYY-MM-DD` in the template is replaced with the current date.
+- **Auto-setup:** on first use, the journal folder and template file are created automatically. The default template is simply `# YYYY-MM-DD`.
+- **Customisable template:** edit `journal_template.md` to add your own sections, prompts, or front matter. Every future journal page will use your custom template.
+- **Instant indexing:** new journal files are indexed immediately, so wikilink completion and backlinks work without delay.
+- **Idempotent:** pressing the shortcut again on the same day simply opens the existing file.
+
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
+| `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
 
 ## Supported file types
 
@@ -310,6 +323,7 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/TodoToggleService.ts` | Pure todo toggle logic — three-state cycle (plain / unchecked / done) |
 | `src/TaskPanelProvider.ts` | Explorer tree view — task list grouped by page, todo-only filter, click-to-navigate |
 | `src/BacklinkPanelProvider.ts` | Webview panel — backlinks display with context, grouped by source page, click-to-navigate |
+| `src/JournalService.ts` | Pure journal logic — date formatting, template processing, path construction |
 | `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
 | `src/test/` | Unit tests (vitest) |
 

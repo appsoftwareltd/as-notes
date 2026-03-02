@@ -2,6 +2,12 @@
 
 All notable changes to AS Notes will be documented here.
 
+## [1.0.6] — 2026-03-02
+
+### Added
+
+- Daily journal
+
 ## [1.0.5] — 2026-03-02
 
 ### Added
