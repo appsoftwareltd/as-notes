@@ -274,7 +274,7 @@ For a deep dive into the technical design, see [docs/TECHNICAL.md](docs/TECHNICA
 ### Publishing
 
 ```
-# Bump package version
+# Bump package version in `package.json`
 
 npx @vscode/vsce package
 npx @vscode/vsce login appsoftwareltd
@@ -282,4 +282,8 @@ npx @vscode/vsce login appsoftwareltd
 (Enter PAT token if auth expired)
 
 npx @vscode/vsce publish
+
+git commit -m "Release v1.0.0
+git tag v1.0.0
+git push origin main --tags
 ```
