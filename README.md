@@ -9,7 +9,7 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 ## Main Features
 
 - Privacy focused - does not send your data anywhere
-- Version control friendly (Git etc)
+- Version control friendly (e.g. Git)
 - Lightweight indexing of your notes (local sqlite3 WASM)
 - Automatic wikilink / file rename tracking
 
