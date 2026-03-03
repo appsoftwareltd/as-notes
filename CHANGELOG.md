@@ -2,6 +2,12 @@
 
 All notable changes to AS Notes will be documented here.
 
+## [1.0.8] — 2026-03-03
+
+### Added
+
+- Added encryption (`.enc.md`) files (Pro feature)
+
 ## [1.0.7] — 2026-03-02
 
 ### Added
