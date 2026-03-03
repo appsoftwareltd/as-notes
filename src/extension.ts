@@ -11,7 +11,7 @@ import { IndexService } from './IndexService.js';
 import { IndexScanner } from './IndexScanner.js';
 import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
 import { wikilinkPlugin, type WikilinkResolverFn } from './MarkdownItWikilinkPlugin.js';
-import { getPathDistance } from './PathUtils.js';
+import { getPathDistance, sanitiseFileName } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 import { TaskPanelProvider } from './TaskPanelProvider.js';
 import { BacklinkPanelProvider } from './BacklinkPanelProvider.js';
@@ -21,6 +21,10 @@ import {
     DEFAULT_TEMPLATE,
     TEMPLATE_FILENAME,
 } from './JournalService.js';
+import { isValidStatus, type LicenceStatus } from './LicenceService.js';
+import { activateWithServer } from './LicenceActivationService.js';
+import * as EncryptionService from './EncryptionService.js';
+import { ensurePreCommitHook } from './GitHookService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -56,6 +60,18 @@ let backlinkPanelProvider: BacklinkPanelProvider | undefined;
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
 
+/** Current licence validation result — updated on activation and config change. */
+let licenceStatus: LicenceStatus = 'not-entered';
+
+/**
+ * Returns true when a valid Pro licence key is configured.
+ * Use this at every pro feature gate — one place to change when real
+ * server-side verification is added.
+ */
+export function isProLicenced(): boolean {
+    return isValidStatus(licenceStatus);
+}
+
 // ── Activation ─────────────────────────────────────────────────────────────
 
 export async function activate(context: vscode.ExtensionContext): Promise<{ extendMarkdownIt: (md: any) => any }> {
@@ -71,6 +87,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     );
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.rebuildIndex', () => rebuildIndex()),
+    );
+
+    // Validate licence key on activation (checks stored token first, then local rule).
+    // Fire-and-forget: result is stored in licenceStatus; we show a warning if invalid.
+    const rawKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
+    activateWithServer(rawKey, context).then((status) => {
+        licenceStatus = status;
+        if (licenceStatus === 'invalid') {
+            vscode.window.showWarningMessage(
+                'AS Notes: The configured licence key is invalid. Pro features are disabled.',
+            );
+        }
+        updateFullModeStatusBar();
+    }).catch((err) => {
+        console.warn('as-notes: licence activation check failed:', err);
+    });
+
+    // Re-validate whenever the licence key setting changes
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (!e.affectsConfiguration('as-notes.licenceKey')) { return; }
+            const newKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
+            activateWithServer(newKey, context).then((status) => {
+                licenceStatus = status;
+                if (licenceStatus === 'invalid') {
+                    vscode.window.showWarningMessage(
+                        'AS Notes: The configured licence key is invalid. Pro features are disabled.',
+                    );
+                }
+                updateFullModeStatusBar();
+            }).catch((err) => {
+                console.warn('as-notes: licence re-validation failed:', err);
+            });
+        }),
     );
 
     // Build the API return value (markdown-it plugin) before mode setup
@@ -248,6 +298,292 @@ async function enterFullMode(
         vscode.commands.registerCommand('as-notes.openDailyJournal', () =>
             openDailyJournal(workspaceRoot),
         ),
+    );
+
+    // ── Encryption commands (Pro) ──────────────────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.setEncryptionKey', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const key = await vscode.window.showInputBox({
+                prompt: 'Enter your encryption passphrase',
+                password: true,
+                ignoreFocusOut: true,
+                placeHolder: 'Passphrase (stored securely in OS secret storage)',
+            });
+            if (key === undefined) { return; }
+            if (key === '') {
+                vscode.window.showWarningMessage('AS Notes: Passphrase cannot be empty.');
+                return;
+            }
+            await context.secrets.store('as-notes.encryptionKey', key);
+            vscode.window.showInformationMessage('AS Notes: Encryption key saved.');
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.clearEncryptionKey', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            await context.secrets.delete('as-notes.encryptionKey');
+            vscode.window.showInformationMessage('AS Notes: Encryption key cleared.');
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.encryptNotes', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const passphrase = await context.secrets.get('as-notes.encryptionKey');
+            if (!passphrase) {
+                vscode.window.showWarningMessage(
+                    'AS Notes: No encryption key set. Run "AS Notes: Set Encryption Key" first.',
+                );
+                return;
+            }
+            const files = await vscode.workspace.findFiles('**/*.enc.md');
+            let encrypted = 0;
+            let skipped = 0;
+            let errors = 0;
+            // Derive key once to avoid 100k PBKDF2 iterations per file
+            const derivedKey = EncryptionService.deriveKey(passphrase);
+            for (const fileUri of files) {
+                try {
+                    // Use open editor buffer if available (captures unsaved edits)
+                    const openDoc = vscode.workspace.textDocuments.find(
+                        d => d.uri.fsPath === fileUri.fsPath,
+                    );
+                    const content = openDoc
+                        ? openDoc.getText()
+                        : Buffer.from(await vscode.workspace.fs.readFile(fileUri)).toString('utf-8');
+                    if (EncryptionService.isEncrypted(content)) { skipped++; continue; }
+                    const encContent = EncryptionService.encrypt(content, passphrase, derivedKey);
+                    if (openDoc) {
+                        // Write back via WorkspaceEdit so the editor buffer stays in sync
+                        const fullRange = new vscode.Range(
+                            openDoc.positionAt(0),
+                            openDoc.positionAt(openDoc.getText().length),
+                        );
+                        const edit = new vscode.WorkspaceEdit();
+                        edit.replace(openDoc.uri, fullRange, encContent);
+                        await vscode.workspace.applyEdit(edit);
+                        await openDoc.save();
+                    } else {
+                        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(encContent, 'utf-8'));
+                    }
+                    encrypted++;
+                } catch (err) {
+                    console.warn(`as-notes: failed to encrypt ${fileUri.fsPath}:`, err);
+                    errors++;
+                }
+            }
+            const errMsg = errors > 0 ? ` ${errors} error(s).` : '';
+            vscode.window.showInformationMessage(
+                `AS Notes: Encrypted ${encrypted} file(s). ${skipped} already encrypted.${errMsg}`,
+            );
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.decryptNotes', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const passphrase = await context.secrets.get('as-notes.encryptionKey');
+            if (!passphrase) {
+                vscode.window.showWarningMessage(
+                    'AS Notes: No encryption key set. Run "AS Notes: Set Encryption Key" first.',
+                );
+                return;
+            }
+            const files = await vscode.workspace.findFiles('**/*.enc.md');
+            let decrypted = 0;
+            let skipped = 0;
+            let errors = 0;
+            // Derive key once to avoid 100k PBKDF2 iterations per file
+            const derivedKey = EncryptionService.deriveKey(passphrase);
+            for (const fileUri of files) {
+                try {
+                    // Always read encrypted content from disk (authoritative source)
+                    const bytes = await vscode.workspace.fs.readFile(fileUri);
+                    const content = Buffer.from(bytes).toString('utf-8');
+                    if (!EncryptionService.isEncrypted(content)) { skipped++; continue; }
+                    const plaintext = EncryptionService.decrypt(content, passphrase, derivedKey);
+                    // If the file is open in an editor, write via WorkspaceEdit to keep buffer in sync
+                    const openDoc = vscode.workspace.textDocuments.find(
+                        d => d.uri.fsPath === fileUri.fsPath,
+                    );
+                    if (openDoc) {
+                        const fullRange = new vscode.Range(
+                            openDoc.positionAt(0),
+                            openDoc.positionAt(openDoc.getText().length),
+                        );
+                        const edit = new vscode.WorkspaceEdit();
+                        edit.replace(openDoc.uri, fullRange, plaintext);
+                        await vscode.workspace.applyEdit(edit);
+                        await openDoc.save();
+                    } else {
+                        await vscode.workspace.fs.writeFile(fileUri, Buffer.from(plaintext, 'utf-8'));
+                    }
+                    decrypted++;
+                } catch (err) {
+                    console.warn(`as-notes: failed to decrypt ${fileUri.fsPath}:`, err);
+                    errors++;
+                }
+            }
+            const errMsg = errors > 0 ? ` ${errors} error(s).` : '';
+            vscode.window.showInformationMessage(
+                `AS Notes: Decrypted ${decrypted} file(s). ${skipped} already plaintext.${errMsg}`,
+            );
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.createEncryptedFile', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const title = await vscode.window.showInputBox({
+                prompt: 'Note title',
+                placeHolder: 'My encrypted note',
+                ignoreFocusOut: true,
+            });
+            if (!title) { return; }
+            const filename = `${sanitiseFileName(title)}.enc.md`;
+            const fileUri = vscode.Uri.joinPath(workspaceRoot, filename);
+            try {
+                await vscode.workspace.fs.stat(fileUri);
+                // File already exists — just open it
+            } catch {
+                await vscode.workspace.fs.writeFile(fileUri, Buffer.from('', 'utf-8'));
+            }
+            const doc = await vscode.workspace.openTextDocument(fileUri);
+            await vscode.window.showTextDocument(doc);
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.createEncryptedJournalNote', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const config = vscode.workspace.getConfiguration('as-notes');
+            const journalFolder = config.get<string>('journalFolder', 'journals');
+            const paths = computeJournalPaths(
+                workspaceRoot.fsPath.replace(/\\/g, '/'),
+                journalFolder,
+                new Date(),
+            );
+            // Replace trailing .md with .enc.md for an encrypted journal note
+            const encFilePath = paths.journalFilePath.replace(/\.md$/, '.enc.md');
+            const folderUri = vscode.Uri.file(paths.journalFolderPath);
+            await vscode.workspace.fs.createDirectory(folderUri);
+            const fileUri = vscode.Uri.file(encFilePath);
+            try {
+                await vscode.workspace.fs.stat(fileUri);
+                // File already exists — just open it
+            } catch {
+                await vscode.workspace.fs.writeFile(fileUri, Buffer.from('', 'utf-8'));
+            }
+            const doc = await vscode.workspace.openTextDocument(fileUri);
+            await vscode.window.showTextDocument(doc);
+        }),
+    );
+
+    // ── Per-file encrypt / decrypt (Pro) ────────────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.encryptCurrentNote', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const passphrase = await context.secrets.get('as-notes.encryptionKey');
+            if (!passphrase) {
+                vscode.window.showWarningMessage(
+                    'AS Notes: No encryption key set. Run "AS Notes: Set Encryption Key" first.',
+                );
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showErrorMessage('AS Notes: No active editor.');
+                return;
+            }
+            if (!editor.document.uri.fsPath.toLowerCase().endsWith('.enc.md')) {
+                vscode.window.showErrorMessage('AS Notes: Current file is not an encrypted note (.enc.md).');
+                return;
+            }
+            const content = editor.document.getText();
+            if (EncryptionService.isEncrypted(content)) {
+                vscode.window.showInformationMessage('AS Notes: File is already encrypted.');
+                return;
+            }
+            const derivedKey = EncryptionService.deriveKey(passphrase);
+            const encContent = EncryptionService.encrypt(content, passphrase, derivedKey);
+            const fullRange = new vscode.Range(
+                editor.document.positionAt(0),
+                editor.document.positionAt(editor.document.getText().length),
+            );
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(editor.document.uri, fullRange, encContent);
+            await vscode.workspace.applyEdit(edit);
+            await editor.document.save();
+            vscode.window.showInformationMessage('AS Notes: Note encrypted.');
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.decryptCurrentNote', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
+                return;
+            }
+            const passphrase = await context.secrets.get('as-notes.encryptionKey');
+            if (!passphrase) {
+                vscode.window.showWarningMessage(
+                    'AS Notes: No encryption key set. Run "AS Notes: Set Encryption Key" first.',
+                );
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showErrorMessage('AS Notes: No active editor.');
+                return;
+            }
+            if (!editor.document.uri.fsPath.toLowerCase().endsWith('.enc.md')) {
+                vscode.window.showErrorMessage('AS Notes: Current file is not an encrypted note (.enc.md).');
+                return;
+            }
+            // Always read from disk — disk is the authoritative encrypted source
+            const bytes = await vscode.workspace.fs.readFile(editor.document.uri);
+            const diskContent = Buffer.from(bytes).toString('utf-8');
+            if (!EncryptionService.isEncrypted(diskContent)) {
+                vscode.window.showInformationMessage('AS Notes: File is already plaintext.');
+                return;
+            }
+            const derivedKey = EncryptionService.deriveKey(passphrase);
+            const plaintext = EncryptionService.decrypt(diskContent, passphrase, derivedKey);
+            const fullRange = new vscode.Range(
+                editor.document.positionAt(0),
+                editor.document.positionAt(editor.document.getText().length),
+            );
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(editor.document.uri, fullRange, plaintext);
+            await vscode.workspace.applyEdit(edit);
+            await editor.document.save();
+            vscode.window.showInformationMessage('AS Notes: Note decrypted.');
+        }),
     );
 
     fullModeDisposables.push(
@@ -479,8 +815,19 @@ async function enterFullMode(
     }
 
     // Update status bar
+    updateFullModeStatusBar();
+}
+
+/**
+ * Refresh the full-mode status bar label.
+ * Shows `AS Notes (Pro)` when a valid licence is active, `AS Notes` otherwise.
+ * Safe to call at any time — no-ops if the status bar item is not yet created.
+ */
+function updateFullModeStatusBar(): void {
+    if (!indexService?.isOpen) { return; }
     const pageCount = indexService.getAllPages().length;
-    statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
+    const proLabel = isProLicenced() ? ' (Pro)' : '';
+    statusBarItem.text = `$(database) AS Notes${proLabel} — ${pageCount} pages`;
     statusBarItem.tooltip = 'Click to rebuild the AS Notes index';
     statusBarItem.command = 'as-notes.rebuildIndex';
     statusBarItem.show();
@@ -560,6 +907,9 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     // Create .gitignore inside .asnotes/ to exclude the DB file
     fs.writeFileSync(path.join(asnotesDir, '.gitignore'), 'index.db\n');
 
+    // Install git pre-commit hook to guard against committing unencrypted .enc.md files
+    ensurePreCommitHook(workspaceRoot.fsPath);
+
     // Enter full mode (creates DB, runs full scan)
     await vscode.window.withProgress(
         {
@@ -593,6 +943,10 @@ async function rebuildIndex(): Promise<void> {
         return;
     }
 
+    // Ensure git pre-commit hook is present (idempotent)
+    const root = getWorkspaceRoot();
+    if (root) { ensurePreCommitHook(root.fsPath); }
+
     await vscode.window.withProgress(
         {
             location: vscode.ProgressLocation.Notification,
@@ -608,8 +962,7 @@ async function rebuildIndex(): Promise<void> {
             backlinkPanelProvider?.refresh();
 
             // Update status bar
-            const pageCount = indexService!.getAllPages().length;
-            statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
+            updateFullModeStatusBar();
 
             vscode.window.showInformationMessage(
                 `AS Notes: Rebuild complete — ${result.filesIndexed} files indexed, ${result.linksFound} links found.`,
@@ -671,8 +1024,7 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
         backlinkPanelProvider?.refresh();
 
         // Update status bar with new page count
-        const pageCount = indexService!.getAllPages().length;
-        statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
+        updateFullModeStatusBar();
     } catch (err) {
         console.warn('as-notes: failed to index new journal file:', err);
     }
@@ -695,14 +1047,17 @@ function startPeriodicScan(): void {
     periodicScanHandle = setInterval(async () => {
         if (!indexService?.isOpen || !indexScanner) { return; }
         try {
+            // Ensure the git hook remains installed (e.g. after git clone / hook deletion)
+            const root = getWorkspaceRoot();
+            if (root) { ensurePreCommitHook(root.fsPath); }
+
             const summary = await indexScanner.staleScan();
             if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
-                const pageCount = indexService.getAllPages().length;
-                statusBarItem.text = `$(database) AS Notes (${pageCount} pages)`;
+                updateFullModeStatusBar();
             }
         } catch (err) {
             console.warn('as-notes: periodic scan failed:', err);
@@ -724,12 +1079,18 @@ function getWorkspaceRoot(): vscode.Uri | undefined {
 }
 
 function isMarkdown(doc: vscode.TextDocument): boolean {
-    return doc.languageId === 'markdown';
+    return doc.languageId === 'markdown' && !isEncryptedFileUri(doc.uri);
 }
 
 function isMarkdownUri(uri: vscode.Uri): boolean {
+    if (isEncryptedFileUri(uri)) { return false; }
     const ext = path.extname(uri.fsPath).toLowerCase();
     return ext === '.md' || ext === '.markdown';
+}
+
+/** Returns true if the URI points to a `.enc.md` encrypted file. */
+function isEncryptedFileUri(uri: vscode.Uri): boolean {
+    return uri.fsPath.toLowerCase().endsWith('.enc.md');
 }
 
 // ── Markdown preview plugin ────────────────────────────────────────────────

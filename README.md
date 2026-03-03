@@ -55,6 +55,44 @@ Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (
 
 AS Notes can work with knowledge bases created in Obsidian or Logseq due to similar file structures. There are format differences — Obsidian does not support nested wikilinks, and AS Notes does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
 
+## AS Notes Pro
+
+A **Pro licence** unlocks premium features. Enter your licence key in VS Code settings under `as-notes.licenceKey`. When a valid key is active the status bar shows **AS Notes (Pro)**.
+
+### Encrypted notes
+
+Pro users can store sensitive notes in encrypted files. Any file with the `.enc.md` extension is treated as an encrypted note — it is excluded from the search index and never read as plain text by the extension.
+
+**Getting started with encryption:**
+
+1. Run **AS Notes: Set Encryption Key** from the Command Palette. Your passphrase is stored securely in the OS keychain (VS Code SecretStorage) — it is never written to disk or settings files.
+2. Create an encrypted note with **AS Notes: Create Encrypted Note** (or **AS Notes: Create Encrypted Journal Note** for a dated journal entry).
+3. Write your note in the editor. When you want to lock it, run **AS Notes: Encrypt All Notes** — all plaintext `.enc.md` files will be encrypted in place.
+4. To read a note, run **AS Notes: Decrypt All Notes** — files are decrypted in place using your stored passphrase.
+
+**Encryption details:**
+- Algorithm: AES-256-GCM with a per-encryption random 12-byte nonce
+- Key derivation: PBKDF2-SHA256 (100,000 iterations) from your passphrase
+- File format: a single-line `ASNOTES_ENC_V1:<base64url payload>` marker — easily detectable by tooling
+- A git pre-commit hook is automatically installed at `.git/hooks/pre-commit` to prevent accidentally committing an unencrypted `.enc.md` file. The hook is self-updating — if AS Notes detects a stale version it replaces it automatically on the next `Rebuild Index` or periodic scan. If a commit is unexpectedly blocked, run **AS Notes: Encrypt All Notes** first.
+
+**Commands:**
+- `AS Notes: Set Encryption Key` — save passphrase to OS keychain
+- `AS Notes: Clear Encryption Key` — remove the stored passphrase
+- `AS Notes: Encrypt All Notes` — encrypt all plaintext `.enc.md` files
+- `AS Notes: Decrypt All Notes` — decrypt all encrypted `.enc.md` files
+- `AS Notes: Create Encrypted Note` — create a new named `.enc.md` file
+- `AS Notes: Create Encrypted Journal Note` — create today's journal entry as `.enc.md`
+- `AS Notes: Encrypt Current Note` — encrypt the active `.enc.md` file (reads unsaved editor content)
+- `AS Notes: Decrypt Current Note` — decrypt the active `.enc.md` file (reads from disk)
+
+**Planned Pro features:**
+
+- HTML/wiki export
+- UI password lock
+
+To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/contact).
+
 ## VS Code Marketplace
 
 https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes
@@ -263,6 +301,7 @@ Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journa
 |---|---|---|
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 | `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
+| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key. Scope: machine (not synced). |
 
 ## Supported file types
 
@@ -341,6 +380,8 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 | `src/TaskPanelProvider.ts` | Explorer tree view — task list grouped by page, todo-only filter, click-to-navigate |
 | `src/BacklinkPanelProvider.ts` | Webview panel — backlinks display with context, grouped by source page, click-to-navigate |
 | `src/JournalService.ts` | Pure journal logic — date formatting, template processing, path construction |
+| `src/LicenceService.ts` | Pure licence key validation logic — no VS Code imports |
+| `src/LicenceActivationService.ts` | Licence activation stub — SecretStorage token management, server call placeholder |
 | `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
 | `src/test/` | Unit tests (vitest) |
 

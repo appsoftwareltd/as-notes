@@ -81,6 +81,18 @@ This document explains the internal architecture, algorithms, and design decisio
   - [JournalService](#journalservice)
   - [Command flow](#command-flow)
   - [Template system](#template-system)
+- [Pro licence](#pro-licence)
+  - [LicenceService](#licenceservice)
+  - [LicenceActivationService](#licenceactivationservice)
+  - [Pro gate pattern](#pro-gate-pattern)
+  - [Settings](#settings-1)
+- [Encryption (Pro)](#encryption-pro)
+  - [File format](#file-format)
+  - [Key derivation](#key-derivation)
+  - [EncryptionService](#encryptionservice)
+  - [GitHookService](#githookservice)
+  - [Index exclusion](#index-exclusion)
+  - [Encryption commands](#encryption-commands)
 - [Filename sanitisation](#filename-sanitisation)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
@@ -1060,6 +1072,173 @@ The template file is indexed like any other markdown file. If the user deletes i
 
 ---
 
+## Pro licence
+
+The Pro Licence system gates premium features behind a validated licence key. The design is split into two components and a small amount of wiring in `extension.ts`.
+
+### LicenceService
+
+`src/LicenceService.ts` — pure logic, no VS Code imports, fully unit-testable.
+
+```
+export type LicenceStatus = 'valid' | 'invalid' | 'not-entered';
+
+validateLicenceKey(key: string): LicenceStatus
+isValidStatus(status: LicenceStatus): boolean
+```
+
+**Current validation rule (temporary):** a key is `valid` if it is exactly 24 ASCII characters containing exactly 12 lowercase and 12 uppercase letters. No digits, spaces, or symbols. This placeholder rule will be replaced with real cryptographic verification when the activation server is available — all call sites remain unchanged.
+
+### LicenceActivationService
+
+`src/LicenceActivationService.ts` — VS Code-dependent, owns `SecretStorage` interaction.
+
+**Agreed architecture (Option A):**
+
+1. User enters licence key in settings.
+2. Extension calls the activation server **once** → server records the activation and returns a signed token (Ed25519/HMAC).
+3. Signed token is stored in VS Code's `SecretStorage` (OS keychain, encrypted at rest, not synced).
+4. On every subsequent startup the token signature is verified locally against the baked-in public key — **no further network calls**.
+
+**Current state (stub — server not yet built):**
+
+```
+activateWithServer(key: string, context: vscode.ExtensionContext): Promise<LicenceStatus>
+```
+
+The stub:
+- Validates the key format locally (no network call)
+- On success, writes a stub token (`stub:<base64(key)>`) to `context.secrets` under the key `as-notes.activationToken`
+- On subsequent startups, checks the stored token before re-validating locally
+
+Three internal helpers are clearly marked for replacement:
+- `_callServer(key)` — replace with the real HTTP call
+- `_buildToken(key)` — replace with storage of the server-returned signed token
+- `_verifyToken(token, key)` — replace with Ed25519/HMAC signature verification against the baked-in public key
+
+### Pro gate pattern
+
+A single exported function in `extension.ts` is the only place pro status is checked:
+
+```typescript
+export function isProLicenced(): boolean
+```
+
+All pro-gated features call `isProLicenced()` directly. When real server verification arrives, only `LicenceActivationService` and `LicenceService` change — call sites are unaffected.
+
+### Settings
+
+`as-notes.licenceKey` — scope `machine` (not synced across devices, appropriate for paid licences). Read on activation and re-validated on every `onDidChangeConfiguration` event. An invalid (wrong format) key triggers an immediate `showWarningMessage`.
+
+**Status bar:** Full mode with valid licence shows `AS Notes (Pro) — N pages`; without licence shows `AS Notes — N pages`.
+
+---
+
+## Encryption (Pro)
+
+Encryption is a Pro-gated feature allowing users to store sensitive notes in `.enc.md` files. These files use AES-256-GCM symmetric encryption with a passphrase-derived key stored in VS Code's `SecretStorage` (OS keychain).
+
+### File format
+
+An encrypted `.enc.md` file contains exactly **one line**:
+
+```
+ASNOTES_ENC_V1:<base64url(12-byte-nonce + ciphertext + 16-byte-authTag)>
+```
+
+- **Marker prefix** `ASNOTES_ENC_V1:` makes encrypted status detectable without the key (used by the git hook).
+- **Nonce** (12 bytes, random) is unique per encryption call — the same plaintext encrypted twice produces different ciphertext.
+- **Auth tag** (16 bytes) provides GCM authenticated encryption; any tampering causes decryption to fail.
+- **No filename extension change on encryption** — the file is always `.enc.md`, whether plaintext or ciphertext. The marker prefix is the canonical encrypted indicator.
+
+### Key derivation
+
+Passphrase → PBKDF2-SHA256 (100,000 iterations, fixed salt `asnotes-enc-v1`) → 32-byte AES-256 key.
+
+The **fixed salt** is intentional: it produces a deterministic key from the same passphrase on any machine, so the user does not need to store the derived key — only the passphrase (in SecretStorage).
+
+For bulk encrypt/decrypt operations, `deriveKey()` is called once per command invocation and the resulting `Buffer` is passed to each `encrypt()` / `decrypt()` call via the optional `precomputedKey` parameter, avoiding 100,000 PBKDF2 iterations per file.
+
+SecretStorage key: `as-notes.encryptionKey`.
+
+### EncryptionService
+
+`src/EncryptionService.ts` — pure module, no VS Code imports, fully unit-testable.
+
+```typescript
+export const ENCRYPTION_MARKER = 'ASNOTES_ENC_V1:';
+
+isEligibleFile(filePath: string): boolean           // true if path ends with .enc.md
+isEncrypted(content: string): boolean              // true if content starts with marker
+deriveKey(passphrase: string): Buffer              // PBKDF2-SHA256 → 32-byte key
+encrypt(plaintext, passphrase, precomputedKey?): string
+decrypt(encryptedContent, passphrase, precomputedKey?): string
+```
+
+`encrypt()` throws nothing — returns a single-line encrypted string.  
+`decrypt()` throws descriptive errors on: wrong passphrase (GCM auth failure), tampered ciphertext, malformed base64, non-encrypted input, or payload too short (< 28 bytes).
+
+### GitHookService
+
+`src/GitHookService.ts` — pure module using Node `fs`, no VS Code imports.
+
+Installs a POSIX shell script block in `.git/hooks/pre-commit` that prevents committing an unencrypted `.enc.md` file (i.e. one that does NOT start with `ASNOTES_ENC_V1:`).
+
+```typescript
+export const HOOK_PATH_RELATIVE = path.join('.git', 'hooks', 'pre-commit');
+export const HOOK_START_MARKER = '# asnotes-enc-check-start';
+export const HOOK_END_MARKER   = '# asnotes-enc-check-end';
+export type HookResult = 'no-git' | 'created' | 'appended' | 'exists' | 'updated';
+
+buildHookBlock(): string                          // returns the shell script block
+ensurePreCommitHook(workspaceRoot: string): HookResult
+```
+
+`ensurePreCommitHook()` is **idempotent** and **self-healing**:
+- `no-git` — `.git/hooks/` directory does not exist (not a git repo)
+- `created` — no pre-commit hook existed; created with `#!/bin/sh` + block
+- `appended` — hook existed but lacked the marker; block appended
+- `exists` — marker already present and block is current; no changes
+- `updated` — marker present but block was stale (old version); block replaced in-place, surrounding content preserved
+
+`buildHookBlock()` uses `while IFS= read -r f; do ... done <<ASNOTES_EOF` (heredoc fed from `$enc_files`) instead of `for f in $enc_files` to correctly handle filenames containing spaces.
+
+The hook file is made executable via `fs.chmodSync(hookPath, 0o755)` (wrapped in try/catch — no-op on Windows without Git Bash, but the hook still runs in Git Bash environments).
+
+`ensurePreCommitHook()` is called in three places in `extension.ts`:
+1. `initWorkspace()` — after creating `.asnotes/`
+2. `rebuildIndex()` — at the start of the rebuild
+3. `startPeriodicScan()` setInterval callback — each periodic scan tick
+
+### Index exclusion
+
+`.enc.md` files end in `.md`, so they match the `**/*.{md,markdown}` glob used by `IndexScanner`. They are explicitly excluded at three points:
+
+1. **`IndexScanner.indexFile(uri)`** — early return if `uri.fsPath.toLowerCase().endsWith('.enc.md')`
+2. **`IndexScanner.fullScan()`** — post-filter on `findFiles()` result
+3. **`IndexScanner.staleScan()`** — post-filter on `findFiles()` result
+
+In `extension.ts`, all index update triggers (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, etc.) use `isMarkdown(doc)` / `isMarkdownUri(uri)`, both of which have been updated to return `false` for `.enc.md` URIs.
+
+A private `isEncryptedFileUri(uri)` helper centralises the `.enc.md` check within `extension.ts`.
+
+### Encryption commands
+
+All eight commands are registered in `enterFullMode()` and pro-gated via `isProLicenced()`.
+
+| Command | Action |
+|---|---|
+| `as-notes.setEncryptionKey` | `showInputBox(password:true)` → `context.secrets.store('as-notes.encryptionKey', ...)` |
+| `as-notes.clearEncryptionKey` | `context.secrets.delete('as-notes.encryptionKey')` |
+| `as-notes.encryptNotes` | `findFiles('**/*.enc.md')` → derive key once → for each file, find open doc via `textDocuments.find(d => d.uri.fsPath === fileUri.fsPath)`, read from editor buffer if open else disk → encrypt → if open doc: `WorkspaceEdit` replace + `save()`, else `workspace.fs.writeFile` |
+| `as-notes.decryptNotes` | `findFiles('**/*.enc.md')` → derive key once → always read encrypted content from disk → decrypt → if open doc (matched via `fsPath`): `WorkspaceEdit` replace + `save()`, else `workspace.fs.writeFile` |
+| `as-notes.createEncryptedFile` | `showInputBox` for title → `sanitiseFileName(title).enc.md` → open/create in workspace root |
+| `as-notes.createEncryptedJournalNote` | `computeJournalPaths()` → replace `.md` suffix with `.enc.md` → open/create in journal folder |
+| `as-notes.encryptCurrentNote` | Active editor buffer → encrypt → `WorkspaceEdit` replace full range + save. Error if not `.enc.md` or no active editor. |
+| `as-notes.decryptCurrentNote` | Read from disk via `workspace.fs.readFile` → decrypt → `WorkspaceEdit` replace full range + save. Error if not `.enc.md` or no active editor. |
+
+---
+
 ## Filename sanitisation
 
 The regex `/ ? < > \ : * | "` is applied to `pageName` to produce `pageFileName`. The replacement character is `_`.
@@ -1086,7 +1265,7 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
    - Runs a stale scan to catch external changes
    - Creates shared `WikilinkService`, `WikilinkFileService`, `IndexService`, `IndexScanner`
    - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`, `BacklinkPanelProvider`
-   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask`, `as-notes.showBacklinks` commands
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
 5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared
@@ -1176,6 +1355,30 @@ Tests that depend on VS Code APIs (decorations, document links, hover, rename tr
 3. **Folder normalisation** (7 tests) — clean input, leading slashes, trailing slashes, both, backslashes, blank, whitespace-only, nested paths.
 
 4. **Path construction** (4 tests) — default folder, custom folder, empty folder (workspace root), folder with extra slashes.
+
+### `EncryptionService.test.ts` (27 tests)
+
+1. **`isEligibleFile`** (8 tests) — `.enc.md` extensions (case variants), plain `.md`, other extensions, directory paths, compound extensions.
+
+2. **`isEncrypted`** (5 tests) — starts with marker, no marker, partial marker, empty string, whitespace prefix.
+
+3. **`deriveKey`** (4 tests) — returns 32-byte Buffer, deterministic (same passphrase → same key), different passphrases produce different keys, empty passphrase produces a valid key.
+
+4. **`encrypt` / `decrypt`** (10 tests) — roundtrip recovery, empty string roundtrip, unicode/multi-line content, single-line output, marker prefix, random nonce (two encryptions differ), wrong passphrase throws, non-encrypted input throws, tampered ciphertext throws, malformed base64 payload throws.
+
+### `GitHookService.test.ts` (20 tests)
+
+All tests use real `fs` in an `os.tmpdir()` temp directory, cleaned up in `afterEach`.
+
+1. **`buildHookBlock`** (6 tests) — starts with HOOK_START_MARKER, ends with HOOK_END_MARKER, contains `\.enc\.md` pattern, contains `ASNOTES_ENC_V1:`, contains `exit 1`, idempotent.
+
+2. **No git directory** (2 tests) — returns `'no-git'`, creates no files.
+
+3. **No existing hook** (6 tests) — returns `'created'`, file exists, starts with `#!/bin/sh`, contains start marker, contains end marker, contains encryption marker.
+
+4. **Existing hook without marker** (4 tests) — returns `'appended'`, preserves original content, contains start marker, end marker appears after original content.
+
+5. **Existing hook with marker** (3 tests) — returns `'exists'`, file unchanged, idempotent on repeated calls.
 
 ---
 

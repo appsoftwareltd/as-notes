@@ -16,8 +16,12 @@ export class IndexScanner {
     /**
      * Index a single file by URI. Reads content, resolves mtime, and delegates
      * to IndexService.indexFileContent().
+     *
+     * `.enc.md` files are silently skipped — they are never indexed.
      */
     async indexFile(uri: vscode.Uri): Promise<void> {
+        // Encrypted files are never indexed — their content is ciphertext.
+        if (uri.fsPath.toLowerCase().endsWith('.enc.md')) { return; }
         const relativePath = vscode.workspace.asRelativePath(uri, false);
         const filename = path.basename(uri.fsPath);
 
@@ -41,7 +45,9 @@ export class IndexScanner {
         token?: vscode.CancellationToken,
     ): Promise<{ filesIndexed: number; linksFound: number }> {
         const pattern = '**/*.{md,markdown}';
-        const files = await vscode.workspace.findFiles(pattern);
+        const allFiles = await vscode.workspace.findFiles(pattern);
+        // Never index encrypted files — their content is ciphertext, not markdown.
+        const files = allFiles.filter(u => !u.fsPath.toLowerCase().endsWith('.enc.md'));
 
         // Get all paths currently in the DB
         const existingPages = this.indexService.getAllPages();
@@ -99,7 +105,9 @@ export class IndexScanner {
         token?: vscode.CancellationToken,
     ): Promise<ScanSummary> {
         const pattern = '**/*.{md,markdown}';
-        const files = await vscode.workspace.findFiles(pattern);
+        const allFiles = await vscode.workspace.findFiles(pattern);
+        // Never index encrypted files — their content is ciphertext, not markdown.
+        const files = allFiles.filter(u => !u.fsPath.toLowerCase().endsWith('.enc.md'));
 
         const existingPages = this.indexService.getAllPages();
         const existingByPath = new Map(existingPages.map(p => [p.path, p]));

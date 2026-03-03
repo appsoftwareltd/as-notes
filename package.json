@@ -83,6 +83,38 @@
             {
                 "command": "as-notes.openDailyJournal",
                 "title": "AS Notes: Open Daily Journal"
+            },
+            {
+                "command": "as-notes.setEncryptionKey",
+                "title": "AS Notes: Set Encryption Key"
+            },
+            {
+                "command": "as-notes.clearEncryptionKey",
+                "title": "AS Notes: Clear Encryption Key"
+            },
+            {
+                "command": "as-notes.encryptNotes",
+                "title": "AS Notes: Encrypt All Notes"
+            },
+            {
+                "command": "as-notes.decryptNotes",
+                "title": "AS Notes: Decrypt All Notes"
+            },
+            {
+                "command": "as-notes.createEncryptedFile",
+                "title": "AS Notes: Create Encrypted Note"
+            },
+            {
+                "command": "as-notes.createEncryptedJournalNote",
+                "title": "AS Notes: Create Encrypted Journal Note"
+            },
+            {
+                "command": "as-notes.encryptCurrentNote",
+                "title": "AS Notes: Encrypt Current Note"
+            },
+            {
+                "command": "as-notes.decryptCurrentNote",
+                "title": "AS Notes: Decrypt Current Note"
             }
         ],
         "keybindings": [
@@ -124,6 +156,12 @@
                     "type": "string",
                     "default": "journals",
                     "description": "Folder for daily journal files, relative to workspace root."
+                },
+                "as-notes.licenceKey": {
+                    "type": "string",
+                    "default": "",
+                    "scope": "machine",
+                    "description": "AS Notes Pro licence key. Enter your 24-character licence key to activate Pro features."
                 }
             }
         },
