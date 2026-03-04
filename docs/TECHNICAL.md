@@ -450,6 +450,18 @@ Since the cache is pre-built (no SQLite in the hot path), the cost of re-queryin
 
 **Note:** `CompletionList` with `isIncomplete: true` combined with a **capped/filtered** subset was previously tested but VS Code dropped the widget entirely. The current approach returns the **full** item list with `isIncomplete: true`, which works correctly.
 
+### Completion re-trigger after session death
+
+`isIncomplete: true` keeps the completion session alive while the widget is visible, but VS Code still kills the session when zero items match the typed text (or on word-boundary heuristics such as trailing spaces). Once the session is dead, backspace does not restart it — no trigger character is being typed.
+
+To handle this, a separate `onDidChangeTextDocument` listener in `extension.ts` detects **deletions** (backspace / delete key) where the cursor remains inside an unclosed `[[`. When detected, it fires `editor.action.triggerSuggest` via `setTimeout(0)` to restart the completion session. This is safe because:
+
+- **Active session:** `triggerSuggest` is a no-op when the widget is already showing.
+- **Dead session:** A new session starts, `provideCompletionItems()` is called, and items matching the current wikilink text are displayed.
+- **Cursor outside `[[`:** `findInnermostOpenBracket()` returns -1, so no trigger fires.
+
+The listener only fires on deletions (where `rangeLength > 0` and `text` is empty), not on forward typing — forward typing either keeps the existing session alive or opens a new one via the `[` trigger character.
+
 ### Completion and rename tracking interaction
 
 When the user types inside a wikilink, two things happen on every keystroke:

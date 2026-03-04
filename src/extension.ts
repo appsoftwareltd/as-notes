@@ -27,6 +27,7 @@ import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
 import { debugLog, debugTime } from './DebugLogger.js';
+import { findInnermostOpenBracket } from './CompletionUtils.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -689,6 +690,37 @@ async function enterFullMode(
                 backlinkPanelProvider?.refresh();
                 end();
             }, 500);
+        }),
+    );
+
+    // Re-trigger completion when the user backspaces inside a [[ ... ]] and
+    // VS Code has already killed the completion session (zero matches or
+    // word-boundary heuristic).  `triggerSuggest` is a no-op when the widget
+    // is already visible, so this is safe to fire on every text change.
+    fullModeDisposables.push(
+        vscode.workspace.onDidChangeTextDocument((e) => {
+            if (!isMarkdown(e.document)) { return; }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || editor.document !== e.document) { return; }
+
+            // Only act on deletions (backspace / delete key)
+            const hasDeletion = e.contentChanges.some(
+                c => c.rangeLength > 0 && c.text.length === 0,
+            );
+            if (!hasDeletion) { return; }
+
+            const pos = editor.selection.active;
+            const lineText = e.document.lineAt(pos.line).text;
+            const textUpToCursor = lineText.substring(0, pos.character);
+            const bracketCol = findInnermostOpenBracket(textUpToCursor);
+
+            if (bracketCol !== -1) {
+                debugLog('completion', 're-triggering suggest after backspace inside [[');
+                // Defer so VS Code finishes processing the deletion first.
+                setTimeout(() => {
+                    vscode.commands.executeCommand('editor.action.triggerSuggest');
+                }, 0);
+            }
         }),
     );
 
