@@ -63,6 +63,11 @@ AS Notes configures the built-in `markdown.copyFiles.destination` workspace sett
 
 The setting is applied automatically when AS Notes initialises or the value changes. The destination folder is created by VS Code on first use.
 
+**Tips:**
+
+- **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing — useful for placing the link precisely within your text.
+- **Filenames with spaces:** If a pasted or dropped file has spaces in its name (e.g. `my image.png`), VS Code wraps the path in angle brackets per the [CommonMark spec](https://spec.commonmark.org/0.31.2/#link-destination): `![alt text](<assets/images/my image.png>)`. This is valid markdown and renders correctly. Renaming the file to use hyphens or underscores avoids the brackets.
+
 > **Note:** File drop & paste requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
 ### Compatibility With Other Markdown PKMS
