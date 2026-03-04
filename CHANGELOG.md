@@ -2,6 +2,12 @@
 
 All notable changes to AS Notes will be documented here.
 
+## [1.0.9] — 2026-03-04
+
+### Added
+
+- Added image drag drop / copy paste path handling and hover preview for images
+
 ## [1.0.8] — 2026-03-03
 
 ### Added
