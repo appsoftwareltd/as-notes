@@ -26,6 +26,7 @@ import { activateWithServer } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
+import { debugLog, debugTime } from './DebugLogger.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -252,6 +253,7 @@ async function enterFullMode(
 
     // Completion provider — wikilink autocomplete triggered by [[
     completionProvider = new WikilinkCompletionProvider(indexService);
+    completionProvider.refresh(); // Warm the cache so first [[ is instant
     fullModeDisposables.push(
         vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
     );
@@ -662,6 +664,10 @@ async function enterFullMode(
     // On text change: debounced re-index of the live buffer so that newly
     // typed wikilinks (forward references) appear in autocomplete immediately
     // without requiring a save or editor switch.
+    //
+    // Note: completionProvider.refresh() is NOT called here — the 3 SQLite
+    // queries it runs are expensive and this fires on every typing pause.
+    // Forward references appear in autocomplete after the next save.
     fullModeDisposables.push(
         vscode.workspace.onDidChangeTextDocument((e) => {
             if (!isMarkdown(e.document)) { return; }
@@ -675,12 +681,13 @@ async function enterFullMode(
                 // The rename tracker needs the stale index state to detect the change;
                 // refreshIndexAfterRename will re-index the file once the rename completes.
                 if (renameTracker.hasPendingEdit(doc.uri.toString())) { return; }
+                const end = debugTime('debounce', 'indexFileContent + refresh');
                 const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
                 const filename = path.basename(doc.uri.fsPath);
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
-                completionProvider?.refresh();
                 taskPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
+                end();
             }, 500);
         }),
     );
@@ -772,33 +779,45 @@ async function enterFullMode(
     // On active editor change: re-index the file being left from the editor
     // buffer (not disk) so unsaved edits (e.g. new aliases in front matter)
     // are captured immediately.
+    //
+    // The re-indexing is deferred with setTimeout(0) so the new editor's
+    // decorations render first — the synchronous SQLite work would otherwise
+    // block the event loop and delay decoration painting.
+    //
+    // completionProvider.refresh() is NOT called here — completion data is
+    // global (all pages / aliases / forward refs) and switching tabs doesn't
+    // change it.  Forward refs from unsaved edits appear after the next save.
     let previousEditorUri: vscode.Uri | undefined;
     fullModeDisposables.push(
-        vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-            if (previousEditorUri && isMarkdownUri(previousEditorUri)) {
-                try {
-                    const doc = vscode.workspace.textDocuments.find(
-                        d => d.uri.toString() === previousEditorUri!.toString(),
-                    );
-                    if (doc) {
-                        const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
-                        const filename = path.basename(doc.uri.fsPath);
-                        const content = doc.getText();
-                        const stat = await vscode.workspace.fs.stat(doc.uri);
-                        indexService!.indexFileContent(relativePath, filename, content, stat.mtime);
-                    } else {
-                        // Document already closed — fall back to disk read
-                        await indexScanner!.indexFile(previousEditorUri);
-                    }
-                    if (!safeSaveToFile()) { return; }
-                    completionProvider?.refresh();
-                    taskPanelProvider?.refresh();
-                    backlinkPanelProvider?.refresh();
-                } catch {
-                    // File may have been closed/deleted
-                }
-            }
+        vscode.window.onDidChangeActiveTextEditor((editor) => {
+            const uriToReindex = previousEditorUri;
             previousEditorUri = editor?.document.uri;
+
+            if (uriToReindex && isMarkdownUri(uriToReindex)) {
+                // Defer off the UI thread so the new editor paints first.
+                setTimeout(async () => {
+                    try {
+                        const doc = vscode.workspace.textDocuments.find(
+                            d => d.uri.toString() === uriToReindex.toString(),
+                        );
+                        if (doc) {
+                            const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+                            const filename = path.basename(doc.uri.fsPath);
+                            const content = doc.getText();
+                            const stat = await vscode.workspace.fs.stat(doc.uri);
+                            indexService!.indexFileContent(relativePath, filename, content, stat.mtime);
+                        } else {
+                            // Document already closed — fall back to disk read
+                            await indexScanner!.indexFile(uriToReindex);
+                        }
+                        if (!safeSaveToFile()) { return; }
+                        taskPanelProvider?.refresh();
+                        backlinkPanelProvider?.refresh();
+                    } catch {
+                        // File may have been closed/deleted
+                    }
+                }, 0);
+            }
         }),
     );
 

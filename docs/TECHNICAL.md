@@ -268,7 +268,9 @@ All handlers except `onDidChangeTextDocument` persist the DB after updating.
 
 Both handlers detect non-markdown URIs in the event and respond by running `indexScanner.staleScan()`. The stale scan compares every file on disk against the DB: files no longer on disk are removed (old paths after a folder delete or move), and files not yet indexed are added (files at their new location after a folder move). The individual per-file handling for bare `.md` file events is still applied as a fast path before the stale scan guard.
 
-**Buffer read on editor switch:** The `onDidChangeActiveTextEditor` handler reads from the VS Code `TextDocument` buffer (`doc.getText()`) rather than from disk. This ensures that unsaved edits — such as newly added aliases in front matter — are captured in the index immediately when the user navigates away. If the document has already been closed (no longer in `workspace.textDocuments`), it falls back to reading from disk via `IndexScanner.indexFile()`.
+**Buffer read on editor switch:** The `onDidChangeActiveTextEditor` handler reads from the VS Code `TextDocument` buffer (`doc.getText()`) rather than from disk. This ensures that unsaved edits — such as newly added aliases in front matter — are captured in the index immediately when the user navigates away. If the document has already been closed (no longer in `workspace.textDocuments`), it falls back to reading from disk via `IndexScanner.indexFile()`. `completionProvider.refresh()` is **not** called here — completion data is global and unchanged by switching tabs; forward references from unsaved edits appear after the next save.
+
+**Deferred re-indexing:** The editor-switch re-indexing work (`indexFileContent`, `safeSaveToFile`, task/backlink panel refresh) is wrapped in `setTimeout(0)`. This defers the synchronous SQLite work off the immediate event callback, allowing the new editor’s decoration manager to paint wikilinks blue before the background index sync blocks the event loop. The rename tracker’s `onDidChangeActiveTextEditor` fires synchronously (registered earlier), so it always reads the stale index state before the deferred re-index runs — preserving the critical ordering guarantee.
 
 **Debounced live-buffer re-index:** The `onDidChangeTextDocument` handler re-indexes the current document from its editor buffer 500 ms after the last keystroke. This ensures that a wikilink like `[[New Topic]]` typed on line 1 is immediately available for autocomplete when the user starts typing `[[New` on line 2 — without needing to save or navigate away first. Because this is a transient in-memory update (no `.asnotes/index.db` write), it is fast and does not call `safeSaveToFile()`. The debounce prevents re-indexing on every single keystroke. The debounce timer is cancelled in `disposeFullMode()` to prevent a stale callback firing after full mode has been torn down.
 
@@ -414,7 +416,8 @@ Items are built from two sources in the index:
 | Source | Kind | Label | Detail | Sort prefix |
 |---|---|---|---|---|
 | Page | File | Filename stem (no `.md`) | Subfolder path (if ambiguous) | `0-` |
-| Alias | Reference | Alias name | `→ CanonicalPage` | `1-` |
+| Forward ref | File | Page name | `not yet created` | `1-` |
+| Alias | Reference | Alias name | `→ CanonicalPage` | `2-` |
 
 The `sortText` prefix ensures pages always appear before aliases in the list. Both page and alias items set `insertText` to `Name]]` — selecting an item auto-closes the wikilink.
 
@@ -430,13 +433,22 @@ All three pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBra
 
 ### Caching strategy
 
-The provider maintains a cached array of `CompletionItem[]` objects. The cache is rebuilt from the index only when marked dirty.
+The provider maintains a cached array of `CompletionItem[]` objects. The cache is rebuilt **eagerly** whenever `refresh()` is called — there is no dirty flag or lazy rebuild.
 
-- **Dirty flag:** set via `refresh()` after any index update (file save, create, delete, rename, periodic scan, rebuild).
-- **Rebuild:** queries `IndexService.getAllPages()` and `IndexService.getAllAliases()`, builds items once.
-- **Filtering:** VS Code handles client-side filtering of the cached list as the user types — no per-keystroke DB queries.
+- **Eager rebuild:** `refresh()` calls `rebuildCache()` immediately, running three SQLite queries (`getAllPages`, `getAllAliases`, `getForwardReferencedPages`) and building lightweight plain data objects (not `CompletionItem` instances). This happens at index-update time (file save, create, delete, rename, periodic scan, rebuild), not at `[[` keystroke time.
+- **Not called on text-change debounce:** The 500 ms `onDidChangeTextDocument` debounce handler does **not** call `completionProvider.refresh()`. This eliminates three SQLite queries on every typing pause. Forward references appear in autocomplete after the next file save.
+- **Warm on activation:** `enterFullMode()` calls `completionProvider.refresh()` immediately after construction (post stale-scan), so the cache is warm before the user types the first `[[`.
+- **Not called on editor switch:** The `onDidChangeActiveTextEditor` handler does **not** call `completionProvider.refresh()`. Completion data is global (all pages, aliases, forward refs) and is unaffected by which tab is focused. This avoids 3 SQLite queries on every tab switch.
+- **Hot path:** `provideCompletionItems()` never touches the database. It builds `CompletionItem` instances from lightweight cached data objects with the per-call replacement range and returns them inside a `CompletionList`.
+- **Filtering:** VS Code handles client-side filtering of the full list as the user types — no per-keystroke DB queries.
 
-This approach ensures the completion list is always up to date without redundant database access.
+### CompletionList and backspace handling
+
+`provideCompletionItems()` returns a `vscode.CompletionList` with `isIncomplete: true`. This tells VS Code to re-query the provider on every keystroke — including backspace. Without `isIncomplete`, VS Code may dismiss the completion widget on backspace because it treats the session as over.
+
+Since the cache is pre-built (no SQLite in the hot path), the cost of re-querying on every keystroke is negligible: it's just a clone of the cached items with an updated replacement range.
+
+**Note:** `CompletionList` with `isIncomplete: true` combined with a **capped/filtered** subset was previously tested but VS Code dropped the widget entirely. The current approach returns the **full** item list with `isIncomplete: true`, which works correctly.
 
 ### Completion and rename tracking interaction
 
@@ -590,7 +602,22 @@ By using segments, each character position has exactly one range in either the d
 2. When building segments for that line, compare `segment.wikilink === activeWikilink` (reference equality).
 3. Matching segments go to `activeRanges`; all others go to `defaultRanges`.
 
-The decoration update runs on every cursor movement, editor switch, and document change. This is acceptably fast because segment computation is O(line_length × wikilink_count) and only processes the visible document.
+### Decoration caching and debouncing
+
+Parsing every line on every event (keystroke, cursor move) is expensive for large documents. The decoration manager uses a two-tier strategy:
+
+- **Document-version cache:** Parsed wikilinks and computed segments are cached per `(document.uri, document.version)`. A full re-parse only occurs when the document version changes (text edit) or a different document is focused.
+- **Debounced text changes:** `onDidChangeTextDocument` is debounced at 50 ms. Rapidly fired edit events are batched into a single re-parse.
+- **Instant selection updates:** `onDidChangeTextEditorSelection` skips re-parsing when the cache is fresh — it only re-classifies existing segments as active/default based on the new cursor position.
+
+This ensures:
+- Opening a document parses once and applies decorations immediately.
+- Typing triggers at most one re-parse per 50 ms burst.
+- Moving the cursor (arrow keys, click) never re-parses — only re-classifies.
+
+### Debug logging
+
+When the `AS_NOTES_DEBUG=1` environment variable is set (configured in `.vscode/launch.json` for the Extension Development Host), the decoration manager logs `rebuildCache` timing, line count, and wikilink count to the debug console via `DebugLogger.ts`. All logging is no-op overhead when the variable is unset.
 
 ---
 

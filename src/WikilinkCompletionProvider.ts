@@ -2,6 +2,20 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { IndexService } from './IndexService.js';
 import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter } from './CompletionUtils.js';
+import { debugLog, debugTime } from './DebugLogger.js';
+
+/**
+ * Lightweight cached completion data — no VS Code object overhead.
+ * CompletionItem instances are only created in the hot path.
+ */
+interface CachedCompletionEntry {
+    label: string;
+    kind: vscode.CompletionItemKind;
+    detail: string | undefined;
+    sortText: string;
+    filterText: string;
+    insertText: string;
+}
 
 /**
  * Provides autocomplete suggestions for wikilinks.
@@ -16,16 +30,16 @@ import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMa
  * Completions are suppressed inside front matter blocks (between `---` fences).
  */
 export class WikilinkCompletionProvider implements vscode.CompletionItemProvider {
-    private cachedItems: vscode.CompletionItem[] = [];
-    private dirty = true;
+    private cachedEntries: CachedCompletionEntry[] = [];
 
     constructor(private readonly indexService: IndexService) { }
 
     /**
-     * Mark the cache as stale. Call this after index updates (save, scan, rename).
+     * Rebuild the completion cache from the index. Call this after index updates
+     * (save, scan, rename) so the cache is always warm when the user types `[[`.
      */
     refresh(): void {
-        this.dirty = true;
+        this.rebuildCache();
     }
 
     provideCompletionItems(
@@ -33,13 +47,16 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
         position: vscode.Position,
         _token: vscode.CancellationToken,
         _context: vscode.CompletionContext,
-    ): vscode.CompletionItem[] | undefined {
+    ): vscode.CompletionList | undefined {
+        const end = debugTime('completion', 'provideCompletionItems');
+
         // Suppress inside front matter
         const lines: string[] = [];
         for (let i = 0; i < document.lineCount; i++) {
             lines.push(document.lineAt(i).text);
         }
         if (isLineInsideFrontMatter(lines, position.line)) {
+            end();
             return undefined;
         }
 
@@ -49,15 +66,9 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
         const bracketCol = findInnermostOpenBracket(textUpToCursor);
 
         if (bracketCol === -1) {
+            end();
             return undefined;
         }
-
-        // Rebuild cache if stale
-        if (this.dirty) {
-            this.rebuildCache();
-            this.dirty = false;
-        }
-
 
         // Set the replacement range: from after the [[ to just past the matching ]]
         // (or to the cursor if no ]] exists yet).
@@ -69,25 +80,35 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             : position;
         const range = new vscode.Range(rangeStart, rangeEnd);
 
-        // Clone items with the computed range
-        return this.cachedItems.map(item => {
-            const clone = new vscode.CompletionItem(item.label, item.kind);
-            clone.detail = item.detail;
-            clone.sortText = item.sortText;
-            clone.filterText = item.filterText;
-            clone.insertText = item.insertText;
-            clone.range = range;
-            return clone;
+        // Build CompletionItem instances from lightweight cache
+        const items = this.cachedEntries.map(entry => {
+            const item = new vscode.CompletionItem(entry.label, entry.kind);
+            item.detail = entry.detail;
+            item.sortText = entry.sortText;
+            item.filterText = entry.filterText;
+            item.insertText = entry.insertText;
+            item.range = range;
+            return item;
         });
+
+        debugLog('completion', `returning ${items.length} items`);
+        end();
+
+        // Return as CompletionList with isIncomplete: true so VS Code re-queries
+        // on every keystroke (including backspace), keeping the widget alive.
+        return new vscode.CompletionList(items, true);
     }
 
     /**
-     * Rebuild the cached completion items from the index.
+     * Rebuild the cached completion entries from the index.
      */
     private rebuildCache(): void {
-        this.cachedItems = [];
+        const end = debugTime('completion', 'rebuildCache');
+
+        this.cachedEntries = [];
 
         if (!this.indexService.isOpen) {
+            end();
             return;
         }
 
@@ -101,7 +122,7 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             filenameCount.set(lower, (filenameCount.get(lower) ?? 0) + 1);
         }
 
-        // Page completion items
+        // Page completion entries
         for (const page of pages) {
             const stem = page.filename.endsWith('.md')
                 ? page.filename.slice(0, -3)
@@ -109,48 +130,49 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
                     ? page.filename.slice(0, -9)
                     : page.filename;
 
-            const item = new vscode.CompletionItem(stem, vscode.CompletionItemKind.File);
-
-            // Show path for disambiguation when multiple pages share the same filename
             const isDuplicate = (filenameCount.get(page.filename.toLowerCase()) ?? 0) > 1;
             const dir = path.dirname(page.path);
-            item.detail = isDuplicate && dir !== '.' ? dir : undefined;
 
-            // Sort pages before aliases (0-prefix)
-            item.sortText = `0-${stem.toLowerCase()}`;
-            item.filterText = stem;
-            item.insertText = `${stem}]]`;
-
-            this.cachedItems.push(item);
+            this.cachedEntries.push({
+                label: stem,
+                kind: vscode.CompletionItemKind.File,
+                detail: isDuplicate && dir !== '.' ? dir : undefined,
+                sortText: `0-${stem.toLowerCase()}`,
+                filterText: stem,
+                insertText: `${stem}]]`,
+            });
         }
 
-        // Forward-reference completion items (pages linked to but not yet created).
-        // Sort between real pages (0-) and aliases (2-).
+        // Forward-reference completion entries (pages linked to but not yet created).
         const forwardRefs = this.indexService.getForwardReferencedPages();
         for (const ref of forwardRefs) {
-            const item = new vscode.CompletionItem(ref.page_name, vscode.CompletionItemKind.File);
-            item.detail = 'not yet created';
-            item.sortText = `1-${ref.page_name.toLowerCase()}`;
-            item.filterText = ref.page_name;
-            item.insertText = `${ref.page_name}]]`;
-            this.cachedItems.push(item);
+            this.cachedEntries.push({
+                label: ref.page_name,
+                kind: vscode.CompletionItemKind.File,
+                detail: 'not yet created',
+                sortText: `1-${ref.page_name.toLowerCase()}`,
+                filterText: ref.page_name,
+                insertText: `${ref.page_name}]]`,
+            });
         }
 
-        // Alias completion items
+        // Alias completion entries
         for (const alias of aliases) {
             const canonicalStem = alias.canonical_filename.endsWith('.md')
                 ? alias.canonical_filename.slice(0, -3)
                 : alias.canonical_filename;
 
-            const item = new vscode.CompletionItem(alias.alias_name, vscode.CompletionItemKind.Reference);
-            item.detail = `→ ${canonicalStem}`;
-
-            // Sort aliases after forward refs (2-prefix)
-            item.sortText = `2-${alias.alias_name.toLowerCase()}`;
-            item.filterText = alias.alias_name;
-            item.insertText = `${alias.alias_name}]]`;
-
-            this.cachedItems.push(item);
+            this.cachedEntries.push({
+                label: alias.alias_name,
+                kind: vscode.CompletionItemKind.Reference,
+                detail: `→ ${canonicalStem}`,
+                sortText: `2-${alias.alias_name.toLowerCase()}`,
+                filterText: alias.alias_name,
+                insertText: `${alias.alias_name}]]`,
+            });
         }
+
+        debugLog('completion', `cache rebuilt: ${pages.length} pages, ${forwardRefs.length} fwd refs, ${aliases.length} aliases (${this.cachedEntries.length} total)`);
+        end();
     }
 }
