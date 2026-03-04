@@ -66,9 +66,16 @@ The setting is applied automatically when AS Notes initialises or the value chan
 **Tips:**
 
 - **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing — useful for placing the link precisely within your text.
-- **Filenames with spaces:** If a pasted or dropped file has spaces in its name (e.g. `my image.png`), VS Code wraps the path in angle brackets per the [CommonMark spec](https://spec.commonmark.org/0.31.2/#link-destination): `![alt text](<assets/images/my image.png>)`. This is valid markdown and renders correctly. Renaming the file to use hyphens or underscores avoids the brackets.
+- **Filenames with spaces:** If a pasted or dropped file has spaces in its name (e.g. `my image.png`), VS Code wraps the path in angle brackets per the [CommonMark spec](https://spec.commonmark.org/0.31.2/#link-destination): `![alt text](<assets/images/my image.png>)`.
 
 > **Note:** File drop & paste requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
+
+### Image Hover Preview
+
+Hover over any image link in a markdown file to see a preview of the image inline. This is provided by VS Code's built-in markdown extension and requires no configuration — it works with both standard `![alt](path)` links and dropped/pasted images.
+
+
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/image-preview.png" alt="AS Notes Image Preview" style="max-height:300px; margin-top: 10px; margin-bottom: 10px;">
 
 ### Compatibility With Other Markdown PKMS
 
@@ -104,11 +111,6 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 - `AS Notes: Create Encrypted Journal Note` — create today's journal entry as `.enc.md`
 - `AS Notes: Encrypt Current Note` — encrypt the active `.enc.md` file (reads unsaved editor content)
 - `AS Notes: Decrypt Current Note` — decrypt the active `.enc.md` file (reads from disk)
-
-**Planned Pro features:**
-
-- HTML/wiki export
-- UI password lock
 
 To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/contact).
 
