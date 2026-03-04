@@ -25,6 +25,7 @@ import { isValidStatus, type LicenceStatus } from './LicenceService.js';
 import { activateWithServer } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
+import { applyAssetPathSettings } from './ImageDropProvider.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -253,6 +254,11 @@ async function enterFullMode(
     completionProvider = new WikilinkCompletionProvider(indexService);
     fullModeDisposables.push(
         vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
+    );
+
+    // Configure the built-in markdown copy-files destination to use our asset path
+    applyAssetPathSettings().catch(err =>
+        console.warn('as-notes: failed to apply asset path settings:', err),
     );
 
     // Todo toggle — requires full mode (index needed for task panel sync)
@@ -806,6 +812,11 @@ async function enterFullMode(
                 clearPeriodicScan();
                 startPeriodicScan();
             }
+            if (e.affectsConfiguration('as-notes.assetPath')) {
+                applyAssetPathSettings().catch(err =>
+                    console.warn('as-notes: failed to apply asset path settings on config change:', err),
+                );
+            }
         }),
     );
 
@@ -910,6 +921,9 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     // Install git pre-commit hook to guard against committing unencrypted .enc.md files
     ensurePreCommitHook(workspaceRoot.fsPath);
 
+    // Configure the built-in markdown copy-files destination before entering full mode
+    await applyAssetPathSettings();
+
     // Enter full mode (creates DB, runs full scan)
     await vscode.window.withProgress(
         {
@@ -946,6 +960,11 @@ async function rebuildIndex(): Promise<void> {
     // Ensure git pre-commit hook is present (idempotent)
     const root = getWorkspaceRoot();
     if (root) { ensurePreCommitHook(root.fsPath); }
+
+    // Re-apply asset path settings in case they were modified externally
+    applyAssetPathSettings().catch(err =>
+        console.warn('as-notes: failed to re-apply asset path settings on rebuild:', err),
+    );
 
     await vscode.window.withProgress(
         {

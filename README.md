@@ -51,6 +51,20 @@ Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
+### File Drop & Paste
+
+Drag files from your file manager onto a markdown editor, or paste images from the clipboard — VS Code's built-in markdown editor handles the copy and link insertion automatically.
+
+AS Notes configures the built-in `markdown.copyFiles.destination` workspace setting so that dropped/pasted files are saved to a dedicated asset folder instead of next to your markdown file.
+
+| Setting | Default | Description |
+|---|---|---|
+| `as-notes.assetPath` | `assets/images` | Workspace-relative folder where dropped/pasted files are saved |
+
+The setting is applied automatically when AS Notes initialises or the value changes. The destination folder is created by VS Code on first use.
+
+> **Note:** File drop & paste requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
+
 ### Compatibility With Other Markdown PKMS
 
 AS Notes can work with knowledge bases created in Obsidian or Logseq due to similar file structures. There are format differences — Obsidian does not support nested wikilinks, and AS Notes does not use a block structure like Logseq. Front matter in AS Notes uses YAML.

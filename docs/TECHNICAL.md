@@ -93,7 +93,9 @@ This document explains the internal architecture, algorithms, and design decisio
   - [GitHookService](#githookservice)
   - [Index exclusion](#index-exclusion)
   - [Encryption commands](#encryption-commands)
-- [Filename sanitisation](#filename-sanitisation)
+- [File drop & paste](#file-drop--paste)
+  - [Workspace configuration](#workspace-configuration)
+  - [Legacy cleanup](#legacy-cleanup)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
 - [Known limitations and future considerations](#known-limitations-and-future-considerations)
@@ -1236,6 +1238,45 @@ All eight commands are registered in `enterFullMode()` and pro-gated via `isProL
 | `as-notes.createEncryptedJournalNote` | `computeJournalPaths()` → replace `.md` suffix with `.enc.md` → open/create in journal folder |
 | `as-notes.encryptCurrentNote` | Active editor buffer → encrypt → `WorkspaceEdit` replace full range + save. Error if not `.enc.md` or no active editor. |
 | `as-notes.decryptCurrentNote` | Read from disk via `workspace.fs.readFile` → decrypt → `WorkspaceEdit` replace full range + save. Error if not `.enc.md` or no active editor. |
+
+---
+
+## File drop & paste
+
+AS Notes delegates file drop and paste to VS Code's **built-in** markdown editor. Rather than registering custom `DocumentDropEditProvider` / `DocumentPasteEditProvider` providers, the extension programmatically configures the built-in `markdown.copyFiles.destination` workspace setting so dropped/pasted files land in the user's preferred asset folder.
+
+### Workspace configuration
+
+`applyAssetPathSettings()` in `src/ImageDropProvider.ts` reads `as-notes.assetPath` (default `assets/images`) and writes:
+
+```json
+"markdown.copyFiles.destination": {
+    "**/*.md": "assets/images/${fileName}"
+}
+```
+
+to `.vscode/settings.json` at workspace scope. `${fileName}` is a built-in VS Code variable that resolves to the original filename of the dropped/pasted file.
+
+| Setting | Default | Description |
+|---|---|---|
+| `as-notes.assetPath` | `assets/images` | Workspace-relative folder where dropped/pasted files are saved |
+
+**Trigger points** (all in `extension.ts`):
+1. `enterFullMode()` — on activation when `.asnotes/` is found
+2. `initWorkspace` command — when user initialises a new workspace
+3. `rebuildIndex` command — re-applies in case settings were modified externally
+4. `onDidChangeConfiguration` — when `as-notes.assetPath` changes
+
+### Legacy cleanup
+
+`applyAssetPathSettings()` also removes workspace-scoped overrides that may have been written by earlier versions of the extension:
+
+- `markdown.editor.drop.enabled`
+- `markdown.editor.filePaste.enabled`
+- `markdown.editor.drop.copyIntoWorkspace`
+- `markdown.editor.filePaste.copyIntoWorkspace`
+
+These are cleaned up once (only if a workspace-level value exists) so users upgrading from earlier versions are not left with stale settings.
 
 ---
 
