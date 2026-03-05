@@ -254,12 +254,36 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             return `<span class="instance-link" onclick="event.stopPropagation(); navigate('${pagePath}', ${link.line})">[[${escapeHtml(link.pageName)}]] <span class="line-ref">L${lineNum}</span></span>`;
         }).join('<span class="chain-arrow">\u2009\u2192\u2009</span>');
 
+        // Context from the last link in the chain (the target link)
+        const lastLink = instance.chain[instance.chain.length - 1];
+        let contextHtml = '';
+        if (lastLink?.context) {
+            const contextLines = lastLink.context.split('\n');
+            // The wikilink's own line is in the middle (or first if no preceding line)
+            // Determine which line in the snippet is the wikilink line
+            const wikiLinkLineIndex = lastLink.line > 0 ? 1 : 0;
+            const rendered = contextLines.map((line, i) => {
+                const trimmed = line.trimEnd();
+                if (i === wikiLinkLineIndex) {
+                    const startCol = lastLink.startCol;
+                    const endCol = lastLink.endCol;
+                    const before = escapeHtml(trimmed.substring(0, startCol));
+                    const highlight = escapeHtml(trimmed.substring(startCol, endCol));
+                    const after = escapeHtml(trimmed.substring(endCol));
+                    return `${before}<span class="context-highlight">${highlight}</span>${after}`;
+                }
+                return escapeHtml(trimmed);
+            }).join('\n');
+            contextHtml = `<pre class="instance-context">${rendered}</pre>`;
+        }
+
         return `<div class="chain-instance">
             <div class="instance-source" onclick="navigate('${pagePath}', 0)">
                 <span class="codicon codicon-file-text"></span>
                 <span class="source-title">${pageTitle}</span>
             </div>
             <div class="instance-chain">${chainLinksHtml}</div>
+            ${contextHtml}
         </div>`;
     }
 
@@ -515,6 +539,26 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         .line-ref {
             font-size: 0.8em;
             color: var(--vscode-editorLineNumber-foreground, rgba(128,128,128,0.5));
+        }
+
+        .instance-context {
+            margin: 4px 0 6px 28px;
+            padding: 6px 10px;
+            border-left: 3px solid var(--vscode-textBlockQuote-border, rgba(128,128,128,0.3));
+            background: var(--vscode-textBlockQuote-background, rgba(128,128,128,0.05));
+            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+            font-size: var(--vscode-editor-font-size, 13px);
+            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.7));
+            white-space: pre;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-radius: 0 3px 3px 0;
+            line-height: 1.5;
+        }
+
+        .context-highlight {
+            color: var(--vscode-textLink-foreground, #3794ff);
+            font-weight: 600;
         }
     </style>
 </head>

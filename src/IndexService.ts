@@ -81,6 +81,7 @@ export interface BacklinkChainLink {
     line: number;
     startCol: number;
     endCol: number;
+    context: string | null;
 }
 
 /** A single chain instance (one occurrence on one source page). */
@@ -643,13 +644,20 @@ export class IndexService {
                 const depth = this.computeDepth(wl, sorted);
                 const parentWl = this.findParentWikilink(wl, sorted);
 
+                // Build ±1 line context snippet
+                const contextLines: string[] = [];
+                if (lineNum > 0) { contextLines.push(lines[lineNum - 1]); }
+                contextLines.push(lineText);
+                if (lineNum < lines.length - 1) { contextLines.push(lines[lineNum + 1]); }
+                const contextSnippet = contextLines.join('\n');
+
                 allLinks.push({
                     page_name: wl.pageName,
                     page_filename: `${wl.pageFileName}.md`,
                     line: lineNum,
                     start_col: wl.startPositionInText,
                     end_col: wl.endPositionInText,
-                    context: lineText,
+                    context: contextSnippet,
                     parent_link_id: null, // Will be set in a second pass if needed
                     depth,
                     _parentIndex: parentWl ? sorted.indexOf(parentWl) : -1,
@@ -688,6 +696,13 @@ export class IndexService {
             // Compute indent level from leading whitespace (tabs count as 1 char)
             const indentLevel = IndexService.computeIndentLevel(lineText);
 
+            // Build ±1 line context snippet
+            const contextLines: string[] = [];
+            if (lineNum > 0) { contextLines.push(lines[lineNum - 1]); }
+            contextLines.push(lineText);
+            if (lineNum < lines.length - 1) { contextLines.push(lines[lineNum + 1]); }
+            const contextSnippet = contextLines.join('\n');
+
             // Sort outermost first (largest range)
             const sorted = [...wikilinks].sort((a, b) => b.length - a.length);
 
@@ -698,7 +713,7 @@ export class IndexService {
                 this.db!.run(
                     `INSERT INTO links (source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth, indent_level, outline_parent_link_id)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [pageId, wl.pageName, `${wl.pageFileName}.md`, lineNum, wl.startPositionInText, wl.endPositionInText, lineText, null, depth, indentLevel, null],
+                    [pageId, wl.pageName, `${wl.pageFileName}.md`, lineNum, wl.startPositionInText, wl.endPositionInText, contextSnippet, null, depth, indentLevel, null],
                 );
                 const result = this.db!.exec(`SELECT last_insert_rowid()`);
                 const linkId = result[0].values[0][0] as number;
@@ -1196,7 +1211,7 @@ export class IndexService {
 
         while (currentId !== null) {
             const result = this.db!.exec(
-                `SELECT id, page_name, page_filename, line, start_col, end_col, outline_parent_link_id
+                `SELECT id, page_name, page_filename, line, start_col, end_col, outline_parent_link_id, context
                  FROM links WHERE id = ?`,
                 [currentId],
             );
@@ -1209,6 +1224,7 @@ export class IndexService {
                 line: row[3] as number,
                 startCol: row[4] as number,
                 endCol: row[5] as number,
+                context: row[7] as string | null,
             });
             currentId = row[6] as number | null;
         }

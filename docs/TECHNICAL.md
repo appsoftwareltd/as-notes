@@ -208,7 +208,7 @@ CREATE TABLE links (
     line INTEGER NOT NULL,          -- 0-based line number
     start_col INTEGER NOT NULL,     -- column of first [
     end_col INTEGER NOT NULL,       -- column of last ]
-    context TEXT,                   -- full line text for display
+    context TEXT,                   -- surrounding lines text for display (±1 lines)
     parent_link_id INTEGER REFERENCES links(id),  -- nesting parent (bracket-based)
     depth INTEGER NOT NULL DEFAULT 0,              -- nesting depth (0 = top-level)
     indent_level INTEGER NOT NULL DEFAULT 0,       -- leading whitespace count
@@ -1292,6 +1292,7 @@ interface BacklinkChainLink {
     line: number;
     startCol: number;
     endCol: number;
+    context: string | null;
 }
 
 interface BacklinkChainInstance {
@@ -1310,7 +1311,7 @@ The `BacklinkEntry` interface and `getBacklinksIncludingAliases()` method are re
 
 ### Chain building
 
-**`buildChainForLink(linkId)`** (public method on `IndexService`) walks the `outline_parent_link_id` chain from a given link upward to the root, collecting `BacklinkChainLink` entries for each step, then reverses for root-to-leaf order. A standalone mention (no `outline_parent_link_id`) produces a chain of length 1.
+**`buildChainForLink(linkId)`** (public method on `IndexService`) walks the `outline_parent_link_id` chain from a given link upward to the root, collecting `BacklinkChainLink` entries (including `context` — the surrounding ±1 lines of text) for each step, then reverses for root-to-leaf order. A standalone mention (no `outline_parent_link_id`) produces a chain of length 1.
 
 ### Message protocol
 
@@ -1323,6 +1324,7 @@ The webview communicates with the extension via `postMessage`:
 Each chain group renders as a collapsible section with:
 - **Header**: the chain pattern displayed as clickable page name links separated by `→` arrows, with an instance count badge
 - **Instances**: each instance shows the source page title followed by the chain with per-link line numbers (e.g. `[L12]`), each clickable for navigation
+- **Context block**: below each chain instance, a multi-line context snippet (±1 surrounding lines) of the last link (the target link) is displayed in a blockquote-styled `<pre>` block. The wikilink text on the relevant line is highlighted using `--vscode-textLink-foreground`. The blockquote uses `--vscode-textBlockQuote-border` for the left border and `--vscode-textBlockQuote-background` for the background fill.
 
 The HTML uses VS Code CSS variables for automatic light/dark theme support. Chain arrows use dimmed description foreground. Clickable elements have hover states.
 
@@ -1649,7 +1651,7 @@ Tests use vitest and are split across eight test files:
 
 3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
 
-### `IndexService.test.ts` (119 tests)
+### `IndexService.test.ts` (120 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
@@ -1677,7 +1679,7 @@ Tests use vitest and are split across eight test files:
 
 13. **Outline parent computation** (14 tests) — basic nesting, siblings, multi-level, same-line peers, nested wikilinks, cross-line inheritance, deep hierarchies.
 
-14. **Unified backlink chains / `getBacklinkChains`** (14 tests) — standalone mention (chain length 1), chain with outline context, pattern grouping across files, separate groups for different patterns, length-1-first sorting, alias resolution, empty/non-existent page, line numbers, alphabetical instance sorting, case-insensitive pattern grouping, alias in outline context, multiple backlinks from same page, real-world outliner scenario.
+14. **Unified backlink chains / `getBacklinkChains`** (15 tests) — standalone mention (chain length 1), chain with outline context, pattern grouping across files, separate groups for different patterns, length-1-first sorting, alias resolution, empty/non-existent page, line numbers, context line text in chain links, alphabetical instance sorting, case-insensitive pattern grouping, alias in outline context, multiple backlinks from same page, real-world outliner scenario.
 
 15. **Forward reference chains / `getBacklinkChainsByName`** (3 tests) — forward reference with no page file, empty for unreferenced name, chain with outline context for forward reference.
 

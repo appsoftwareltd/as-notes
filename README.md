@@ -342,6 +342,7 @@ Every backlink is displayed as a **chain** — the full outline context path fro
 - **Standalone mentions** — direct `[[wikilink]]` references appear as single-link chains, sorted first.
 - **Outline context** — if a wikilink is indented below another wikilink, the full hierarchy is shown as a chain (e.g. `Page A → Page B → Page C`), with each link clickable.
 - **Per-link line numbers** — each chain link shows its line number (e.g. `[L12]`) for precise navigation.
+- **Line context** — each chain instance shows the surrounding line text with the wikilink highlighted, giving immediate context without opening the file.
 - **Case-insensitive grouping** — `[[server]]` and `[[Server]]` produce the same chain pattern.
 
 #### Context menu — View Backlinks

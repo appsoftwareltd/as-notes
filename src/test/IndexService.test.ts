@@ -391,7 +391,7 @@ describe('IndexService — indexFileContent', () => {
         expect(links[0].page_name).toBe('Target');
         expect(links[0].page_filename).toBe('Target.md');
         expect(links[0].line).toBe(2);
-        expect(links[0].context).toBe('See [[Target]] for details.');
+        expect(links[0].context).toBe('\nSee [[Target]] for details.');
         expect(links[0].depth).toBe(0);
         expect(links[0].parent_link_id).toBeNull();
     });
@@ -1310,6 +1310,21 @@ describe('IndexService — getBacklinkChains (unified)', () => {
         expect(chain[1].line).toBe(1); // [[NGINX]] on line 1
     });
 
+    it('should include context (surrounding lines) in chain links', () => {
+        const content = 'Root [[Server]] setup\n  Configure [[NGINX]] as reverse proxy\nSome trailing line';
+        service.indexFileContent('source.md', 'source.md', content, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        const chain = groups[0].instances[0].chain;
+        // [[Server]] is on line 0 — no line before, includes line after
+        expect(chain[0].context).toBe('Root [[Server]] setup\n  Configure [[NGINX]] as reverse proxy');
+        // [[NGINX]] is on line 1 — includes line before, current, and line after
+        expect(chain[1].context).toBe('Root [[Server]] setup\n  Configure [[NGINX]] as reverse proxy\nSome trailing line');
+    });
+
     it('should sort instances within a group by source page title alphabetically', () => {
         service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
         service.indexFileContent('beta.md', 'beta.md', '# Beta\n\n[[NGINX]]\n', 1000);
@@ -1589,7 +1604,7 @@ describe('IndexService — getBacklinksIncludingAliases', () => {
 
         expect(entries).toHaveLength(1);
         expect(entries[0].link.page_name).toBe('Target Page');
-        expect(entries[0].link.context).toBe('See [[Target Page]]');
+        expect(entries[0].link.context).toBe('\nSee [[Target Page]]\n');
         expect(entries[0].sourcePage.title).toBe('Linker');
         expect(entries[0].sourcePage.path).toBe('linker.md');
     });
@@ -1633,7 +1648,7 @@ describe('IndexService — getBacklinksIncludingAliases', () => {
         expect(entries[0].link.line).toBe(2);
         expect(entries[0].link.start_col).toBeGreaterThanOrEqual(0);
         expect(entries[0].link.end_col).toBeGreaterThan(entries[0].link.start_col);
-        expect(entries[0].link.context).toBe('Prefix [[Target]] suffix');
+        expect(entries[0].link.context).toBe('\nPrefix [[Target]] suffix\n');
     });
 
     it('should order results by page title then line number', () => {
