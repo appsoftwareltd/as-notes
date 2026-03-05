@@ -250,19 +250,36 @@ async function enterFullMode(
     const dbPath = path.join(workspaceRoot.fsPath, ASNOTES_DIR, INDEX_DB);
     indexService = new IndexService(dbPath, logService);
     logService.info('extension', 'enterFullMode: initialising database');
-    await indexService.initDatabase();
+    const { schemaReset } = await indexService.initDatabase();
 
     ignoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
     indexScanner = new IndexScanner(indexService, workspaceRoot, ignoreService, logService);
 
-    // Run stale scan on activation to catch external changes
-    logService.info('extension', 'enterFullMode: running stale scan');
-    const summary = await indexScanner.staleScan();
-    if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
-        indexService.saveToFile();
-        console.log(
-            `as-notes: stale scan — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted, ${summary.unchanged} unchanged`,
+    if (schemaReset) {
+        // Schema was outdated and reset — run a full rebuild with progress notification
+        logService.info('extension', 'enterFullMode: schema was reset, running full rebuild');
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: 'AS Notes: Rebuilding index (schema updated)',
+                cancellable: false,
+            },
+            async (progress) => {
+                const result = await indexScanner!.fullScan(progress);
+                indexService!.saveToFile();
+                logService!.info('extension', `enterFullMode: full rebuild complete — ${result.filesIndexed} files, ${result.linksFound} links`);
+            },
         );
+    } else {
+        // Run stale scan on activation to catch external changes
+        logService.info('extension', 'enterFullMode: running stale scan');
+        const summary = await indexScanner.staleScan();
+        if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
+            indexService.saveToFile();
+            console.log(
+                `as-notes: stale scan — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted, ${summary.unchanged} unchanged`,
+            );
+        }
     }
 
     // Shared services
@@ -338,6 +355,35 @@ async function enterFullMode(
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.showBacklinks', () => {
             backlinkPanelProvider?.show();
+        }),
+    );
+
+    // View backlinks for the wikilink under cursor (context menu)
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.viewBacklinks', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !backlinkPanelProvider || !indexService) { return; }
+
+            const line = editor.document.lineAt(editor.selection.active.line);
+            const wikilinks = wikilinkService.extractWikilinks(line.text);
+            const wikilink = wikilinkService.findInnermostWikilinkAtOffset(
+                wikilinks,
+                editor.selection.active.character,
+            );
+
+            if (!wikilink) {
+                vscode.window.showInformationMessage('No wikilink found at cursor position.');
+                return;
+            }
+
+            // Try to find the page in the index
+            const page = indexService.findPagesByFilename(wikilink.pageFileName + '.md')?.[0];
+            if (page) {
+                backlinkPanelProvider.showForPage(page.id, page.title);
+            } else {
+                // Forward reference — use page name directly
+                backlinkPanelProvider.showForName(wikilink.pageName);
+            }
         }),
     );
 
@@ -1067,8 +1113,7 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
             indexService = new IndexService(dbPath, logService);
             await indexService.initDatabase();
 
-            const initIgnoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
-            indexScanner = new IndexScanner(indexService, workspaceRoot, initIgnoreService, logService);
+            const initIgnoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));            indexScanner = new IndexScanner(indexService, workspaceRoot, initIgnoreService, logService);
 
             const result = await indexScanner.fullScan(progress);
             indexService.saveToFile();

@@ -81,6 +81,10 @@
                 "icon": "$(references)"
             },
             {
+                "command": "as-notes.viewBacklinks",
+                "title": "AS Notes: View Backlinks for Wikilink"
+            },
+            {
                 "command": "as-notes.openDailyJournal",
                 "title": "AS Notes: Open Daily Journal"
             },
@@ -196,6 +200,13 @@
             "editor/title": [
                 {
                     "command": "as-notes.showBacklinks",
+                    "when": "as-notes.fullMode && editorLangId == markdown",
+                    "group": "navigation"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "as-notes.viewBacklinks",
                     "when": "as-notes.fullMode && editorLangId == markdown",
                     "group": "navigation"
                 }

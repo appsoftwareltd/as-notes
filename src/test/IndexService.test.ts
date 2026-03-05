@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { IndexService, extractTitle } from '../IndexService.js';
+import { IndexService, extractTitle, SCHEMA_VERSION } from '../IndexService.js';
 import { WikilinkService } from '../WikilinkService.js';
-import type { LinkInsert } from '../IndexService.js';
+import type { LinkInsert, OutlinerEntry } from '../IndexService.js';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 
 describe('extractTitle', () => {
     it('should extract the first # heading', () => {
@@ -999,6 +1002,432 @@ describe('IndexService — getForwardReferencedPages', () => {
     });
 });
 
+// ── Outliner backlinks / references ────────────────────────────────────────
+
+describe('IndexService — computeIndentLevel', () => {
+    it('should return 0 for no leading whitespace', () => {
+        expect(IndexService.computeIndentLevel('[[Page A]]')).toBe(0);
+    });
+
+    it('should count leading spaces', () => {
+        expect(IndexService.computeIndentLevel('  [[Page A]]')).toBe(2);
+        expect(IndexService.computeIndentLevel('    [[Page A]]')).toBe(4);
+    });
+
+    it('should count leading tabs', () => {
+        expect(IndexService.computeIndentLevel('\t[[Page A]]')).toBe(1);
+        expect(IndexService.computeIndentLevel('\t\t[[Page A]]')).toBe(2);
+    });
+
+    it('should count mixed spaces and tabs', () => {
+        expect(IndexService.computeIndentLevel('\t  [[Page A]]')).toBe(3);
+        expect(IndexService.computeIndentLevel('  \t[[Page A]]')).toBe(3);
+    });
+
+    it('should return 0 for empty string', () => {
+        expect(IndexService.computeIndentLevel('')).toBe(0);
+    });
+});
+
+describe('IndexService — indent_level indexing', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should store indent_level for links at different indentations', () => {
+        const content = '[[Page A]]\n  [[Page B]]\n    [[Page C]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        expect(links).toHaveLength(3);
+
+        const byLine = links.sort((a, b) => a.line - b.line);
+        expect(byLine[0].indent_level).toBe(0);
+        expect(byLine[1].indent_level).toBe(2);
+        expect(byLine[2].indent_level).toBe(4);
+    });
+
+    it('should give same indent_level to multiple wikilinks on the same line', () => {
+        const content = '  [[Page A]] and [[Page B]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        expect(links).toHaveLength(2);
+        expect(links[0].indent_level).toBe(2);
+        expect(links[1].indent_level).toBe(2);
+    });
+
+    it('should handle bullet list indentation', () => {
+        const content = '- [[Page A]]\n  - [[Page B]]\n    - [[Page C]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const byLine = links.sort((a, b) => a.line - b.line);
+        expect(byLine[0].indent_level).toBe(0);
+        expect(byLine[1].indent_level).toBe(2);
+        expect(byLine[2].indent_level).toBe(4);
+    });
+});
+
+describe('IndexService — outline_parent_link_id', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should set outline_parent_link_id for basic nesting', () => {
+        const content = '[[Page A]]\n  [[Page B]]\n    [[Page C]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const byLine = links.sort((a, b) => a.line - b.line);
+
+        // Page A has no outline parent
+        expect(byLine[0].outline_parent_link_id).toBeNull();
+        // Page B's outline parent is Page A
+        expect(byLine[1].outline_parent_link_id).toBe(byLine[0].id);
+        // Page C's outline parent is Page B
+        expect(byLine[2].outline_parent_link_id).toBe(byLine[1].id);
+    });
+
+    it('should handle siblings correctly — same indent returns to previous parent', () => {
+        const content = '[[Page A]]\n  [[Page B]]\n  [[Page C]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const byLine = links.sort((a, b) => a.line - b.line);
+
+        // Both B and C are children of A
+        expect(byLine[0].outline_parent_link_id).toBeNull();
+        expect(byLine[1].outline_parent_link_id).toBe(byLine[0].id);
+        expect(byLine[2].outline_parent_link_id).toBe(byLine[0].id);
+    });
+
+    it('should handle dedent — returning to a higher level', () => {
+        const content = '[[Page A]]\n  [[Page B]]\n    [[Page C]]\n  [[Page D]]\n[[Page E]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const byLine = links.sort((a, b) => a.line - b.line);
+
+        expect(byLine[0].outline_parent_link_id).toBeNull();    // A: root
+        expect(byLine[1].outline_parent_link_id).toBe(byLine[0].id); // B → A
+        expect(byLine[2].outline_parent_link_id).toBe(byLine[1].id); // C → B
+        expect(byLine[3].outline_parent_link_id).toBe(byLine[0].id); // D → A (dedent)
+        expect(byLine[4].outline_parent_link_id).toBeNull();    // E: root (full dedent)
+    });
+
+    it('should give same-line peers the same outline parent', () => {
+        const content = '[[Page A]]\n  [[Page B]] and [[Page C]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const pageA = links.find(l => l.page_name === 'Page A')!;
+        const pageB = links.find(l => l.page_name === 'Page B')!;
+        const pageC = links.find(l => l.page_name === 'Page C')!;
+
+        expect(pageA.outline_parent_link_id).toBeNull();
+        expect(pageB.outline_parent_link_id).toBe(pageA.id);
+        expect(pageC.outline_parent_link_id).toBe(pageA.id);
+    });
+
+    it('should handle nested (bracket) wikilinks — all share same indent and outline parent', () => {
+        const content = '[[Page A]]\n  [[Outer [[Inner]] Link]]';
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const pageA = links.find(l => l.page_name === 'Page A')!;
+        const outer = links.find(l => l.page_name === 'Outer [[Inner]] Link')!;
+        const inner = links.find(l => l.page_name === 'Inner')!;
+
+        // Both outer and inner are outline children of Page A
+        expect(outer.outline_parent_link_id).toBe(pageA.id);
+        expect(inner.outline_parent_link_id).toBe(pageA.id);
+    });
+
+    it('should handle multi-level nesting with several roots', () => {
+        const content = [
+            '[[Root 1]]',
+            '  [[Child 1A]]',
+            '    [[Grandchild 1]]',
+            '  [[Child 1B]]',
+            '[[Root 2]]',
+            '  [[Child 2A]]',
+        ].join('\n');
+        const pageId = service.indexFileContent('test.md', 'test.md', content, 1000);
+
+        const links = service.getLinksForPage(pageId);
+        const byName = (name: string) => links.find(l => l.page_name === name)!;
+
+        expect(byName('Root 1').outline_parent_link_id).toBeNull();
+        expect(byName('Child 1A').outline_parent_link_id).toBe(byName('Root 1').id);
+        expect(byName('Grandchild 1').outline_parent_link_id).toBe(byName('Child 1A').id);
+        expect(byName('Child 1B').outline_parent_link_id).toBe(byName('Root 1').id);
+        expect(byName('Root 2').outline_parent_link_id).toBeNull();
+        expect(byName('Child 2A').outline_parent_link_id).toBe(byName('Root 2').id);
+    });
+});
+
+describe('IndexService — getBacklinkChains (unified)', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should return a standalone mention as a chain of length 1', () => {
+        service.indexFileContent('Target.md', 'Target.md', '# Target', 1000);
+        service.indexFileContent('linker.md', 'linker.md', '# Linker\n\nSee [[Target]]\n', 1000);
+
+        const target = service.getPageByPath('Target.md')!;
+        const groups = service.getBacklinkChains(target.id);
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].displayPattern).toEqual(['Target']);
+        expect(groups[0].instances).toHaveLength(1);
+        expect(groups[0].instances[0].chain).toHaveLength(1);
+        expect(groups[0].instances[0].chain[0].pageName).toBe('Target');
+        expect(groups[0].instances[0].sourcePage.path).toBe('linker.md');
+    });
+
+    it('should return a chain with outline context', () => {
+        const content = '[[App Software]]\n  [[Server]]\n    [[NGINX]]';
+        service.indexFileContent('source.md', 'source.md', content, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].displayPattern).toEqual(['App Software', 'Server', 'NGINX']);
+        expect(groups[0].instances).toHaveLength(1);
+        expect(groups[0].instances[0].chain).toHaveLength(3);
+        expect(groups[0].instances[0].chain.map(c => c.pageName))
+            .toEqual(['App Software', 'Server', 'NGINX']);
+    });
+
+    it('should group identical chain patterns from different source files', () => {
+        const content1 = '[[Server]]\n  [[NGINX]]';
+        const content2 = '[[Server]]\n  [[NGINX]]';
+        service.indexFileContent('source1.md', 'source1.md', content1, 1000);
+        service.indexFileContent('source2.md', 'source2.md', content2, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        // Both have pattern [[Server]] → [[NGINX]], so one group with 2 instances
+        expect(groups).toHaveLength(1);
+        expect(groups[0].instances).toHaveLength(2);
+    });
+
+    it('should separate different chain patterns into different groups', () => {
+        const content1 = '[[Server]]\n  [[NGINX]]';
+        const content2 = '[[NGINX]]';
+        service.indexFileContent('source1.md', 'source1.md', content1, 1000);
+        service.indexFileContent('source2.md', 'source2.md', content2, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        // Two groups: [[NGINX]] (length 1) and [[Server]] → [[NGINX]] (length 2)
+        expect(groups).toHaveLength(2);
+        // Length-1 first
+        expect(groups[0].displayPattern).toEqual(['NGINX']);
+        expect(groups[1].displayPattern).toEqual(['Server', 'NGINX']);
+    });
+
+    it('should sort length-1 groups before longer chains', () => {
+        const content = '[[Server]]\n  [[NGINX]]';
+        const standalone = '[[NGINX]]';
+        service.indexFileContent('deep.md', 'deep.md', content, 1000);
+        service.indexFileContent('flat.md', 'flat.md', standalone, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        expect(groups[0].displayPattern.length).toBe(1);
+        expect(groups[1].displayPattern.length).toBe(2);
+    });
+
+    it('should resolve alias backlinks', () => {
+        const aliasContent = '---\naliases: [Shortcut]\n---\n\n# Target Page';
+        service.indexFileContent('target.md', 'target.md', aliasContent, 1000);
+        service.indexFileContent('linker1.md', 'linker1.md', '# Linker 1\n\nSee [[target]]\n', 1000);
+        service.indexFileContent('linker2.md', 'linker2.md', '# Linker 2\n\nSee [[Shortcut]]\n', 1000);
+
+        const target = service.getPageByPath('target.md')!;
+        const groups = service.getBacklinkChains(target.id);
+
+        const totalInstances = groups.reduce((sum, g) => sum + g.instances.length, 0);
+        expect(totalInstances).toBe(2);
+    });
+
+    it('should return empty array when no backlinks exist', () => {
+        service.indexFileContent('lonely.md', 'lonely.md', '# Lonely Page', 1000);
+
+        const page = service.getPageByPath('lonely.md')!;
+        const groups = service.getBacklinkChains(page.id);
+
+        expect(groups).toHaveLength(0);
+    });
+
+    it('should return empty array for non-existent page id', () => {
+        const groups = service.getBacklinkChains(9999);
+        expect(groups).toHaveLength(0);
+    });
+
+    it('should include correct line numbers in chain links', () => {
+        const content = '[[Server]]\n  [[NGINX]]';
+        service.indexFileContent('source.md', 'source.md', content, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        const chain = groups[0].instances[0].chain;
+        expect(chain[0].line).toBe(0); // [[Server]] on line 0
+        expect(chain[1].line).toBe(1); // [[NGINX]] on line 1
+    });
+
+    it('should sort instances within a group by source page title alphabetically', () => {
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+        service.indexFileContent('beta.md', 'beta.md', '# Beta\n\n[[NGINX]]\n', 1000);
+        service.indexFileContent('alpha.md', 'alpha.md', '# Alpha\n\n[[NGINX]]\n', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].instances[0].sourcePage.title).toBe('Alpha');
+        expect(groups[0].instances[1].sourcePage.title).toBe('Beta');
+    });
+
+    it('should use case-insensitive pattern grouping', () => {
+        const content1 = '[[server]]\n  [[NGINX]]';
+        const content2 = '[[Server]]\n  [[nginx]]';
+        service.indexFileContent('source1.md', 'source1.md', content1, 1000);
+        service.indexFileContent('source2.md', 'source2.md', content2, 1000);
+        service.indexFileContent('NGINX.md', 'NGINX.md', '# NGINX', 1000);
+
+        const nginx = service.getPageByPath('NGINX.md')!;
+        const groups = service.getBacklinkChains(nginx.id);
+
+        // Both have same lowercased pattern: server → nginx
+        expect(groups).toHaveLength(1);
+        expect(groups[0].instances).toHaveLength(2);
+    });
+
+    it('should handle chains with alias resolution in outline context', () => {
+        const aliasContent = '---\naliases: [Shortcut]\n---\n\n# Page A';
+        service.indexFileContent('Page A.md', 'Page A.md', aliasContent, 1000);
+
+        const content = '[[Parent]]\n  [[Shortcut]]';
+        service.indexFileContent('source.md', 'source.md', content, 1000);
+
+        const pageA = service.getPageByPath('Page A.md')!;
+        const groups = service.getBacklinkChains(pageA.id);
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].displayPattern).toEqual(['Parent', 'Shortcut']);
+        expect(groups[0].instances).toHaveLength(1);
+    });
+
+    it('should handle multiple backlinks from the same page', () => {
+        service.indexFileContent('Target.md', 'Target.md', '# Target', 1000);
+        service.indexFileContent('linker.md', 'linker.md', '# Linker\n\n[[Target]] first\n\n[[Target]] second\n', 1000);
+
+        const target = service.getPageByPath('Target.md')!;
+        const groups = service.getBacklinkChains(target.id);
+
+        expect(groups).toHaveLength(1);
+        // Two mentions of [[Target]] from the same page, both standalone
+        expect(groups[0].instances).toHaveLength(2);
+    });
+
+    it('should produce correct chains for a real-world outliner scenario', () => {
+        const content = [
+            '- [[Project X]]',
+            '  - [[Task A]]',
+            '    - [[Task B]]',
+            '  - [[Task C]]',
+            '- [[Project Y]]',
+            '  - [[Task D]]',
+        ].join('\n');
+        service.indexFileContent('planning.md', 'planning.md', content, 1000);
+        service.indexFileContent('Task B.md', 'Task B.md', '# Task B', 1000);
+
+        const taskB = service.getPageByPath('Task B.md')!;
+        const groups = service.getBacklinkChains(taskB.id);
+
+        // Only one chain pattern: [[Project X]] → [[Task A]] → [[Task B]]
+        expect(groups).toHaveLength(1);
+        expect(groups[0].displayPattern).toEqual(['Project X', 'Task A', 'Task B']);
+        expect(groups[0].instances).toHaveLength(1);
+        expect(groups[0].instances[0].sourcePage.path).toBe('planning.md');
+    });
+});
+
+describe('IndexService — getBacklinkChainsByName', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should find backlinks for a forward reference (no page file)', () => {
+        // NGINX.md does not exist, but is referenced
+        service.indexFileContent('source.md', 'source.md', '# Source\n\n[[NGINX]]\n', 1000);
+
+        const groups = service.getBacklinkChainsByName('NGINX');
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].displayPattern).toEqual(['NGINX']);
+        expect(groups[0].instances).toHaveLength(1);
+        expect(groups[0].instances[0].sourcePage.path).toBe('source.md');
+    });
+
+    it('should return empty for a name with no references', () => {
+        const groups = service.getBacklinkChainsByName('NonExistent');
+        expect(groups).toHaveLength(0);
+    });
+
+    it('should find chains for a forward reference with outline context', () => {
+        const content = '[[Server]]\n  [[NGINX]]';
+        service.indexFileContent('source.md', 'source.md', content, 1000);
+
+        const groups = service.getBacklinkChainsByName('NGINX');
+
+        expect(groups).toHaveLength(1);
+        expect(groups[0].displayPattern).toEqual(['Server', 'NGINX']);
+    });
+});
+
 // ── Task indexing ──────────────────────────────────────────────────────────
 
 describe('IndexService — task indexing', () => {
@@ -1232,5 +1661,99 @@ describe('IndexService — getBacklinksIncludingAliases', () => {
 
         expect(entries).toHaveLength(2);
         expect(entries.every(e => e.sourcePage.path === 'linker.md')).toBe(true);
+    });
+});
+
+describe('IndexService — schema versioning', () => {
+    let tmpDbPath: string;
+
+    beforeEach(() => {
+        tmpDbPath = path.join(os.tmpdir(), `as-notes-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+    });
+
+    afterEach(() => {
+        if (fs.existsSync(tmpDbPath)) {
+            fs.unlinkSync(tmpDbPath);
+        }
+    });
+
+    it('new database gets user_version stamped to SCHEMA_VERSION', async () => {
+        const service = new IndexService(tmpDbPath);
+        const { schemaReset } = await service.initDatabase();
+        expect(schemaReset).toBe(false);
+        expect(service.getSchemaVersion()).toBe(SCHEMA_VERSION);
+        service.close();
+    });
+
+    it('existing database with current version returns schemaReset: false', async () => {
+        // First open — create the DB.
+        const service1 = new IndexService(tmpDbPath);
+        await service1.initDatabase();
+        service1.saveToFile();
+        service1.close();
+
+        // Second open — version matches, no reset.
+        const service2 = new IndexService(tmpDbPath);
+        const { schemaReset } = await service2.initDatabase();
+        expect(schemaReset).toBe(false);
+        expect(service2.getSchemaVersion()).toBe(SCHEMA_VERSION);
+        service2.close();
+    });
+
+    it('existing database with outdated version (0) returns schemaReset: true and stamps new version', async () => {
+        // Simulate a pre-versioning DB: initInMemory does NOT stamp user_version,
+        // so saveToFile produces a DB file with user_version = 0.
+        const service1 = new IndexService(tmpDbPath);
+        await service1.initInMemory();
+        service1.indexFileContent('note.md', 'note.md', '# Note', Date.now());
+        service1.saveToFile();
+        service1.close();
+
+        // Re-open via initDatabase — should detect version 0 < SCHEMA_VERSION and reset.
+        const service2 = new IndexService(tmpDbPath);
+        const { schemaReset } = await service2.initDatabase();
+        expect(schemaReset).toBe(true);
+        expect(service2.getSchemaVersion()).toBe(SCHEMA_VERSION);
+        service2.close();
+    });
+
+    it('after schema reset the database is empty and tables exist', async () => {
+        // Create a DB with data and version 0 (using initInMemory, no version stamp).
+        const service1 = new IndexService(tmpDbPath);
+        await service1.initInMemory();
+        service1.indexFileContent('page.md', 'page.md', '# Page\n\n[[Wikilink]]\n', Date.now());
+        expect(service1.getAllPages()).toHaveLength(1);
+        service1.saveToFile();
+        service1.close();
+
+        // Re-open — schema reset wipes data.
+        const service2 = new IndexService(tmpDbPath);
+        const { schemaReset } = await service2.initDatabase();
+        expect(schemaReset).toBe(true);
+        // All tables must exist
+        const tables = service2.getTableNames();
+        expect(tables).toContain('pages');
+        expect(tables).toContain('links');
+        expect(tables).toContain('aliases');
+        expect(tables).toContain('tasks');
+        // Data was wiped
+        expect(service2.getAllPages()).toHaveLength(0);
+        service2.close();
+    });
+
+    it('after schema reset the database is fully functional for indexing', async () => {
+        // Create stale DB.
+        const service1 = new IndexService(tmpDbPath);
+        await service1.initInMemory();
+        service1.saveToFile();
+        service1.close();
+
+        // Re-open with reset, then index a page.
+        const service2 = new IndexService(tmpDbPath);
+        await service2.initDatabase();
+        service2.indexFileContent('note.md', 'note.md', '# Note\n\n[[Other]]\n', Date.now());
+        expect(service2.getAllPages()).toHaveLength(1);
+        expect(service2.getPageByPath('note.md')).not.toBeNull();
+        service2.close();
     });
 });

@@ -1,13 +1,8 @@
 import * as vscode from 'vscode';
-import { IndexService, type BacklinkEntry, type PageRow } from './IndexService.js';
+import { IndexService, type BacklinkChainGroup, type BacklinkChainInstance, type PageRow } from './IndexService.js';
 import * as path from 'path';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-interface BacklinkGroup {
-    sourcePage: PageRow;
-    entries: BacklinkEntry[];
-}
 
 interface NavigateMessage {
     command: 'navigate';
@@ -31,8 +26,12 @@ type WebviewMessage = NavigateMessage;
 export class BacklinkPanelProvider implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
     private disposables: vscode.Disposable[] = [];
-    /** The page the backlink panel is locked to. */
+    /** The page the backlink panel is locked to (by URI). */
     private lockedUri: vscode.Uri | undefined;
+    /** The page name the backlink panel is locked to (for forward references). */
+    private lockedPageName: string | undefined;
+    /** The page id when targeting a known page (includes alias resolution). */
+    private lockedPageId: number | undefined;
 
     constructor(
         private indexService: IndexService,
@@ -50,40 +49,52 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         if (this.panel) {
             this.panel.reveal(vscode.ViewColumn.Beside, true);
         } else {
-            this.panel = vscode.window.createWebviewPanel(
-                'as-notes-backlinks',
-                'Backlinks',
-                { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-                {
-                    enableScripts: true,
-                    retainContextWhenHidden: true,
-                },
-            );
-
-            this.panel.iconPath = new vscode.ThemeIcon('references');
-
-            // Handle messages from the webview (click-to-navigate)
-            this.disposables.push(
-                this.panel.webview.onDidReceiveMessage((msg: WebviewMessage) => {
-                    if (msg.command === 'navigate') {
-                        this.navigateToBacklink(msg.pagePath, msg.line);
-                    }
-                }),
-            );
-
-            // Clean up when the panel is closed by the user
-            this.panel.onDidDispose(() => {
-                this.panel = undefined;
-                this.lockedUri = undefined;
-            }, null, this.disposables);
+            this.createPanel();
         }
 
         // Lock to the currently active markdown file
         const editor = vscode.window.activeTextEditor;
         if (editor && isMarkdownUri(editor.document.uri)) {
             this.lockedUri = editor.document.uri;
+            this.lockedPageName = undefined;
+            this.lockedPageId = undefined;
         }
-        this.renderForLockedUri();
+        this.renderForLockedTarget();
+    }
+
+    /**
+     * Show the backlinks panel for a specific page name (e.g. from right-click
+     * on a forward reference where no page file exists). Uses
+     * getBacklinkChainsByName to query by page_filename directly.
+     */
+    showForName(pageName: string): void {
+        if (this.panel) {
+            this.panel.reveal(vscode.ViewColumn.Beside, true);
+        } else {
+            this.createPanel();
+        }
+
+        this.lockedUri = undefined;
+        this.lockedPageName = pageName;
+        this.lockedPageId = undefined;
+        this.renderForLockedTarget();
+    }
+
+    /**
+     * Show the backlinks panel for a known page (by id). Includes alias
+     * resolution for complete results.
+     */
+    showForPage(pageId: number, pageTitle: string): void {
+        if (this.panel) {
+            this.panel.reveal(vscode.ViewColumn.Beside, true);
+        } else {
+            this.createPanel();
+        }
+
+        this.lockedUri = undefined;
+        this.lockedPageName = pageTitle;
+        this.lockedPageId = pageId;
+        this.renderForLockedTarget();
     }
 
     /**
@@ -93,7 +104,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
      */
     refresh(): void {
         if (!this.panel) { return; }
-        this.renderForLockedUri();
+        this.renderForLockedTarget();
     }
 
     /** Whether the panel is currently visible. */
@@ -105,6 +116,8 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         this.panel?.dispose();
         this.panel = undefined;
         this.lockedUri = undefined;
+        this.lockedPageName = undefined;
+        this.lockedPageId = undefined;
         for (const d of this.disposables) {
             d.dispose();
         }
@@ -113,15 +126,48 @@ export class BacklinkPanelProvider implements vscode.Disposable {
 
     // ── Private ────────────────────────────────────────────────────────────
 
-    private renderForLockedUri(): void {
+    private createPanel(): void {
+        this.panel = vscode.window.createWebviewPanel(
+            'as-notes-backlinks',
+            'Backlinks',
+            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+            },
+        );
+
+        this.panel.iconPath = new vscode.ThemeIcon('references');
+
+        this.disposables.push(
+            this.panel.webview.onDidReceiveMessage((msg: WebviewMessage) => {
+                if (msg.command === 'navigate') {
+                    this.navigateToBacklink(msg.pagePath, msg.line);
+                }
+            }),
+        );
+
+        this.panel.onDidDispose(() => {
+            this.panel = undefined;
+            this.lockedUri = undefined;
+            this.lockedPageName = undefined;
+            this.lockedPageId = undefined;
+        }, null, this.disposables);
+    }
+
+    private renderForLockedTarget(): void {
         if (this.lockedUri && isMarkdownUri(this.lockedUri)) {
-            this.renderBacklinks(this.lockedUri);
+            this.renderBacklinksForUri(this.lockedUri);
+        } else if (this.lockedPageId !== undefined && this.lockedPageName) {
+            this.renderBacklinksForPage(this.lockedPageId, this.lockedPageName);
+        } else if (this.lockedPageName) {
+            this.renderBacklinksForName(this.lockedPageName);
         } else {
             this.renderNoFile();
         }
     }
 
-    private renderBacklinks(uri: vscode.Uri): void {
+    private renderBacklinksForUri(uri: vscode.Uri): void {
         if (!this.panel || !this.indexService.isOpen) { return; }
 
         const relativePath = vscode.workspace.asRelativePath(uri, false);
@@ -136,21 +182,85 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             return;
         }
 
-        const entries = this.indexService.getBacklinksIncludingAliases(page.id);
+        const groups = this.indexService.getBacklinkChains(page.id);
+        this.renderChainGroups(page.title, page.path, groups);
+    }
 
-        if (entries.length === 0) {
+    private renderBacklinksForPage(pageId: number, pageTitle: string): void {
+        if (!this.panel || !this.indexService.isOpen) { return; }
+        const groups = this.indexService.getBacklinkChains(pageId);
+        this.renderChainGroups(pageTitle, null, groups);
+    }
+
+    private renderBacklinksForName(pageName: string): void {
+        if (!this.panel || !this.indexService.isOpen) { return; }
+
+        const groups = this.indexService.getBacklinkChainsByName(pageName);
+        this.renderChainGroups(pageName, null, groups);
+    }
+
+    private renderChainGroups(pageTitle: string, originPagePath: string | null, groups: BacklinkChainGroup[]): void {
+        if (!this.panel) { return; }
+
+        if (groups.length === 0) {
             this.panel.webview.html = this.buildHtml(
-                page.title,
-                page.path,
+                pageTitle,
+                originPagePath,
                 '<div class="empty-state">No backlinks found for this page.</div>',
             );
             return;
         }
 
-        // Group by source page
-        const groups = this.groupBySourcePage(entries);
-        const html = this.renderGroups(groups, entries.length);
-        this.panel.webview.html = this.buildHtml(page.title, page.path, html);
+        const totalInstances = groups.reduce((sum, g) => sum + g.instances.length, 0);
+        const summaryHtml = `<div class="summary">${totalInstances} backlink${totalInstances === 1 ? '' : 's'} in ${groups.length} pattern${groups.length === 1 ? '' : 's'}</div>`;
+
+        const groupsHtml = groups.map(group => this.renderChainGroup(group)).join('');
+
+        this.panel.webview.html = this.buildHtml(pageTitle, originPagePath, summaryHtml + groupsHtml);
+    }
+
+    private renderChainGroup(group: BacklinkChainGroup): string {
+        const patternHtml = group.displayPattern
+            .map(name => `<span class="pattern-link">[[${escapeHtml(name)}]]</span>`)
+            .join('<span class="chain-arrow">\u2009\u2192\u2009</span>');
+
+        const count = group.instances.length;
+        const groupId = group.patternKey.replace(/[^a-zA-Z0-9]/g, '_');
+
+        const instancesHtml = group.instances
+            .map(instance => this.renderChainInstance(instance))
+            .join('');
+
+        return `<div class="chain-group">
+            <div class="chain-group-header" onclick="toggleGroup('${escapeAttr(groupId)}')">
+                <span class="group-chevron codicon codicon-chevron-down" id="chevron-${escapeAttr(groupId)}"></span>
+                <span class="chain-pattern">${patternHtml}</span>
+                <span class="group-count">${count}</span>
+            </div>
+            <div class="chain-group-body" id="group-${escapeAttr(groupId)}">
+                ${instancesHtml}
+            </div>
+        </div>`;
+    }
+
+    private renderChainInstance(instance: BacklinkChainInstance): string {
+        const pageTitle = escapeHtml(
+            instance.sourcePage.title || instance.sourcePage.filename.replace(/\.md$/, ''),
+        );
+        const pagePath = escapeAttr(instance.sourcePage.path);
+
+        const chainLinksHtml = instance.chain.map(link => {
+            const lineNum = link.line + 1; // 1-based for display
+            return `<span class="instance-link" onclick="event.stopPropagation(); navigate('${pagePath}', ${link.line})">[[${escapeHtml(link.pageName)}]] <span class="line-ref">L${lineNum}</span></span>`;
+        }).join('<span class="chain-arrow">\u2009\u2192\u2009</span>');
+
+        return `<div class="chain-instance">
+            <div class="instance-source" onclick="navigate('${pagePath}', 0)">
+                <span class="codicon codicon-file-text"></span>
+                <span class="source-title">${pageTitle}</span>
+            </div>
+            <div class="instance-chain">${chainLinksHtml}</div>
+        </div>`;
     }
 
     private renderNoFile(): void {
@@ -160,70 +270,6 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             null,
             '<div class="empty-state">Open a markdown file to see its backlinks.</div>',
         );
-    }
-
-    private groupBySourcePage(entries: BacklinkEntry[]): BacklinkGroup[] {
-        const map = new Map<number, BacklinkGroup>();
-        for (const entry of entries) {
-            const existing = map.get(entry.sourcePage.id);
-            if (existing) {
-                existing.entries.push(entry);
-            } else {
-                map.set(entry.sourcePage.id, {
-                    sourcePage: entry.sourcePage,
-                    entries: [entry],
-                });
-            }
-        }
-        return Array.from(map.values());
-    }
-
-    private renderGroups(groups: BacklinkGroup[], totalCount: number): string {
-        const summary = `<div class="summary">${totalCount} backlink${totalCount === 1 ? '' : 's'} from ${groups.length} page${groups.length === 1 ? '' : 's'}</div>`;
-
-        const groupsHtml = groups.map(group => {
-            const title = escapeHtml(group.sourcePage.title || group.sourcePage.filename.replace(/\.md$/, ''));
-            const filePath = escapeHtml(group.sourcePage.path);
-            const count = group.entries.length;
-
-            const entriesHtml = group.entries.map(entry => {
-                const lineNum = entry.link.line + 1; // 1-based for display
-                const context = entry.link.context || '';
-                const highlightedContext = this.highlightWikilink(context, entry.link.start_col, entry.link.end_col);
-                const pagePath = escapeAttr(entry.sourcePage.path);
-
-                return `<div class="backlink-entry" data-path="${pagePath}" data-line="${entry.link.line}" onclick="navigate('${pagePath}', ${entry.link.line})">
-                    <span class="line-number">L${lineNum}</span>
-                    <span class="context">${highlightedContext}</span>
-                </div>`;
-            }).join('');
-
-            return `<div class="backlink-group">
-                <div class="group-header" data-path="${escapeAttr(group.sourcePage.path)}" data-line="0" onclick="navigate('${escapeAttr(group.sourcePage.path)}', 0)">
-                    <span class="codicon codicon-file-text"></span>
-                    <span class="group-title">${title}</span>
-                    <span class="group-count">${count}</span>
-                </div>
-                <div class="group-path">${filePath}</div>
-                <div class="group-entries">${entriesHtml}</div>
-            </div>`;
-        }).join('');
-
-        return summary + groupsHtml;
-    }
-
-    /**
-     * Highlight the wikilink within the context line using start/end column positions.
-     * Escapes HTML in the non-highlighted parts.
-     */
-    private highlightWikilink(context: string, startCol: number, endCol: number): string {
-        if (startCol < 0 || endCol <= startCol || startCol >= context.length) {
-            return escapeHtml(context);
-        }
-        const before = escapeHtml(context.substring(0, startCol));
-        const link = escapeHtml(context.substring(startCol, endCol + 1));
-        const after = escapeHtml(context.substring(endCol + 1));
-        return `${before}<span class="highlight">${link}</span>${after}`;
     }
 
     private getPageTitle(uri: vscode.Uri): string {
@@ -333,31 +379,68 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             text-align: center;
         }
 
-        /* Backlink group */
-        .backlink-group {
-            margin-bottom: 16px;
+        /* Codicon support */
+        .codicon-file-text::before {
+            content: "\\eb60";
+            font-family: codicon;
+            font-size: 14px;
+            color: var(--vscode-descriptionForeground);
         }
 
-        .group-header {
+        .codicon-chevron-down::before {
+            content: "\\eab4";
+            font-family: codicon;
+            font-size: 14px;
+        }
+
+        .codicon-chevron-right::before {
+            content: "\\eab6";
+            font-family: codicon;
+            font-size: 14px;
+        }
+
+        /* Chain group */
+        .chain-group {
+            margin-bottom: 14px;
+        }
+
+        .chain-group-header {
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 6px;
+            padding: 5px 6px;
             cursor: pointer;
             border-radius: 3px;
             font-weight: 600;
             color: var(--vscode-foreground);
+            border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128,128,128,0.15)));
+            margin-bottom: 6px;
         }
 
-        .group-header:hover {
+        .chain-group-header:hover {
             background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
         }
 
-        .group-title {
+        .group-chevron {
+            flex-shrink: 0;
+        }
+
+        .chain-pattern {
             flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 2px;
+            font-size: 0.95em;
+        }
+
+        .pattern-link {
+            color: var(--vscode-textLink-foreground, #3794ff);
+        }
+
+        .chain-arrow {
+            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.4));
+            font-size: 0.85em;
         }
 
         .group-count {
@@ -371,67 +454,67 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             text-align: center;
         }
 
-        .group-path {
-            font-size: 0.8em;
-            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.6));
-            padding: 0 6px 4px 28px;
+        .chain-group-body {
+            padding-left: 8px;
+        }
+
+        .chain-group-body.collapsed {
+            display: none;
+        }
+
+        /* Chain instance */
+        .chain-instance {
+            margin-bottom: 8px;
+            padding: 2px 0;
+        }
+
+        .instance-source {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 6px;
+            cursor: pointer;
+            border-radius: 3px;
+            color: var(--vscode-foreground);
+            font-weight: 500;
+        }
+
+        .instance-source:hover {
+            background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
+        }
+
+        .source-title {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        /* Backlink entries */
-        .group-entries {
-            padding-left: 8px;
-        }
-
-        .backlink-entry {
+        .instance-chain {
             display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            padding: 3px 6px;
-            cursor: pointer;
-            border-radius: 3px;
-            border-left: 2px solid transparent;
-        }
-
-        .backlink-entry:hover {
-            background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
-            border-left-color: var(--vscode-focusBorder, #007acc);
-        }
-
-        .line-number {
-            font-size: 0.8em;
-            font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
-            color: var(--vscode-editorLineNumber-foreground, rgba(128,128,128,0.5));
-            min-width: 32px;
-            text-align: right;
-            flex-shrink: 0;
-            padding-top: 1px;
-        }
-
-        .context {
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 2px;
+            padding: 2px 6px 2px 28px;
             font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
             font-size: var(--vscode-editor-font-size, 13px);
-            color: var(--vscode-editor-foreground, var(--vscode-foreground));
-            white-space: pre;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            opacity: 0.85;
         }
 
-        .context .highlight {
+        .instance-link {
+            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.7));
+            cursor: pointer;
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
+
+        .instance-link:hover {
             color: var(--vscode-textLink-foreground, #3794ff);
-            font-weight: 600;
-            opacity: 1;
+            background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
+            text-decoration: underline;
         }
 
-        /* Codicon support */
-        .codicon-file-text::before {
-            content: "\\eb60";
-            font-family: codicon;
-            font-size: 14px;
-            color: var(--vscode-descriptionForeground);
+        .line-ref {
+            font-size: 0.8em;
+            color: var(--vscode-editorLineNumber-foreground, rgba(128,128,128,0.5));
         }
     </style>
 </head>
@@ -451,6 +534,19 @@ export class BacklinkPanelProvider implements vscode.Disposable {
                 pagePath: pagePath,
                 line: line,
             });
+        }
+
+        function toggleGroup(groupId) {
+            const body = document.getElementById('group-' + groupId);
+            const chevron = document.getElementById('chevron-' + groupId);
+            if (body && chevron) {
+                body.classList.toggle('collapsed');
+                if (body.classList.contains('collapsed')) {
+                    chevron.className = 'group-chevron codicon codicon-chevron-right';
+                } else {
+                    chevron.className = 'group-chevron codicon codicon-chevron-down';
+                }
+            }
         }
     </script>
 </body>

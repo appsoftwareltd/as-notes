@@ -332,14 +332,32 @@ The **AS Notes Tasks** panel appears in the Explorer sidebar when the workspace 
 
 ### Backlinks panel
 
-The **Backlinks** panel shows all incoming links to the active markdown file. Open it with `Ctrl+Alt+B` (Cmd+Alt+B on macOS), or click the references icon in the editor title bar.
+The **Backlinks** panel shows all incoming links to a target page. Open it with `Ctrl+Alt+B` (Cmd+Alt+B on macOS) for the active file, or right-click any wikilink and choose **"View Backlinks"** to see backlinks for that specific page (including forward references to pages that don't exist yet).
 
-- **Rich context** — each backlink shows the surrounding line with the wikilink highlighted.
-- **Grouped by page** — organised by source file with page title and path.
-- **Click to navigate** — click any backlink entry to jump directly to the source file and line.
+Every backlink is displayed as a **chain** — the full outline context path from root to the link. A standalone mention (with no outline nesting) is simply a chain of length 1. Chains are grouped by their pattern (the sequence of page names), so identical structures from different source files appear together.
+
+#### Chain-first display
+
+- **Pattern grouping** — backlinks are grouped by their chain pattern (e.g. all `[[Project]] → [[Tasks]] → [[NGINX]]` from different files appear in one group).
+- **Standalone mentions** — direct `[[wikilink]]` references appear as single-link chains, sorted first.
+- **Outline context** — if a wikilink is indented below another wikilink, the full hierarchy is shown as a chain (e.g. `Page A → Page B → Page C`), with each link clickable.
+- **Per-link line numbers** — each chain link shows its line number (e.g. `[L12]`) for precise navigation.
+- **Case-insensitive grouping** — `[[server]]` and `[[Server]]` produce the same chain pattern.
+
+#### Context menu — View Backlinks
+
+Right-click any wikilink in the editor to open backlinks for that specific page:
+- Works with aliases — if the wikilink targets an alias, backlinks for the canonical page are shown.
+- Works with forward references — pages that don't exist yet still show any incoming links.
+
+---
+
+**Common features:**
+
 - **Alias-aware** — includes links that target the page via its aliases, not just direct filename references.
 - **Live sync** — the panel auto-updates when you switch files, save, or when the index changes.
-- **Editor-side display** — opens beside your active editor (like Markdown Preview), giving you a spacious view of backlink context.
+- **Editor-side display** — opens beside your active editor, giving you a spacious view of backlink context.
+- **Collapsible groups** — click a chain group header to expand or collapse its instances.
 
 ### Daily journal
 

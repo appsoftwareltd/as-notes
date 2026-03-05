@@ -19,6 +19,7 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Index update triggers](#index-update-triggers)
   - [Periodic scanning](#periodic-scanning)
   - [Manual rebuild](#manual-rebuild)
+  - [Automatic schema migration (PRAGMA user_version)](#automatic-schema-migration-pragma-user_version)
   - [Clean workspace](#clean-workspace)
 - [Aliases and front matter](#aliases-and-front-matter)
   - [FrontMatterService](#frontmatterservice)
@@ -78,9 +79,13 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Sync strategy](#sync-strategy)
 - [Backlinks panel](#backlinks-panel)
   - [BacklinkPanelProvider](#backlinkpanelprovider)
-  - [Data flow](#data-flow)
+  - [Chain-first grouping](#chain-first-grouping)
+  - [Data flow](#data-flow-1)
+  - [Context menu — View Backlinks](#context-menu--view-backlinks)
+  - [Types](#types)
+  - [Chain building](#chain-building)
   - [Message protocol](#message-protocol)
-  - [Styling](#styling)
+  - [Rendering](#rendering)
   - [Sync strategy](#sync-strategy-1)
 - [Daily journal](#daily-journal)
   - [JournalService](#journalservice)
@@ -204,8 +209,10 @@ CREATE TABLE links (
     start_col INTEGER NOT NULL,     -- column of first [
     end_col INTEGER NOT NULL,       -- column of last ]
     context TEXT,                   -- full line text for display
-    parent_link_id INTEGER REFERENCES links(id),  -- nesting parent
-    depth INTEGER NOT NULL DEFAULT 0               -- nesting depth (0 = top-level)
+    parent_link_id INTEGER REFERENCES links(id),  -- nesting parent (bracket-based)
+    depth INTEGER NOT NULL DEFAULT 0,              -- nesting depth (0 = top-level)
+    indent_level INTEGER NOT NULL DEFAULT 0,       -- leading whitespace count
+    outline_parent_link_id INTEGER REFERENCES links(id) ON DELETE SET NULL  -- outliner parent
 );
 
 CREATE TABLE aliases (
@@ -225,7 +232,7 @@ CREATE TABLE tasks (
 );
 ```
 
-Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`.
+Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`, `idx_links_outline_parent`.
 
 ### Content indexing and nesting
 
@@ -235,13 +242,23 @@ Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name
 
 2. **Page upsert** — `upsertPage()` uses an UPDATE-first-then-INSERT pattern to avoid UPSERT syntax differences.
 
-3. **Link parsing** — `setLinksForPageWithNesting()` parses all lines with `WikilinkService.extractWikilinks()` and inserts links in two passes:
-   - **Pass 1:** Insert all links with `parent_link_id = NULL`.
+3. **Link parsing** — `setLinksForPageWithNesting()` parses all lines with `WikilinkService.extractWikilinks()` and inserts links in three passes:
+   - **Pass 1:** Insert all links with `parent_link_id = NULL`, including `indent_level` computed from leading whitespace (`computeIndentLevel()`).
    - **Pass 2:** For each link, find the smallest containing wikilink (`findParentWikilink()`), look up its DB id, and UPDATE `parent_link_id`.
+   - **Pass 3:** Compute outliner parents via `computeOutlineParents()`, updating `outline_parent_link_id`.
 
-   This two-pass approach avoids foreign key ordering issues — all link ids exist before parent references are set.
+   This three-pass approach avoids foreign key ordering issues — all link ids exist before parent references are set.
 
-4. **Depth computation** — `computeDepth()` counts how many larger wikilinks fully contain the current one (by position range). Depth 0 = top-level, depth 1 = nested inside one parent, etc.
+4. **Indent level** — `computeIndentLevel(lineText)` counts leading whitespace characters (spaces and tabs) to determine the indentation of each wikilink's source line. This is used by the outliner parent algorithm.
+
+5. **Outline parent computation** — `computeOutlineParents()` uses a stack-based algorithm to determine the outline hierarchy between wikilinks on a page:
+   - Links are processed in document order (by line, then column).
+   - A stack of `(linkId, indentLevel)` pairs tracks the current hierarchy.
+   - For each new link, the stack is popped until the top element has a strictly smaller indent level — that element becomes the outline parent.
+   - Same-line links (peers) share the same outline parent; only the first link on each line is pushed to the stack.
+   - The result is a tree structure stored via `outline_parent_link_id` in the `links` table.
+
+6. **Depth computation** — `computeDepth()` counts how many larger wikilinks fully contain the current one (by position range). Depth 0 = top-level, depth 1 = nested inside one parent, etc.
 
 ### Staleness detection
 
@@ -394,6 +411,48 @@ WASM linear memory can grow but never shrink. After indexing 18k files the heap 
 **How `resetCache()` works:**
 
 sql.js caches the first `initSqlJs()` promise forever in a closure variable (`initSqlJsPromise`). The `sqlJsCacheResetPlugin` esbuild plugin (in `build.mjs`) intercepts `sql-wasm.js` during bundling and injects `initSqlJs.resetCache = function() { initSqlJsPromise = undefined; };` — this has closure access to the private variable. Calling `resetCache()` allows the next `initSqlJs()` to load a fresh WASM binary with clean memory. The old WASM module (~80 MB) becomes unreferenced and eligible for GC.
+
+### Automatic schema migration (PRAGMA user_version)
+
+Every time `IndexService.initDatabase()` opens an existing `.asnotes/index.db` file, it compares the stored `PRAGMA user_version` against the compiled-in `SCHEMA_VERSION` constant. If the stored value is lower, the schema is outdated and the database is automatically dropped and rebuilt.
+
+**Why this matters:** The index database is a pure derived artifact — every record can be regenerated by re-scanning the markdown files. There is no user data that cannot be recovered. This makes drop-and-rebuild the simplest and safest migration strategy: no incremental SQL migration scripts, no ALTER TABLE statements, no data transformations.
+
+**`SCHEMA_VERSION` constant:**
+
+```typescript
+// src/IndexService.ts
+export const SCHEMA_VERSION = 1;
+```
+
+This integer is incremented whenever the schema changes (new column, new table, dropped index, etc.). Every future change only requires two edits: update `SCHEMA_SQL` and increment `SCHEMA_VERSION`.
+
+**`initDatabase()` flow:**
+
+1. If the DB file exists, open it and read `PRAGMA user_version`.
+2. If `storedVersion < SCHEMA_VERSION`, call `resetSchema()` (drops all tables, fresh WASM instance, recreates schema) then stamp `PRAGMA user_version = SCHEMA_VERSION`. Return `{ schemaReset: true }`.
+3. If `storedVersion >= SCHEMA_VERSION`, proceed normally (enable FK enforcement, run `SCHEMA_SQL` with `CREATE TABLE IF NOT EXISTS`). Return `{ schemaReset: false }`.
+4. If the DB file does not exist, create a new in-memory database and stamp `user_version`. Return `{ schemaReset: false }`.
+
+**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 1`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
+
+**Caller contract:** `initDatabase()` returns `{ schemaReset: boolean }`. In `enterFullMode()` in `extension.ts`:
+
+```typescript
+const { schemaReset } = await indexService.initDatabase();
+if (schemaReset) {
+    // Schema was outdated — force a full rebuild with a progress notification
+    await vscode.window.withProgress({ title: 'AS Notes: Rebuilding index (schema updated)' }, ...);
+} else {
+    // Normal path — run a stale scan to catch external changes
+    const summary = await indexScanner.staleScan();
+    ...
+}
+```
+
+`resetSchema()` also stamps `user_version` directly, so a manual rebuild via the **Rebuild Index** command also keeps the version current.
+
+**Scale:** Drop-and-rebuild works for arbitrarily complex schema changes because the migration code path never changes. There are no migration scripts to maintain or chain. Adding a new column, index, or table only requires changing `SCHEMA_SQL` and incrementing `SCHEMA_VERSION`.
 
 ### Clean workspace
 
@@ -1175,40 +1234,101 @@ The `toggleTodoCommand` additionally re-indexes the current buffer after the edi
 
 ## Backlinks panel
 
-The backlinks panel displays all incoming links to the currently active markdown file. It uses a `WebviewPanel` that opens beside the active editor (like Markdown Preview), providing rich HTML rendering of backlink context.
+The backlinks panel displays all incoming links to a target page — either the currently active markdown file or a specific wikilink chosen via right-click context menu. It uses a `WebviewPanel` in `ViewColumn.Beside` with rich HTML rendering. The panel presents a single unified **Backlinks** view where every backlink is shown as a **chain** — the full outline context path from root to the link itself. Standalone mentions (no outline nesting) appear as chains of length 1.
 
 ### BacklinkPanelProvider
 
 `BacklinkPanelProvider` (`src/BacklinkPanelProvider.ts`) manages the webview panel lifecycle:
 
-- **`show()`** — creates a new `WebviewPanel` in `ViewColumn.Beside` with `preserveFocus: true` (so the editor keeps focus), or reveals an existing one. Uses `retainContextWhenHidden: true` to preserve state when the panel is not visible.
-- **`update(uri)`** — called when the active editor changes. Queries the index for the given file's backlinks and renders the HTML.
-- **`refresh()`** — re-renders the current file's backlinks. Called by all index update triggers (same set as task panel and completion provider).
+- **`show()`** — creates or reveals the panel for the currently active editor file. Resolves the active file's page in the index and displays its backlink chains.
+- **`showForPage(pageId, pageTitle)`** — opens the panel locked to a specific page by its database ID. Used when the target page exists in the index (e.g. right-clicking a wikilink that resolves to a known page, including via alias resolution).
+- **`showForName(pageName)`** — opens the panel locked to a page name without requiring a page to exist. Used for forward references (wikilinks to pages that haven't been created yet).
+- **`update(uri)`** — called when the active editor changes. Re-renders backlinks for the given file unless the panel is locked to a specific page/name.
+- **`refresh()`** — re-renders the current target's backlinks. Called by all index update triggers.
 - **`dispose()`** — cleans up the panel and listeners.
+
+### Chain-first grouping
+
+All backlinks are grouped by their **chain pattern** — the abstract sequence of page names from root to the target link. For example, `[[Project]] → [[Tasks]] → [[NGINX]]` is a different pattern from `[[NGINX]]` alone.
+
+Grouping logic:
+1. Query all links pointing to the target page's filename(s) — including alias filenames
+2. For each link, build the full chain via `buildChainForLink()` (walk `outline_parent_link_id` upward, then reverse)
+3. Compute a **pattern key**: the lowercased, `→`-joined sequence of page names (case-insensitive grouping)
+4. Group chain instances by pattern key
+5. Sort groups: length-1 chains first, then longer chains alphabetically by pattern key
+6. Within each group, instances are sorted alphabetically by source page title
 
 ### Data flow
 
-1. The provider resolves the active file's workspace-relative path via `vscode.workspace.asRelativePath()`
-2. Looks up the page in the index via `IndexService.getPageByPath()`
-3. Queries `IndexService.getBacklinksIncludingAliases(pageId)` which returns `BacklinkEntry[]` — each containing a full `LinkRow` (with `context`, `line`, `start_col`, `end_col`) and the source `PageRow` (with `title`, `path`)
-4. Groups entries by source page
-5. Renders HTML with backlinks grouped under page headers, context lines with the wikilink text highlighted, and line numbers
+1. **Active file mode**: resolves workspace-relative path → `getPageByPath()` → `getBacklinkChains(pageId)`
+2. **Locked page mode**: uses stored `lockedPageId` → `getBacklinkChains(pageId)`
+3. **Forward ref mode**: uses stored `lockedPageName` → `getBacklinkChainsByName(pageName)`
 
-The `getBacklinksIncludingAliases()` method collects the page's own filename plus all alias filenames and queries links matching any of them in a single `IN (...)` clause, joined with the `pages` table for source page metadata. Results are ordered by page title (case-insensitive), then line number and column.
+Both `getBacklinkChains()` and `getBacklinkChainsByName()` call the private `buildBacklinkChainGroups(targetFilenames)` method which:
+- Queries `SELECT l.id, l.source_page_id, p.* FROM links l JOIN pages p ON l.source_page_id = p.id WHERE LOWER(l.page_filename) IN (...)` with case-insensitive filename matching
+- Builds chain for each link via `buildChainForLink(linkId)`
+- Groups by lowercased pattern key into `BacklinkChainGroup[]`
+
+### Context menu — View Backlinks
+
+The `as-notes.viewBacklinks` command (registered in `extension.ts`) enables right-clicking any wikilink in the editor to open backlinks for that specific page:
+
+1. Extracts all wikilinks from the active editor's document text
+2. Finds the innermost wikilink at the cursor position via `WikilinkService.findInnermostWikilinkAtOffset()`
+3. Looks up the page via `IndexService.findPagesByFilename(filename)` (handles alias resolution)
+4. If found: calls `showForPage(pageId, pageTitle)`
+5. If not found (forward reference): calls `showForName(pageName)`
+
+The command appears in the `editor/context` menu when `as-notes.fullMode` is active and the editor language is markdown.
+
+### Types
+
+```typescript
+interface BacklinkChainLink {
+    linkId: number;
+    pageName: string;
+    pageFilename: string;
+    line: number;
+    startCol: number;
+    endCol: number;
+}
+
+interface BacklinkChainInstance {
+    chain: BacklinkChainLink[];
+    sourcePage: PageRow;
+}
+
+interface BacklinkChainGroup {
+    patternKey: string;           // lowercased page names joined by ' → '
+    displayPattern: string[];     // original-cased page names for display
+    instances: BacklinkChainInstance[];
+}
+```
+
+The `BacklinkEntry` interface and `getBacklinksIncludingAliases()` method are retained for use by `WikilinkHoverProvider`.
+
+### Chain building
+
+**`buildChainForLink(linkId)`** (public method on `IndexService`) walks the `outline_parent_link_id` chain from a given link upward to the root, collecting `BacklinkChainLink` entries for each step, then reverses for root-to-leaf order. A standalone mention (no `outline_parent_link_id`) produces a chain of length 1.
 
 ### Message protocol
 
 The webview communicates with the extension via `postMessage`:
 
-- **`navigate`** — sent when the user clicks a backlink entry or page header. Payload: `{ command: 'navigate', pagePath: string, line: number }`. The provider opens the file in `ViewColumn.One` and scrolls to the line.
+- **`navigate`** — sent when the user clicks a chain link or source page header. Payload: `{ command: 'navigate', pagePath: string, line: number }`. The provider opens the file in `ViewColumn.One` and scrolls to the line.
 
-### Styling
+### Rendering
 
-The HTML uses VS Code CSS variables (`--vscode-foreground`, `--vscode-editor-background`, `--vscode-list-hoverBackground`, etc.) for automatic light/dark theme support. Context lines use the editor's monospace font. Wikilink text within context is highlighted with `--vscode-textLink-foreground`. Hover states provide visual feedback on clickable elements.
+Each chain group renders as a collapsible section with:
+- **Header**: the chain pattern displayed as clickable page name links separated by `→` arrows, with an instance count badge
+- **Instances**: each instance shows the source page title followed by the chain with per-link line numbers (e.g. `[L12]`), each clickable for navigation
+
+The HTML uses VS Code CSS variables for automatic light/dark theme support. Chain arrows use dimmed description foreground. Clickable elements have hover states.
 
 ### Sync strategy
 
-The backlink panel follows the same sync pattern as the task panel and completion provider. All index update triggers (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) call `backlinkPanelProvider?.refresh()`. Additionally, `onDidChangeActiveTextEditor` calls `backlinkPanelProvider?.update(uri)` to show backlinks for the newly active file.
+The backlink panel follows the same sync pattern as the task panel and completion provider. All index update triggers (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) call `backlinkPanelProvider?.refresh()`. Additionally, `onDidChangeActiveTextEditor` calls `backlinkPanelProvider?.update(uri)` to show backlinks for the newly active file (unless the panel is locked to a specific target).
 
 ---
 
@@ -1529,25 +1649,41 @@ Tests use vitest and are split across eight test files:
 
 3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
 
-### `IndexService.test.ts` (67 tests)
+### `IndexService.test.ts` (119 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
 2. **Schema** (2 tests) — table creation verification (including tasks table), `isOpen` state.
 
-3. **Page CRUD** (6 tests) — insert, upsert, query, delete, cascade.
+3. **Schema versioning** (5 tests) — new DB gets `user_version` stamped; existing up-to-date DB returns `schemaReset: false`; existing DB with version 0 (pre-versioning) returns `schemaReset: true` and stamps new version; after reset tables exist and data is wiped; post-reset DB is fully functional for indexing.
 
-4. **Link CRUD** (8 tests) — insert, replace, backlinks, backlink count, nesting with parent_link_id and depth, rename updates, page path updates.
+4. **Page CRUD** (6 tests) — insert, upsert, query, delete, cascade.
 
-5. **Reset schema** (1 test) — drop and recreate.
+5. **Link CRUD** (8 tests) — insert, replace, backlinks, backlink count, nesting with parent_link_id and depth, rename updates, page path updates.
 
-6. **`indexFileContent`** (9 tests) — simple file, nested links, 3-level nesting, multi-line, title fallback, re-index, backlinks, empty file, filename sanitisation.
+6. **Reset schema** (1 test) — drop and recreate.
 
-7. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation, `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow.
+7. **`indexFileContent`** (9 tests) — simple file, nested links, 3-level nesting, multi-line, title fallback, re-index, backlinks, empty file, filename sanitisation.
 
-8. **Aliases** (15 tests) — alias storage from front matter, re-indexing replaces aliases, no-front-matter edge case, `resolveAlias()` success and failure, case-insensitive resolution, `resolvePageByFilename()` direct vs alias match, backlink count including aliases, `updateAliasRename()` for alias record and link references, `findPagesByFilename()` for subfolder resolution, cascade delete on page removal, filename sanitisation, `getPageById()`, `getAllAliases()` with canonical page info, empty aliases.
+8. **Rename support** (6 tests) — link state for positional comparison, rename detection simulation, `updateRename()` for link references, `updatePagePath()` for page records, nested link rename detection, full rename flow.
 
-9. **Task indexing** (11 tests) — unchecked and done task indexing, re-index replacement, todoOnly filter, pages with tasks grouped by count, task counts, cascade delete on page removal, indented tasks, `*` bullet tasks, non-todo exclusion, empty tasks, `line_text` storage.
+9. **Aliases** (15 tests) — alias storage from front matter, re-indexing replaces aliases, no-front-matter edge case, `resolveAlias()` success and failure, case-insensitive resolution, `resolvePageByFilename()` direct vs alias match, backlink count including aliases, `updateAliasRename()` for alias record and link references, `findPagesByFilename()` for subfolder resolution, cascade delete on page removal, filename sanitisation, `getPageById()`, `getAllAliases()` with canonical page info, empty aliases.
+
+10. **Forward referenced pages** (7 tests) — unresolved links, resolved links excluded, ghost page detection, multi-file scenarios, alias exclusion.
+
+11. **Indent level computation** (4 tests) — zero indent, spaces, tabs, mixed.
+
+12. **Indent level indexing** (4 tests) — zero indent stored, indented links stored, mixed indents, tab indented.
+
+13. **Outline parent computation** (14 tests) — basic nesting, siblings, multi-level, same-line peers, nested wikilinks, cross-line inheritance, deep hierarchies.
+
+14. **Unified backlink chains / `getBacklinkChains`** (14 tests) — standalone mention (chain length 1), chain with outline context, pattern grouping across files, separate groups for different patterns, length-1-first sorting, alias resolution, empty/non-existent page, line numbers, alphabetical instance sorting, case-insensitive pattern grouping, alias in outline context, multiple backlinks from same page, real-world outliner scenario.
+
+15. **Forward reference chains / `getBacklinkChainsByName`** (3 tests) — forward reference with no page file, empty for unreferenced name, chain with outline context for forward reference.
+
+16. **Task indexing** (11 tests) — unchecked and done task indexing, re-index replacement, todoOnly filter, pages with tasks grouped by count, task counts, cascade delete on page removal, indented tasks, `*` bullet tasks, non-todo exclusion, empty tasks, `line_text` storage.
+
+17. **`getBacklinksIncludingAliases`** (7 tests) — direct backlinks, alias backlinks, self-link exclusion, empty result, line/column data, ordering by title then line.
 
 ### `WikilinkFileService.test.ts` (10 tests)
 

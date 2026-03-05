@@ -28,6 +28,8 @@ export interface LinkRow {
     context: string | null;
     parent_link_id: number | null;
     depth: number;
+    indent_level: number;
+    outline_parent_link_id: number | null;
 }
 
 export interface LinkInsert {
@@ -39,6 +41,8 @@ export interface LinkInsert {
     context: string | null;
     parent_link_id: number | null;
     depth: number;
+    indent_level: number;
+    outline_parent_link_id: number | null;
 }
 
 export interface AliasRow {
@@ -69,7 +73,43 @@ export interface BacklinkEntry {
     sourcePage: PageRow;
 }
 
+/** A single link in a backlink chain, from root to leaf. */
+export interface BacklinkChainLink {
+    linkId: number;
+    pageName: string;
+    pageFilename: string;
+    line: number;
+    startCol: number;
+    endCol: number;
+}
+
+/** A single chain instance (one occurrence on one source page). */
+export interface BacklinkChainInstance {
+    /** The chain from the outline root down to the target link, in document order. */
+    chain: BacklinkChainLink[];
+    /** The source page where this chain exists. */
+    sourcePage: PageRow;
+}
+
+/** A group of chain instances sharing the same abstract pattern. */
+export interface BacklinkChainGroup {
+    /** Page-name sequence lowercased (for grouping key). */
+    patternKey: string;
+    /** Page-name sequence in original case (for display). */
+    displayPattern: string[];
+    /** All occurrences of this chain pattern, sorted by source page title. */
+    instances: BacklinkChainInstance[];
+}
+
 // ── Schema ─────────────────────────────────────────────────────────────────
+
+/**
+ * Increment this whenever the schema changes (new columns, tables, indexes).
+ * On DB open, if the stored user_version is less than this value, the database
+ * is dropped and rebuilt from scratch. Because the DB is a pure derived index
+ * (fully regeneratable from markdown files), drop-and-rebuild is always safe.
+ */
+export const SCHEMA_VERSION = 1;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS pages (
@@ -91,7 +131,9 @@ CREATE TABLE IF NOT EXISTS links (
     end_col INTEGER NOT NULL,
     context TEXT,
     parent_link_id INTEGER REFERENCES links(id) ON DELETE CASCADE,
-    depth INTEGER NOT NULL DEFAULT 0
+    depth INTEGER NOT NULL DEFAULT 0,
+    indent_level INTEGER NOT NULL DEFAULT 0,
+    outline_parent_link_id INTEGER REFERENCES links(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS aliases (
@@ -104,6 +146,7 @@ CREATE TABLE IF NOT EXISTS aliases (
 CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_page_id);
 CREATE INDEX IF NOT EXISTS idx_links_page_filename ON links(page_filename);
 CREATE INDEX IF NOT EXISTS idx_links_page_name ON links(page_name);
+CREATE INDEX IF NOT EXISTS idx_links_outline_parent ON links(outline_parent_link_id);
 CREATE INDEX IF NOT EXISTS idx_aliases_alias_name ON aliases(alias_name);
 CREATE INDEX IF NOT EXISTS idx_aliases_canonical ON aliases(canonical_page_id);
 CREATE INDEX IF NOT EXISTS idx_pages_path ON pages(path);
@@ -191,8 +234,12 @@ export class IndexService {
     /**
      * Initialise the database. Opens an existing file or creates a new one.
      * Creates the schema tables if they don't already exist.
+     *
+     * Returns `{ schemaReset: true }` if the database schema was outdated and
+     * was dropped and recreated. The caller should trigger a full index rebuild
+     * in this case.
      */
-    async initDatabase(): Promise<void> {
+    async initDatabase(): Promise<{ schemaReset: boolean }> {
         // Reuse the cached WASM module — see ensureSqlModule() for rationale.
         const SQL = await this.ensureSqlModule();
 
@@ -200,6 +247,18 @@ export class IndexService {
             const fileBuffer = fs.readFileSync(this.dbPath);
             this.logger.info('IndexService', `initDatabase: opening existing file (${fileBuffer.length} bytes)`);
             this.db = new SQL.Database(fileBuffer);
+
+            // Check schema version — if outdated, drop and recreate.
+            // user_version is a SQLite pragma we control; 0 means never set (pre-versioning).
+            const versionResult = this.db.exec('PRAGMA user_version');
+            const storedVersion = (versionResult[0]?.values[0]?.[0] as number) ?? 0;
+            if (storedVersion < SCHEMA_VERSION) {
+                this.logger.info('IndexService', `initDatabase: schema version ${storedVersion} < ${SCHEMA_VERSION} — resetting database`);
+                await this.resetSchema();
+                this.db!.run(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+                this.logger.info('IndexService', 'initDatabase: schema reset complete');
+                return { schemaReset: true };
+            }
         } else {
             this.logger.info('IndexService', 'initDatabase: creating new in-memory database');
             this.db = new SQL.Database();
@@ -208,7 +267,9 @@ export class IndexService {
         // Enable foreign key enforcement
         this.db.run('PRAGMA foreign_keys = ON;');
         this.db.run(SCHEMA_SQL);
+        this.db.run(`PRAGMA user_version = ${SCHEMA_VERSION}`);
         this.logger.info('IndexService', 'initDatabase: complete');
+        return { schemaReset: false };
     }
 
     /**
@@ -291,6 +352,7 @@ export class IndexService {
         this.db = new this.sqlModule.Database();
         this.db.run('PRAGMA foreign_keys = ON;');
         this.db.run(SCHEMA_SQL);
+        this.db.run(`PRAGMA user_version = ${SCHEMA_VERSION}`);
         this.logger.info('IndexService', 'resetSchema: complete');
     }
 
@@ -441,9 +503,9 @@ export class IndexService {
         const ids: number[] = [];
         for (const link of links) {
             this.db!.run(
-                `INSERT INTO links (source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [pageId, link.page_name, link.page_filename, link.line, link.start_col, link.end_col, link.context, link.parent_link_id, link.depth],
+                `INSERT INTO links (source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth, indent_level, outline_parent_link_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [pageId, link.page_name, link.page_filename, link.line, link.start_col, link.end_col, link.context, link.parent_link_id, link.depth, link.indent_level ?? 0, link.outline_parent_link_id ?? null],
             );
             const result = this.db!.exec(`SELECT last_insert_rowid()`);
             ids.push(result[0].values[0][0] as number);
@@ -458,7 +520,7 @@ export class IndexService {
     getLinksForPage(pageId: number): LinkRow[] {
         this.ensureOpen();
         const result = this.db!.exec(
-            `SELECT id, source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth
+            `SELECT id, source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth, indent_level, outline_parent_link_id
              FROM links WHERE source_page_id = ?`,
             [pageId],
         );
@@ -472,7 +534,7 @@ export class IndexService {
     getBacklinks(pageFilename: string): LinkRow[] {
         this.ensureOpen();
         const result = this.db!.exec(
-            `SELECT l.id, l.source_page_id, l.page_name, l.page_filename, l.line, l.start_col, l.end_col, l.context, l.parent_link_id, l.depth
+            `SELECT l.id, l.source_page_id, l.page_name, l.page_filename, l.line, l.start_col, l.end_col, l.context, l.parent_link_id, l.depth, l.indent_level, l.outline_parent_link_id
              FROM links l WHERE l.page_filename = ?`,
             [pageFilename],
         );
@@ -602,6 +664,8 @@ export class IndexService {
     /**
      * Insert links for a page with correct parent_link_id references for nested links.
      * Handles the two-pass insert: first insert all links, then update parent references.
+     * Also computes indent_level (leading whitespace) and outline_parent_link_id
+     * (closest preceding link on the same page with strictly less indent).
      */
     setLinksForPageWithNesting(pageId: number, content: string): number[] {
         const wikilinkService = new WikilinkService();
@@ -611,32 +675,39 @@ export class IndexService {
         this.ensureOpen();
         this.db!.run(`DELETE FROM links WHERE source_page_id = ?`, [pageId]);
 
+        // Collect all link inserts with their indent levels and DB ids
         const allIds: number[] = [];
+        // Track (linkId, indentLevel, lineNum) for outline parent computation
+        const linkMeta: { id: number; indentLevel: number; line: number }[] = [];
 
         for (let lineNum = 0; lineNum < lines.length; lineNum++) {
             const lineText = lines[lineNum];
             const wikilinks = wikilinkService.extractWikilinks(lineText, false, false);
             if (wikilinks.length === 0) { continue; }
 
+            // Compute indent level from leading whitespace (tabs count as 1 char)
+            const indentLevel = IndexService.computeIndentLevel(lineText);
+
             // Sort outermost first (largest range)
             const sorted = [...wikilinks].sort((a, b) => b.length - a.length);
 
-            // First pass: insert all links with null parent_link_id
+            // First pass: insert all links with null parent_link_id and outline_parent_link_id
             const wlToId = new Map<Wikilink, number>();
             for (const wl of sorted) {
                 const depth = this.computeDepth(wl, sorted);
                 this.db!.run(
-                    `INSERT INTO links (source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [pageId, wl.pageName, `${wl.pageFileName}.md`, lineNum, wl.startPositionInText, wl.endPositionInText, lineText, null, depth],
+                    `INSERT INTO links (source_page_id, page_name, page_filename, line, start_col, end_col, context, parent_link_id, depth, indent_level, outline_parent_link_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [pageId, wl.pageName, `${wl.pageFileName}.md`, lineNum, wl.startPositionInText, wl.endPositionInText, lineText, null, depth, indentLevel, null],
                 );
                 const result = this.db!.exec(`SELECT last_insert_rowid()`);
                 const linkId = result[0].values[0][0] as number;
                 wlToId.set(wl, linkId);
                 allIds.push(linkId);
+                linkMeta.push({ id: linkId, indentLevel, line: lineNum });
             }
 
-            // Second pass: set parent_link_id for nested links
+            // Second pass: set parent_link_id for nested (bracket-nested) links
             for (const wl of sorted) {
                 const parent = this.findParentWikilink(wl, sorted);
                 if (parent) {
@@ -650,7 +721,71 @@ export class IndexService {
             }
         }
 
+        // Third pass: compute outline_parent_link_id using a stack-based algorithm.
+        // Walk links in document order (line ASC). For each link, the outline parent
+        // is the closest preceding link with strictly less indent_level.
+        // Links on the same line share the same outline parent (they are peers).
+        this.computeOutlineParents(linkMeta);
+
         return allIds;
+    }
+
+    /**
+     * Compute the leading whitespace count for a line.
+     * Spaces count as 1, tabs count as 1 character each.
+     */
+    static computeIndentLevel(lineText: string): number {
+        let count = 0;
+        for (const ch of lineText) {
+            if (ch === ' ' || ch === '\t') {
+                count++;
+            } else {
+                break;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Compute outline_parent_link_id for all links on a page using a stack-based algorithm.
+     * Links are expected in document order (line ASC).
+     * Same-line links are peers — they share the same outline parent.
+     */
+    private computeOutlineParents(linkMeta: { id: number; indentLevel: number; line: number }[]): void {
+        if (linkMeta.length === 0) { return; }
+
+        // Stack of { id, indentLevel } — represents the current outline ancestry
+        const stack: { id: number; indentLevel: number }[] = [];
+
+        // Group by line so same-line links get the same parent
+        let i = 0;
+        while (i < linkMeta.length) {
+            const currentLine = linkMeta[i].line;
+            const currentIndent = linkMeta[i].indentLevel;
+
+            // Pop stack until top has indent strictly less than current
+            while (stack.length > 0 && stack[stack.length - 1].indentLevel >= currentIndent) {
+                stack.pop();
+            }
+
+            const outlineParentId = stack.length > 0 ? stack[stack.length - 1].id : null;
+
+            // Assign outline parent to all links on this line, then push the first one onto the stack
+            const lineLinks: number[] = [];
+            while (i < linkMeta.length && linkMeta[i].line === currentLine) {
+                lineLinks.push(linkMeta[i].id);
+                if (outlineParentId !== null) {
+                    this.db!.run(
+                        `UPDATE links SET outline_parent_link_id = ? WHERE id = ?`,
+                        [outlineParentId, linkMeta[i].id],
+                    );
+                }
+                i++;
+            }
+
+            // Push only the first link on this line as the representative for outline ancestry
+            stack.push({ id: lineLinks[0], indentLevel: currentIndent });
+        }
     }
 
     /**
@@ -903,7 +1038,7 @@ export class IndexService {
         const allFilenames = [filename, ...aliasFilenames];
         const placeholders = allFilenames.map(() => '?').join(', ');
         const result = this.db!.exec(
-            `SELECT l.id, l.source_page_id, l.page_name, l.page_filename, l.line, l.start_col, l.end_col, l.context, l.parent_link_id, l.depth,
+            `SELECT l.id, l.source_page_id, l.page_name, l.page_filename, l.line, l.start_col, l.end_col, l.context, l.parent_link_id, l.depth, l.indent_level, l.outline_parent_link_id,
                     p.id, p.path, p.filename, p.title, p.mtime, p.indexed_at
              FROM links l
              JOIN pages p ON l.source_page_id = p.id
@@ -924,16 +1059,190 @@ export class IndexService {
                 context: row[7] as string | null,
                 parent_link_id: row[8] as number | null,
                 depth: row[9] as number,
+                indent_level: row[10] as number,
+                outline_parent_link_id: row[11] as number | null,
             },
             sourcePage: {
-                id: row[10] as number,
-                path: row[11] as string,
-                filename: row[12] as string,
-                title: row[13] as string,
-                mtime: row[14] as number,
-                indexed_at: row[15] as number,
+                id: row[12] as number,
+                path: row[13] as string,
+                filename: row[14] as string,
+                title: row[15] as string,
+                mtime: row[16] as number,
+                indexed_at: row[17] as number,
             },
         }));
+    }
+
+    // ── Unified backlink chains ─────────────────────────────────────────
+
+    /**
+     * Get all page filenames (including aliases) for a given page id.
+     */
+    private getPageFilenames(pageId: number): string[] {
+        const pageResult = this.db!.exec(
+            `SELECT filename FROM pages WHERE id = ?`, [pageId],
+        );
+        if (pageResult.length === 0 || pageResult[0].values.length === 0) { return []; }
+        const filename = pageResult[0].values[0][0] as string;
+
+        const aliasResult = this.db!.exec(
+            `SELECT alias_filename FROM aliases WHERE canonical_page_id = ?`, [pageId],
+        );
+        const aliasFilenames: string[] = aliasResult.length > 0
+            ? aliasResult[0].values.map(r => r[0] as string)
+            : [];
+
+        return [filename, ...aliasFilenames];
+    }
+
+    /**
+     * Get unified backlink chains for a page by its id.
+     *
+     * Algorithm:
+     * 1. Find all links where page_filename matches the target page or its aliases
+     * 2. For each matching link, walk outline_parent_link_id upward to build the
+     *    full chain from outline root to the target link
+     * 3. Group chains by their abstract pattern (lowercased page_name sequence)
+     * 4. Sort: length-1 groups first, then longer chains; within groups,
+     *    instances are sorted by source page title alphabetically
+     */
+    getBacklinkChains(pageId: number): BacklinkChainGroup[] {
+        this.ensureOpen();
+        const allFilenames = this.getPageFilenames(pageId);
+        if (allFilenames.length === 0) { return []; }
+        return this.buildBacklinkChainGroups(allFilenames);
+    }
+
+    /**
+     * Get unified backlink chains by page name (for forward references where
+     * no pages row exists). Converts the name to a filename and queries
+     * the links table directly.
+     */
+    getBacklinkChainsByName(pageName: string): BacklinkChainGroup[] {
+        this.ensureOpen();
+        const invalids = /[\/\?<>\\:\*\|":]/g;
+        const filename = `${pageName.replace(invalids, '_')}.md`;
+        return this.buildBacklinkChainGroups([filename]);
+    }
+
+    /**
+     * Core chain-building logic shared by getBacklinkChains and getBacklinkChainsByName.
+     *
+     * For each link matching the target filenames, builds the full outline chain
+     * from root to that link, then groups by the abstract chain pattern.
+     */
+    private buildBacklinkChainGroups(targetFilenames: string[]): BacklinkChainGroup[] {
+        const placeholders = targetFilenames.map(() => '?').join(', ');
+        const lowered = targetFilenames.map(f => f.toLowerCase());
+
+        // Find all links pointing to the target page (or its aliases), case-insensitive
+        const result = this.db!.exec(
+            `SELECT l.id, l.source_page_id,
+                    p.id, p.path, p.filename, p.title, p.mtime, p.indexed_at
+             FROM links l
+             JOIN pages p ON l.source_page_id = p.id
+             WHERE LOWER(l.page_filename) IN (${placeholders})
+             ORDER BY p.title COLLATE NOCASE, l.line, l.start_col`,
+            lowered,
+        );
+
+        if (result.length === 0) { return []; }
+
+        // Build chain for each matching link
+        const groupMap = new Map<string, BacklinkChainGroup>();
+
+        for (const row of result[0].values) {
+            const linkId = row[0] as number;
+            const sourcePage = this.mapSinglePageRow(row, 2);
+
+            const chain = this.buildChainForLink(linkId);
+            if (chain.length === 0) { continue; }
+
+            // Pattern key: lowercased page_name sequence joined by →
+            const patternKey = chain.map(c => c.pageName.toLowerCase()).join(' → ');
+
+            const existing = groupMap.get(patternKey);
+            if (existing) {
+                existing.instances.push({ chain, sourcePage });
+            } else {
+                groupMap.set(patternKey, {
+                    patternKey,
+                    displayPattern: chain.map(c => c.pageName),
+                    instances: [{ chain, sourcePage }],
+                });
+            }
+        }
+
+        // Sort groups: length-1 first, then longer chains alphabetically by pattern key
+        const groups = Array.from(groupMap.values());
+        groups.sort((a, b) => {
+            const aLen = a.displayPattern.length;
+            const bLen = b.displayPattern.length;
+            if (aLen === 1 && bLen > 1) { return -1; }
+            if (aLen > 1 && bLen === 1) { return 1; }
+            return a.patternKey.localeCompare(b.patternKey);
+        });
+
+        return groups;
+    }
+
+    /**
+     * Build the full outline chain from root to the given link by walking
+     * outline_parent_link_id upward and then reversing.
+     */
+    buildChainForLink(linkId: number): BacklinkChainLink[] {
+        const chain: BacklinkChainLink[] = [];
+        let currentId: number | null = linkId;
+
+        while (currentId !== null) {
+            const result = this.db!.exec(
+                `SELECT id, page_name, page_filename, line, start_col, end_col, outline_parent_link_id
+                 FROM links WHERE id = ?`,
+                [currentId],
+            );
+            if (result.length === 0 || result[0].values.length === 0) { break; }
+            const row = result[0].values[0];
+            chain.push({
+                linkId: row[0] as number,
+                pageName: row[1] as string,
+                pageFilename: row[2] as string,
+                line: row[3] as number,
+                startCol: row[4] as number,
+                endCol: row[5] as number,
+            });
+            currentId = row[6] as number | null;
+        }
+
+        chain.reverse(); // Root first
+        return chain;
+    }
+
+    private mapSingleLinkRow(row: unknown[]): LinkRow {
+        return {
+            id: row[0] as number,
+            source_page_id: row[1] as number,
+            page_name: row[2] as string,
+            page_filename: row[3] as string,
+            line: row[4] as number,
+            start_col: row[5] as number,
+            end_col: row[6] as number,
+            context: row[7] as string | null,
+            parent_link_id: row[8] as number | null,
+            depth: row[9] as number,
+            indent_level: row[10] as number,
+            outline_parent_link_id: row[11] as number | null,
+        };
+    }
+
+    private mapSinglePageRow(row: unknown[], offset: number): PageRow {
+        return {
+            id: row[offset] as number,
+            path: row[offset + 1] as string,
+            filename: row[offset + 2] as string,
+            title: row[offset + 3] as string,
+            mtime: row[offset + 4] as number,
+            indexed_at: row[offset + 5] as number,
+        };
     }
 
     /**
@@ -1114,6 +1423,15 @@ export class IndexService {
     }
 
     /**
+     * Get the stored user_version pragma value (for testing schema versioning).
+     */
+    getSchemaVersion(): number {
+        this.ensureOpen();
+        const result = this.db!.exec('PRAGMA user_version');
+        return (result[0]?.values[0]?.[0] as number) ?? 0;
+    }
+
+    /**
      * Get table names (for testing schema creation).
      */
     getTableNames(): string[] {
@@ -1145,6 +1463,8 @@ export class IndexService {
             context: row[7] as string | null,
             parent_link_id: row[8] as number | null,
             depth: row[9] as number,
+            indent_level: row[10] as number,
+            outline_parent_link_id: row[11] as number | null,
         }));
     }
 }
