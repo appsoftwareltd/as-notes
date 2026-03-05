@@ -12,6 +12,7 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Content indexing and nesting](#content-indexing-and-nesting)
   - [Staleness detection](#staleness-detection)
   - [Persistence strategy](#persistence-strategy)
+  - [WASM memory model](#wasm-memory-model)
 - [Activation model](#activation-model)
   - [Passive mode](#passive-mode)
   - [Full mode](#full-mode)
@@ -262,6 +263,37 @@ sql.js operates entirely in memory. The WASM module (`SqlJsStatic`) is loaded on
 **WASM linear memory constraint:** WASM linear memory can grow but **never shrink**. After indexing ~18k files the heap reaches ~80 MB and becomes fragmented. Creating a new `Database()` on the same heap crashes at ~1618 files with "memory access out of bounds".
 
 **sql.js cache:** `initSqlJs()` internally caches the WASM module at the package level in a closure variable (`initSqlJsPromise`). Once called, all subsequent calls return the same promise — there is no built-in way to get a fresh WASM instance. An esbuild plugin (`sqlJsCacheResetPlugin` in `build.mjs`) patches this by injecting a `resetCache()` function onto the exported `initSqlJs` that sets `initSqlJsPromise = undefined`. This allows `resetSchema()` to force a truly fresh WASM load for rebuilds — see [Manual rebuild](#manual-rebuild).
+
+### WASM memory model
+
+Understanding how WASM linear memory behaves is essential for reasoning about the extension's reliability on large workspaces.
+
+**Why fragmentation occurs during a full scan:**
+
+During a full scan of ~18k files, SQLite performs millions of allocations inside WASM memory: parsing SQL strings, building B-tree nodes, creating prepared statements, buffering row data, managing the page cache. Each `indexFileContent()` call runs `UPDATE`/`INSERT` on `pages`, `DELETE FROM links WHERE source_page_id = ?`, then N × `INSERT INTO links`, plus alias and task operations. Over 18k files with ~280k links, this involves hundreds of thousands of `malloc`/`free` cycles within the WASM heap.
+
+When SQLite frees memory internally (`sqlite3_free`), those freed blocks remain as holes in the linear memory — they're returned to the C allocator's free list but the WASM heap high-water mark never decreases. After 18k files, the heap has grown to ~80 MB with a swiss-cheese pattern of allocated and freed blocks.
+
+On a **fresh** WASM instance, the allocator starts from a pristine state — all allocations are sequential, contiguous, and efficient. This is why the initial scan always succeeds.
+
+**Why rebuild needs a fresh WASM instance but periodic scans do not:**
+
+| Scenario | WASM heap state | Concern? |
+|---|---|---|
+| First scan (activation) | Fresh heap, pristine allocator | None |
+| Periodic scan (`staleScan`) | Steady-state heap; processes 0–10 files per tick | None — small incremental reuse of freed blocks |
+| Manual rebuild (`resetSchema`) | Needs to create a new `Database()` on the heap | **Yes** — fixed by loading a fresh WASM instance |
+| Clean Workspace + Init | Fresh `IndexService` + fresh WASM | None |
+
+Periodic scans (`staleScan()`) compare disk mtime vs indexed mtime and only process **changed/new/deleted** files — typically 0–10 per tick. The SQL operations are identical to `indexFileContent` but at 1000× lower volume. The heap is already at its high-water mark from the initial full scan; processing a handful of files causes negligible additional fragmentation. The allocator efficiently reuses freed blocks when the working set is small.
+
+`staleScan()` does **not** call `resetSchema()` or create new Database instances. It operates purely on the existing DB with the existing WASM heap. There is no accumulation problem.
+
+**Periodic defragmentation is not needed.** The heap reaches its steady-state size after the initial full scan (~80 MB for 18k files). There is no WASM API to compact linear memory — the only way to "defragment" is to load a fresh WASM instance, which is exactly what rebuild does via the esbuild method.
+
+**Rebuild memory lifecycle:**
+
+Each rebuild loads a completely new WASM binary with its own independent linear memory starting at 0 bytes. The old module (~80 MB) becomes unreferenced and eligible for JS garbage collection. The brief ~160 MB peak (old + new WASM coexisting during the transition) is well within the VS Code extension host's memory budget. This makes every rebuild equivalent to a first scan.
 
 The database is persisted to disk (`saveToFile()`) at these points:
 
