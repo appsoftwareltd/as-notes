@@ -1,0 +1,5 @@
+# Normalise all text files to LF line endings.
+# Overrides core.autocrlf — ensures consistency across Windows/Linux/Mac
+# and compatibility with tooling.
+
+* text=auto eol=lf
