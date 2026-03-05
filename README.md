@@ -416,35 +416,6 @@ VS Code remembers the last folder opened in the Extension Development Host. The 
 
 Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offset-based lookup, segment computation, index service CRUD, title extraction, rename detection data flow, and nested link indexing. Run with `npm test`.
 
-## Architecture
-
-| File | Purpose |
-|---|---|
-| `src/extension.ts` | Entry point — activation model (passive/full mode), commands, index triggers |
-| `src/Wikilink.ts` | Model class — positions, page name, filename sanitisation |
-| `src/WikilinkService.ts` | Stack-based parser, innermost-offset lookup, segment computation |
-| `src/WikilinkDecorationManager.ts` | Editor decorations (default + active highlight) |
-| `src/WikilinkDocumentLinkProvider.ts` | Ctrl+Click navigation via non-overlapping segments (alias-aware tooltips) |
-| `src/WikilinkHoverProvider.ts` | Hover tooltips with target file existence, alias indicator, backlink count |
-| `src/WikilinkFileService.ts` | File resolution — index-aware global matching, alias resolution, subfolder disambiguation |
-| `src/WikilinkRenameTracker.ts` | Rename detection (index-backed), alias vs direct rename classification, workspace-wide updates |
-| `src/WikilinkCompletionProvider.ts` | Wikilink autocomplete — `[[` trigger, page + alias suggestions, auto-close, nested link support |
-| `src/CompletionUtils.ts` | Pure utilities for completion logic — bracket detection, front matter detection |
-| `src/IndexService.ts` | SQLite data layer — schema, CRUD, content indexing, alias management, task indexing, nesting detection |
-| `src/IndexScanner.ts` | VS Code filesystem scanning — file indexing, full scan, stale scan |
-| `src/FrontMatterService.ts` | Lightweight YAML front matter parser — alias extraction, in-place alias updates |
-| `src/PathUtils.ts` | Pure utilities — path distance calculation, filename sanitisation |
-| `src/TodoToggleService.ts` | Pure todo toggle logic — three-state cycle (plain / unchecked / done) |
-| `src/TaskPanelProvider.ts` | Explorer tree view — task list grouped by page, todo-only filter, click-to-navigate |
-| `src/BacklinkPanelProvider.ts` | Webview panel — backlinks display with context, grouped by source page, click-to-navigate |
-| `src/JournalService.ts` | Pure journal logic — date formatting, template processing, path construction |
-| `src/LicenceService.ts` | Pure licence key validation logic — no VS Code imports |
-| `src/LicenceActivationService.ts` | Licence activation stub — SecretStorage token management, server call placeholder |
-| `build.mjs` | Custom esbuild script — bundles extension, copies WASM binary |
-| `src/test/` | Unit tests (vitest) |
-
-For a deep dive into the technical design, see [docs/TECHNICAL.md](docs/TECHNICAL.md).
-
 ### Publishing
 
 Releases are published to the VS Code Marketplace manually, then a GitHub Release is created automatically when a version tag is pushed.

@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "publisher": "appsoftwareltd",
     "license": "CC-BY-NC-SA-4.0",
     "icon": "images/icon.png",
