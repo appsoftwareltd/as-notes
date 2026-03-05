@@ -272,6 +272,65 @@ describe('IndexService — link CRUD', () => {
     });
 });
 
+describe('IndexService — clearAllData', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should remove all rows but keep the schema intact', () => {
+        // Insert data across all tables
+        const pageId = service.indexFileContent(
+            'test.md', 'test.md',
+            '# Test\n\n- [ ] a task\n\nSee [[Target]]',
+            1000,
+        );
+        service.setAliasesForPage(pageId, ['Alias One']);
+
+        // Verify data exists
+        expect(service.getAllPages().length).toBeGreaterThan(0);
+        expect(service.getLinksForPage(pageId).length).toBeGreaterThan(0);
+        expect(service.getAliasesForPage(pageId).length).toBeGreaterThan(0);
+        expect(service.getTasksForPage(pageId).length).toBeGreaterThan(0);
+
+        // Clear
+        service.clearAllData();
+
+        // Tables should still exist
+        const tables = service.getTableNames();
+        expect(tables).toContain('pages');
+        expect(tables).toContain('links');
+        expect(tables).toContain('aliases');
+        expect(tables).toContain('tasks');
+
+        // But all rows should be gone
+        expect(service.getAllPages().length).toBe(0);
+    });
+
+    it('should allow normal DB operations after clearing', () => {
+        service.indexFileContent('a.md', 'a.md', '# A\n\nSee [[B]]', 1000);
+        service.clearAllData();
+
+        // Re-index should work without errors
+        const pageId = service.indexFileContent('b.md', 'b.md', '# B\n\nSee [[C]]', 2000);
+        expect(pageId).toBeGreaterThan(0);
+
+        const page = service.getPageByPath('b.md');
+        expect(page).toBeDefined();
+        expect(page!.title).toBe('B');
+
+        const links = service.getLinksForPage(pageId);
+        expect(links.length).toBe(1);
+        expect(links[0].page_name).toBe('C');
+    });
+});
+
 describe('IndexService — resetSchema', () => {
     let service: IndexService;
 
@@ -284,12 +343,12 @@ describe('IndexService — resetSchema', () => {
         service.close();
     });
 
-    it('should drop and recreate all tables', () => {
+    it('should drop and recreate all tables', async () => {
         // Insert some data
         service.upsertPage('test.md', 'test.md', 'Test', 1000);
 
         // Reset
-        service.resetSchema();
+        await service.resetSchema();
 
         // Tables should exist but be empty
         const tables = service.getTableNames();

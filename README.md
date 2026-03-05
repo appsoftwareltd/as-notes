@@ -6,19 +6,31 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 
 [![AS Notes demo](https://img.youtube.com/vi/liRULtb8Rm8/maxresdefault.jpg)](https://youtu.be/liRULtb8Rm8)
 
+## Why VS Code?
+
+Using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features: 
+
+- Cross platform + Web (via Workspaces)
+- UI features such as Tabs, File Explorer, Themes
+- Huge extension library that can be used along side AS Notes (Mermaid diagramming, Vim etc)
+- AI Chat (GitHub CoPilot / Claude etc.) you can use to work with your notes
+- Multiline editing Outliner functionality via `Ctrl + [ / ]`
+- Code highlighting 
+- And all of the many features that VS Code has
+
 ## Main Features
 
 - Privacy focused - does not send your data anywhere
 - Version control friendly (e.g. Git)
 - Lightweight indexing of your notes (local sqlite3 WASM)
 - Automatic wikilink / file rename tracking
-- Performant on large (real) knowledge bases (18,000+ markdown files)
+- Performant on large (~20k markdown files) knowledge bases 
 
 ### Wikilinks
 
 - Logseq / Roam / Obsidian style `[[wikilinks]]` with nested link support e.g. `[[[[AS Notes]] Page]]`
 - Links resolve to the target page anywhere in your workspace
-- Renaming a link updates the target file and all matching references across the workspace
+- Renaming a link updates the target file and all matching references
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/wikilinks.png" alt="AS Notes backlinks wikilinks" style="max-height:200px; margin-top: 10px">
 
@@ -32,11 +44,9 @@ Toggle markdown TODOs with a keyboard shortcut:
 Marker for todo removed
 ```
 
-`Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS). Keybinding is configurable.
+`Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS)
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/todopanel.png" alt="AS Notes todo panel" style="max-height:130px; margin-top: 10px; margin-bottom: 10px;">
-
-> **Note:** Todo toggling requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
 ### Backlinks Panel
 
@@ -52,7 +62,7 @@ Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
-### File Drop & Paste
+### File Drag & Drop / Copy + Paste
 
 Drag files from your file manager onto a markdown editor, or paste images from the clipboard — VS Code's built-in markdown editor handles the copy and link insertion automatically.
 
@@ -67,24 +77,22 @@ The setting is applied automatically when AS Notes initialises or the value chan
 **Tips:**
 
 - **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing — useful for placing the link precisely within your text.
-- **Filenames with spaces:** If a pasted or dropped file has spaces in its name (e.g. `my image.png`), VS Code wraps the path in angle brackets per the [CommonMark spec](https://spec.commonmark.org/0.31.2/#link-destination): `![alt text](<assets/images/my image.png>)`.
-
-> **Note:** File drop & paste requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
 ### Image Hover Preview
 
 Hover over any image link in a markdown file to see a preview of the image inline. This is provided by VS Code's built-in markdown extension and requires no configuration — it works with both standard `![alt](path)` links and dropped/pasted images.
 
-
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/image-preview.png" alt="AS Notes Image Preview" style="max-height:300px; margin-top: 10px; margin-bottom: 10px;">
 
 ### Compatibility With Other Markdown PKMS
 
-AS Notes can work with knowledge bases created in Obsidian or Logseq due to similar file structures. There are format differences — Obsidian does not support nested wikilinks, and AS Notes does not use a block structure like Logseq. Front matter in AS Notes uses YAML.
+AS Notes can work alongside knowledge bases created in Obsidian or Logseq due to similar file structures. Be aware there are format and behavioural differences differences however.
 
-## AS Notes Pro
+## AS Notes Pro Features
 
 A **Pro licence** unlocks premium features. Enter your licence key in VS Code settings under `as-notes.licenceKey`. When a valid key is active the status bar shows **AS Notes (Pro)**.
+
+To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/contact).
 
 ### Encrypted notes
 
@@ -94,26 +102,23 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 
 1. Run **AS Notes: Set Encryption Key** from the Command Palette. Your passphrase is stored securely in the OS keychain (VS Code SecretStorage) — it is never written to disk or settings files.
 2. Create an encrypted note with **AS Notes: Create Encrypted Note** (or **AS Notes: Create Encrypted Journal Note** for a dated journal entry).
-3. Write your note in the editor. When you want to lock it, run **AS Notes: Encrypt All Notes** — all plaintext `.enc.md` files will be encrypted in place.
-4. To read a note, run **AS Notes: Decrypt All Notes** — files are decrypted in place using your stored passphrase.
+3. Write your note in the editor. When you want to lock it, run **AS Notes: Encrypt [All|Current] Note(s)** — all plaintext `.enc.md` files will be encrypted in place.
+4. To read a note, run **AS Notes: [All|Current] Note(s)** — files are decrypted in place using your stored passphrase.
 
 **Encryption details:**
 - Algorithm: AES-256-GCM with a per-encryption random 12-byte nonce
 - Key derivation: PBKDF2-SHA256 (100,000 iterations) from your passphrase
-- File format: a single-line `ASNOTES_ENC_V1:<base64url payload>` marker — easily detectable by tooling
-- A git pre-commit hook is automatically installed at `.git/hooks/pre-commit` to prevent accidentally committing an unencrypted `.enc.md` file. The hook is self-updating — if AS Notes detects a stale version it replaces it automatically on the next `Rebuild Index` or periodic scan. If a commit is unexpectedly blocked, run **AS Notes: Encrypt All Notes** first.
+- File format: a single-line `ASNOTES_ENC_V1:<base64url payload>` marker - used to help prevent accidental commits via a Git pre-commit hook.
 
 **Commands:**
 - `AS Notes: Set Encryption Key` — save passphrase to OS keychain
 - `AS Notes: Clear Encryption Key` — remove the stored passphrase
-- `AS Notes: Encrypt All Notes` — encrypt all plaintext `.enc.md` files
-- `AS Notes: Decrypt All Notes` — decrypt all encrypted `.enc.md` files
 - `AS Notes: Create Encrypted Note` — create a new named `.enc.md` file
 - `AS Notes: Create Encrypted Journal Note` — create today's journal entry as `.enc.md`
+- `AS Notes: Encrypt All Notes` — encrypt all plaintext `.enc.md` files
+- `AS Notes: Decrypt All Notes` — decrypt all encrypted `.enc.md` files
 - `AS Notes: Encrypt Current Note` — encrypt the active `.enc.md` file (reads unsaved editor content)
 - `AS Notes: Decrypt Current Note` — decrypt the active `.enc.md` file (reads from disk)
-
-To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/contact).
 
 ## VS Code Marketplace
 
@@ -138,6 +143,36 @@ This creates the `.asnotes/` directory, builds a SQLite index of all markdown fi
 ### Rebuild the index
 
 If the index becomes stale or corrupted, run **AS Notes: Rebuild Index** from the Command Palette. This drops and recreates the entire index with a progress indicator.
+
+### Clean workspace
+
+If the extension is in a bad state (e.g. persistent WASM errors after a crash), run **AS Notes: Clean Workspace** from the Command Palette. This:
+
+- Removes the `.asnotes/` directory (index database, logs, git hook config)
+- Releases all in-memory state and switches to passive mode
+
+`.asnotesignore` at the workspace root is intentionally preserved. Run **AS Notes: Initialise Workspace** afterwards to start fresh.
+
+### Excluding files from the index
+
+When AS Notes initialises a workspace it creates a `.asnotesignore` file at the workspace root. This file uses [`.gitignore` pattern syntax](https://git-scm.com/docs/gitignore) and controls which files and directories are excluded from the AS Notes index.
+
+**Default contents:**
+
+```
+# Logseq metadata and backup directories
+logseq/
+
+# Obsidian metadata and trash directories
+.obsidian/
+.trash/
+```
+
+Patterns without a leading `/` match at any depth — `logseq/` excludes `logseq/pages/foo.md` and `vaults/work/logseq/pages/foo.md` equally. Prefix with `/` to anchor a pattern to the workspace root only (e.g. `/logseq/`).
+
+Edit `.asnotesignore` at any time. AS Notes watches the file and automatically re-scans the index when it changes — newly ignored files are removed from the index and un-ignored files are added.
+
+> **Note:** `.asnotesignore` is a user-editable, version-controlled file. AS Notes will never overwrite it after initial creation.
 
 ## Features
 
@@ -324,6 +359,7 @@ Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journa
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 | `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
 | `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key. Scope: machine (not synced). |
+| `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
 
 ## Supported file types
 

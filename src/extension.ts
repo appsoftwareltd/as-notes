@@ -26,15 +26,35 @@ import { activateWithServer } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
-import { debugLog, debugTime } from './DebugLogger.js';
+import { LogService, NO_OP_LOGGER } from './LogService.js';
 import { findInnermostOpenBracket } from './CompletionUtils.js';
+import { IgnoreService } from './IgnoreService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
 const INDEX_DB = 'index.db';
+const IGNORE_FILE = '.asnotesignore';
+
+/** Default content written to `.asnotesignore` on first workspace initialisation. */
+const DEFAULT_IGNORE_CONTENT = [
+    '# AS Notes ignore file — uses .gitignore pattern syntax.',
+    '# Paths matching these patterns are excluded from the AS Notes index.',
+    '# See https://github.com/appsoftwareltd/as-notes#asnotesignore for recommended patterns.',
+    '#',
+    '# Logseq metadata and backup directories',
+    'logseq/',
+    '#',
+    '# Obsidian metadata and trash directories',
+    '.obsidian/',
+    '.trash/',
+    '',
+].join('\n');
 
 /** Disposables registered in full mode — cleared on deactivation or mode transition. */
 let fullModeDisposables: vscode.Disposable[] = [];
+
+/** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
+let ignoreService: IgnoreService | undefined;
 
 /** Status bar item shown in both passive and full mode. */
 let statusBarItem: vscode.StatusBarItem;
@@ -59,6 +79,9 @@ let taskPanelProvider: TaskPanelProvider | undefined;
 
 /** Backlink panel provider instance — alive while in full mode. */
 let backlinkPanelProvider: BacklinkPanelProvider | undefined;
+
+/** Log service instance — alive while in full mode. */
+let logService: LogService = NO_OP_LOGGER;
 
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -90,6 +113,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     );
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.rebuildIndex', () => rebuildIndex()),
+    );
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.cleanWorkspace', () => cleanWorkspace()),
     );
 
     // Validate licence key on activation (checks stored token first, then local rule).
@@ -211,13 +237,26 @@ async function enterFullMode(
 ): Promise<void> {
     disposeFullMode(); // Clean up any previous full-mode state
 
+    // Create LogService — enabled by setting or env var, requires reload to change.
+    const config = vscode.workspace.getConfiguration('as-notes');
+    const loggingEnabled = config.get<boolean>('enableLogging', false)
+        || process.env.AS_NOTES_DEBUG === '1';
+    const logDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR, 'logs');
+    logService = new LogService(logDir, { enabled: loggingEnabled });
+    if (logService.isEnabled) {
+        logService.info('extension', 'Logging activated');
+    }
+
     const dbPath = path.join(workspaceRoot.fsPath, ASNOTES_DIR, INDEX_DB);
-    indexService = new IndexService(dbPath);
+    indexService = new IndexService(dbPath, logService);
+    logService.info('extension', 'enterFullMode: initialising database');
     await indexService.initDatabase();
 
-    indexScanner = new IndexScanner(indexService, workspaceRoot);
+    ignoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
+    indexScanner = new IndexScanner(indexService, workspaceRoot, ignoreService, logService);
 
     // Run stale scan on activation to catch external changes
+    logService.info('extension', 'enterFullMode: running stale scan');
     const summary = await indexScanner.staleScan();
     if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
         indexService.saveToFile();
@@ -231,7 +270,7 @@ async function enterFullMode(
     const fileService = new WikilinkFileService(indexService);
 
     // Decoration manager
-    const decorationManager = new WikilinkDecorationManager(wikilinkService);
+    const decorationManager = new WikilinkDecorationManager(wikilinkService, logService);
     fullModeDisposables.push(decorationManager);
 
     // Document link provider — Ctrl/Cmd+Click navigation (alias-aware tooltips)
@@ -253,7 +292,7 @@ async function enterFullMode(
     fullModeDisposables.push(renameTracker);
 
     // Completion provider — wikilink autocomplete triggered by [[
-    completionProvider = new WikilinkCompletionProvider(indexService);
+    completionProvider = new WikilinkCompletionProvider(indexService, logService);
     completionProvider.refresh(); // Warm the cache so first [[ is instant
     fullModeDisposables.push(
         vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
@@ -682,7 +721,7 @@ async function enterFullMode(
                 // The rename tracker needs the stale index state to detect the change;
                 // refreshIndexAfterRename will re-index the file once the rename completes.
                 if (renameTracker.hasPendingEdit(doc.uri.toString())) { return; }
-                const end = debugTime('debounce', 'indexFileContent + refresh');
+                const end = logService.time('debounce', 'indexFileContent + refresh');
                 const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
                 const filename = path.basename(doc.uri.fsPath);
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
@@ -715,7 +754,7 @@ async function enterFullMode(
             const bracketCol = findInnermostOpenBracket(textUpToCursor);
 
             if (bracketCol !== -1) {
-                debugLog('completion', 're-triggering suggest after backspace inside [[');
+                logService.info('completion', 're-triggering suggest after backspace inside [[');
                 // Defer so VS Code finishes processing the deletion first.
                 setTimeout(() => {
                     vscode.commands.executeCommand('editor.action.triggerSuggest');
@@ -856,6 +895,29 @@ async function enterFullMode(
     // Periodic scanner
     startPeriodicScan();
 
+    // Watch .asnotesignore for changes — reload patterns and run a stale scan
+    // so newly ignored files are removed from the index and un-ignored files
+    // are picked up.
+    const ignoreFileWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(workspaceRoot, IGNORE_FILE),
+    );
+    const onIgnoreFileChange = (): void => {
+        ignoreService?.reload();
+        indexScanner?.staleScan().then((summary) => {
+            if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
+                indexService?.saveToFile();
+                completionProvider?.refresh();
+                taskPanelProvider?.refresh();
+                backlinkPanelProvider?.refresh();
+                updateFullModeStatusBar();
+            }
+        }).catch(err => console.warn('as-notes: stale scan after .asnotesignore change failed:', err));
+    };
+    ignoreFileWatcher.onDidChange(onIgnoreFileChange);
+    ignoreFileWatcher.onDidCreate(onIgnoreFileChange);
+    ignoreFileWatcher.onDidDelete(onIgnoreFileChange);
+    fullModeDisposables.push(ignoreFileWatcher);
+
     // Listen for config changes to restart periodic scan
     fullModeDisposables.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
@@ -878,10 +940,10 @@ async function enterFullMode(
 
     // Update status bar
     updateFullModeStatusBar();
+    logService.info('extension', 'enterFullMode: complete');
 }
 
 /**
- * Refresh the full-mode status bar label.
  * Shows `AS Notes (Pro)` when a valid licence is active, `AS Notes` otherwise.
  * Safe to call at any time — no-ops if the status bar item is not yet created.
  */
@@ -914,13 +976,17 @@ function disposeFullMode(): void {
  * Called when `.asnotes/` is detected as missing during a save attempt.
  */
 function exitFullMode(): void {
+    logService.info('extension', 'exitFullMode: tearing down');
     clearPeriodicScan();
     if (indexService?.isOpen) {
         indexService.close();
     }
     indexService = undefined;
     indexScanner = undefined;
+    ignoreService = undefined;
     completionProvider = undefined;
+    logService.info('extension', 'exitFullMode: complete');
+    logService = NO_OP_LOGGER;
     disposeFullMode();
     setPassiveMode();
     console.log('as-notes: .asnotes/ directory removed — switched to passive mode');
@@ -969,11 +1035,24 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     // Create .gitignore inside .asnotes/ to exclude the DB file
     fs.writeFileSync(path.join(asnotesDir, '.gitignore'), 'index.db\n');
 
+    // Create .asnotesignore at workspace root if it doesn't already exist.
+    ensureIgnoreFile(workspaceRoot.fsPath);
+
     // Install git pre-commit hook to guard against committing unencrypted .enc.md files
     ensurePreCommitHook(workspaceRoot.fsPath);
 
     // Configure the built-in markdown copy-files destination before entering full mode
     await applyAssetPathSettings();
+
+    // Create LogService early so the initial full scan is instrumented
+    const config = vscode.workspace.getConfiguration('as-notes');
+    const loggingEnabled = config.get<boolean>('enableLogging', false)
+        || process.env.AS_NOTES_DEBUG === '1';
+    const logDir = path.join(asnotesDir, 'logs');
+    logService = new LogService(logDir, { enabled: loggingEnabled });
+    if (logService.isEnabled) {
+        logService.info('extension', 'initWorkspace: logging activated');
+    }
 
     // Enter full mode (creates DB, runs full scan)
     await vscode.window.withProgress(
@@ -984,14 +1063,17 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
         },
         async (progress) => {
             const dbPath = path.join(asnotesDir, INDEX_DB);
-            indexService = new IndexService(dbPath);
+            logService.info('extension', 'initWorkspace: initialising database');
+            indexService = new IndexService(dbPath, logService);
             await indexService.initDatabase();
 
-            indexScanner = new IndexScanner(indexService, workspaceRoot);
+            const initIgnoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
+            indexScanner = new IndexScanner(indexService, workspaceRoot, initIgnoreService, logService);
 
             const result = await indexScanner.fullScan(progress);
             indexService.saveToFile();
 
+            logService.info('extension', `initWorkspace: complete — ${result.filesIndexed} files, ${result.linksFound} links`);
             vscode.window.showInformationMessage(
                 `AS Notes: Initialised — ${result.filesIndexed} files indexed, ${result.linksFound} links found.`,
             );
@@ -1008,9 +1090,13 @@ async function rebuildIndex(): Promise<void> {
         return;
     }
 
-    // Ensure git pre-commit hook is present (idempotent)
+    // Ensure git pre-commit hook and .asnotesignore are present (idempotent)
     const root = getWorkspaceRoot();
-    if (root) { ensurePreCommitHook(root.fsPath); }
+    if (root) {
+        ensurePreCommitHook(root.fsPath);
+        ensureIgnoreFile(root.fsPath);
+        ignoreService?.reload();
+    }
 
     // Re-apply asset path settings in case they were modified externally
     applyAssetPathSettings().catch(err =>
@@ -1024,20 +1110,90 @@ async function rebuildIndex(): Promise<void> {
             cancellable: true,
         },
         async (progress, token) => {
-            indexService!.resetSchema();
-            const result = await indexScanner!.fullScan(progress, token);
-            indexService!.saveToFile();
-            completionProvider?.refresh();
-            taskPanelProvider?.refresh();
-            backlinkPanelProvider?.refresh();
+            try {
+                // ── Rebuild: fresh WASM instance ───────────────────────────
+                // The index database is entirely derived from the filesystem —
+                // there is nothing in it that cannot be reconstructed by a
+                // full scan.  resetSchema() closes the old DB, resets the
+                // sql.js WASM cache, loads a fresh WASM instance with clean
+                // linear memory, and creates an empty database on it.
+                // This is necessary because WASM memory can only grow (never
+                // shrink) and becomes fragmented after indexing ~18k files.
+                // ────────────────────────────────────────────────────────────
+                logService.info('extension', 'rebuildIndex: resetting schema');
+                await indexService!.resetSchema();
 
-            // Update status bar
-            updateFullModeStatusBar();
+                logService.info('extension', 'rebuildIndex: starting fullScan');
+                const result = await indexScanner!.fullScan(progress, token);
 
-            vscode.window.showInformationMessage(
-                `AS Notes: Rebuild complete — ${result.filesIndexed} files indexed, ${result.linksFound} links found.`,
-            );
+                logService.info('extension', 'rebuildIndex: saving to file');
+                indexService!.saveToFile();
+
+                completionProvider?.refresh();
+                taskPanelProvider?.refresh();
+                backlinkPanelProvider?.refresh();
+
+                // Update status bar
+                updateFullModeStatusBar();
+
+                vscode.window.showInformationMessage(
+                    `AS Notes: Rebuild complete — ${result.filesIndexed} files indexed, ${result.linksFound} links found.`,
+                );
+                logService.info('extension', `rebuildIndex: complete — ${result.filesIndexed} files, ${result.linksFound} links`);
+            } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.error('as-notes: rebuildIndex failed:', err);
+                logService.error('extension', `rebuildIndex: failed — ${msg}`);
+                vscode.window.showErrorMessage(`AS Notes: Rebuild failed — ${msg}`);
+            }
         },
+    );
+}
+
+/**
+ * Clean Workspace — removes the `.asnotes/` directory, releases all in-memory
+ * state, and switches to passive mode. This is a full reset that lets the user
+ * re-initialise from scratch via "AS Notes: Initialise Workspace".
+ *
+ * `.asnotesignore` at the workspace root is intentionally preserved.
+ */
+async function cleanWorkspace(): Promise<void> {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) {
+        vscode.window.showErrorMessage('AS Notes: No workspace folder is open.');
+        return;
+    }
+
+    const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
+    if (!fs.existsSync(asnotesDir)) {
+        vscode.window.showInformationMessage('AS Notes: Workspace is already clean (no .asnotes/ directory).');
+        return;
+    }
+
+    const answer = await vscode.window.showWarningMessage(
+        'AS Notes: This will delete the .asnotes/ directory (index database, logs, git hook config) and reset the extension. Continue?',
+        { modal: true },
+        'Clean Workspace',
+    );
+    if (answer !== 'Clean Workspace') { return; }
+
+    logService.info('extension', 'cleanWorkspace: confirmed, tearing down');
+
+    // Tear down all in-memory state first — closes the database handle so the
+    // file can be deleted on Windows.
+    exitFullMode();
+
+    // Remove the .asnotes/ directory tree.
+    try {
+        fs.rmSync(asnotesDir, { recursive: true, force: true });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`AS Notes: Failed to remove .asnotes/ — ${msg}`);
+        return;
+    }
+
+    vscode.window.showInformationMessage(
+        'AS Notes: Workspace cleaned. Run "AS Notes: Initialise Workspace" to start fresh.',
     );
 }
 
@@ -1117,9 +1273,14 @@ function startPeriodicScan(): void {
     periodicScanHandle = setInterval(async () => {
         if (!indexService?.isOpen || !indexScanner) { return; }
         try {
-            // Ensure the git hook remains installed (e.g. after git clone / hook deletion)
+            logService.info('extension', 'periodicScan: tick starting');
+            // Ensure the git hook and .asnotesignore remain present
             const root = getWorkspaceRoot();
-            if (root) { ensurePreCommitHook(root.fsPath); }
+            if (root) {
+                ensurePreCommitHook(root.fsPath);
+                ensureIgnoreFile(root.fsPath);
+                ignoreService?.reload();
+            }
 
             const summary = await indexScanner.staleScan();
             if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
@@ -1128,6 +1289,9 @@ function startPeriodicScan(): void {
                 taskPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 updateFullModeStatusBar();
+                logService.info('extension', `periodicScan: changes detected — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted`);
+            } else {
+                logService.info('extension', 'periodicScan: no changes');
             }
         } catch (err) {
             console.warn('as-notes: periodic scan failed:', err);
@@ -1143,6 +1307,18 @@ function clearPeriodicScan(): void {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Creates `.asnotesignore` at the workspace root with default content if it
+ * does not already exist. Existence is enforced; content is never overwritten.
+ * Safe to call on every rebuild / periodic scan tick.
+ */
+function ensureIgnoreFile(workspaceRootFsPath: string): void {
+    const ignoreFilePath = path.join(workspaceRootFsPath, IGNORE_FILE);
+    if (!fs.existsSync(ignoreFilePath)) {
+        fs.writeFileSync(ignoreFilePath, DEFAULT_IGNORE_CONTENT, 'utf-8');
+    }
+}
 
 function getWorkspaceRoot(): vscode.Uri | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri;

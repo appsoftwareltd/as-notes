@@ -115,6 +115,10 @@
             {
                 "command": "as-notes.decryptCurrentNote",
                 "title": "AS Notes: Decrypt Current Note"
+            },
+            {
+                "command": "as-notes.cleanWorkspace",
+                "title": "AS Notes: Clean Workspace"
             }
         ],
         "keybindings": [
@@ -167,6 +171,11 @@
                     "type": "string",
                     "default": "assets/images",
                     "description": "Workspace-relative folder where dropped or pasted files are saved by VS Code's built-in markdown editor. AS Notes configures the built-in markdown.copyFiles.destination setting to use this path."
+                },
+                "as-notes.enableLogging": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable diagnostic logging to .asnotes/logs/. Rolling 10 MB files, max 5. Requires reload after changing."
                 }
             }
         },
@@ -225,6 +234,7 @@
         "vitest": "^3.0.0"
     },
     "dependencies": {
+        "ignore": "^7.0.5",
         "sql.js": "^1.14.0"
     }
 }

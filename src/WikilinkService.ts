@@ -113,9 +113,8 @@ export class WikilinkService implements IWikilinkService {
      *   - `[[Inner]]` → inner link
      *   - ` text]]` → outer link
      *
-     * This mirrors the segmentation logic from the reference MarkdownService's
-     * `convertWikiLinksToHtml` — each segment is a contiguous range of text
-     * that belongs to a single wikilink target.
+     * Segmentation logic - segment is a contiguous range of text that belongs 
+     * to a single wikilink target.
      *
      * @param wikilinks - All wikilinks extracted from a line (unordered)
      * @returns Array of non-overlapping segments, each with start/end offsets and target wikilink

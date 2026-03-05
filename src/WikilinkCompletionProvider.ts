@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { IndexService } from './IndexService.js';
 import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter } from './CompletionUtils.js';
-import { debugLog, debugTime } from './DebugLogger.js';
+import { LogService } from './LogService.js';
 
 /**
  * Lightweight cached completion data — no VS Code object overhead.
@@ -32,7 +32,10 @@ interface CachedCompletionEntry {
 export class WikilinkCompletionProvider implements vscode.CompletionItemProvider {
     private cachedEntries: CachedCompletionEntry[] = [];
 
-    constructor(private readonly indexService: IndexService) { }
+    constructor(
+        private readonly indexService: IndexService,
+        private readonly logger: LogService,
+    ) { }
 
     /**
      * Rebuild the completion cache from the index. Call this after index updates
@@ -48,7 +51,7 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
         _token: vscode.CancellationToken,
         _context: vscode.CompletionContext,
     ): vscode.CompletionList | undefined {
-        const end = debugTime('completion', 'provideCompletionItems');
+        const end = this.logger.time('completion', 'provideCompletionItems');
 
         // Suppress inside front matter
         const lines: string[] = [];
@@ -91,7 +94,7 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             return item;
         });
 
-        debugLog('completion', `returning ${items.length} items`);
+        this.logger.info('completion', `returning ${items.length} items`);
         end();
 
         // Return as CompletionList with isIncomplete: true so VS Code re-queries
@@ -103,7 +106,7 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
      * Rebuild the cached completion entries from the index.
      */
     private rebuildCache(): void {
-        const end = debugTime('completion', 'rebuildCache');
+        const end = this.logger.time('completion', 'rebuildCache');
 
         this.cachedEntries = [];
 
@@ -172,7 +175,7 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             });
         }
 
-        debugLog('completion', `cache rebuilt: ${pages.length} pages, ${forwardRefs.length} fwd refs, ${aliases.length} aliases (${this.cachedEntries.length} total)`);
+        this.logger.info('completion', `cache rebuilt: ${pages.length} pages, ${forwardRefs.length} fwd refs, ${aliases.length} aliases (${this.cachedEntries.length} total)`);
         end();
     }
 }

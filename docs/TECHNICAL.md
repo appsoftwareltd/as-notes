@@ -7,6 +7,7 @@ This document explains the internal architecture, algorithms, and design decisio
 - [Overview](#overview)
 - [Persistent index](#persistent-index)
   - [Architecture split: IndexService and IndexScanner](#architecture-split-indexservice-and-indexscanner)
+  - [IgnoreService and .asnotesignore](#ignoreservice-and-asnotesignore)
   - [Database schema](#database-schema)
   - [Content indexing and nesting](#content-indexing-and-nesting)
   - [Staleness detection](#staleness-detection)
@@ -16,6 +17,8 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Full mode](#full-mode)
   - [Index update triggers](#index-update-triggers)
   - [Periodic scanning](#periodic-scanning)
+  - [Manual rebuild](#manual-rebuild)
+  - [Clean workspace](#clean-workspace)
 - [Aliases and front matter](#aliases-and-front-matter)
   - [FrontMatterService](#frontmatterservice)
   - [Alias indexing](#alias-indexing)
@@ -42,6 +45,7 @@ This document explains the internal architecture, algorithms, and design decisio
 - [Decorations](#decorations)
   - [Default vs active](#default-vs-active)
   - [Why segments prevent decoration conflicts](#why-segments-prevent-decoration-conflicts)
+  - [Debug logging](#debug-logging)
 - [Click navigation](#click-navigation)
   - [DocumentLinkProvider and command URIs](#documentlinkprovider-and-command-uris)
   - [File resolution](#file-resolution)
@@ -109,7 +113,7 @@ as-notes is a VS Code extension that turns `[[double bracket]]` text in markdown
 The extension is built with:
 
 - **TypeScript 5.7**, strict mode, ES2022 target
-- **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external)
+- **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external). Includes a custom `sqlJsCacheResetPlugin` that patches sql.js at bundle time — see [Manual rebuild](#manual-rebuild)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
 - **vitest 3.x** for unit tests (219 tests across 8 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
@@ -132,7 +136,53 @@ The index is split into two layers:
 
 This separation follows the Ports & Adapters pattern. The IndexService knows nothing about VS Code, files, or URIs — it only works with strings, numbers, and SQL.
 
-### Database schema
+### IgnoreService and .asnotesignore
+
+`IgnoreService` (`src/IgnoreService.ts`) is a pure Node.js class (no VS Code dependency) that reads a `.asnotesignore` file at a given path and exposes a single check:
+
+```typescript
+isIgnored(relativePath: string): boolean
+reload(): void
+```
+
+Patterns follow `.gitignore` syntax, parsed by the [`ignore`](https://www.npmjs.com/package/ignore) npm package — the standard implementation used by many tools. `IgnoreService` normalises backslash paths to forward slashes on Windows before passing them to `ignore`.
+
+**`.asnotesignore` lifecycle:**
+
+- Created by `initWorkspace()` at the workspace root (same level as `.asnotes/`) if it does not already exist.
+- The extension **never overwrites** the file — existence is enforced, content is not. A user can empty the file freely; if they delete it entirely it will be recreated with defaults on the next indexing operation.
+- Default content excludes `logseq/`, `.obsidian/`, and `.trash/` — common Logseq and Obsidian metadata/cache directories.
+- Patterns without a leading `/` match at any depth (e.g. `logseq/` excludes `vault/logseq/pages/foo.md`).
+
+The create-if-missing logic is centralised in a private `ensureIgnoreFile(workspaceRootFsPath: string): void` helper. It is called in three places:
+
+| Call site | When |
+|---|---|
+| `initWorkspace()` | On first workspace initialisation |
+| `rebuildIndex()` | At the start of every manual rebuild |
+| `startPeriodicScan()` setInterval callback | On every periodic scan tick |
+
+After `ensureIgnoreFile()` is called in `rebuildIndex()` and `startPeriodicScan()`, `ignoreService?.reload()` is called immediately so the in-memory patterns reflect any changes (including recreation after deletion) before the scan proceeds.
+
+**Integration with IndexScanner:**
+
+`IndexScanner` accepts an optional `IgnoreService` in its constructor. It is applied at three points:
+
+1. **`indexFile(uri)`** — early return (silent skip) if `ignoreService?.isIgnored(relativePath)` is true.
+2. **`fullScan()`** — post-filter on `findFiles()` result, alongside the `.enc.md` filter.
+3. **`staleScan()`** — post-filter on `findFiles()` result.
+
+Because ignored files are not present in `scannedPaths`, the "deleted files" cleanup at the end of `staleScan()` automatically removes previously indexed files that have become newly ignored. Conversely, un-ignoring a pattern causes those files to appear as "new" in the next stale scan and be re-indexed.
+
+**File watcher:**
+
+In `enterFullMode()`, a `vscode.workspace.createFileSystemWatcher` is registered on `.asnotesignore`. On any change (create, modify, or delete), `ignoreService.reload()` is called, followed by a `staleScan()`. The stale scan handles both removal of newly-ignored entries and addition of newly-un-ignored files. The watcher disposable is pushed to `fullModeDisposables` and torn down on mode transition.
+
+**Module-level state:**
+
+`ignoreService` is kept as a module-level variable (alongside `indexService` and `indexScanner`) and is set to `undefined` in `exitFullMode()`. In `initWorkspace()`, a temporary `IgnoreService` is constructed (after creating the file) and passed to the one-time `IndexScanner` used for the initial full scan, so newly initialised workspaces also respect default exclusions immediately.
+
+
 
 ```sql
 CREATE TABLE pages (
@@ -207,7 +257,13 @@ This runs on activation and periodically in the background.
 
 ### Persistence strategy
 
-sql.js operates entirely in memory. The database is persisted to disk (`saveToFile()`) at these points:
+sql.js operates entirely in memory. The WASM module (`SqlJsStatic`) is loaded once per `IndexService` instance via `ensureSqlModule()` and cached in a private field. During normal operation the module is reused for the lifetime of the `IndexService` instance — this avoids accumulating WASM heap allocations that cannot be garbage-collected.
+
+**WASM linear memory constraint:** WASM linear memory can grow but **never shrink**. After indexing ~18k files the heap reaches ~80 MB and becomes fragmented. Creating a new `Database()` on the same heap crashes at ~1618 files with "memory access out of bounds".
+
+**sql.js cache:** `initSqlJs()` internally caches the WASM module at the package level in a closure variable (`initSqlJsPromise`). Once called, all subsequent calls return the same promise — there is no built-in way to get a fresh WASM instance. An esbuild plugin (`sqlJsCacheResetPlugin` in `build.mjs`) patches this by injecting a `resetCache()` function onto the exported `initSqlJs` that sets `initSqlJsPromise = undefined`. This allows `resetSchema()` to force a truly fresh WASM load for rebuilds — see [Manual rebuild](#manual-rebuild).
+
+The database is persisted to disk (`saveToFile()`) at these points:
 
 - After each index update (file save, create, delete, rename, editor switch)
 - After each periodic scan that detects changes
@@ -282,6 +338,43 @@ A background `setInterval` runs `staleScan()` at a configurable interval (defaul
 - Files created or deleted outside VS Code
 
 The interval is read from `as-notes.periodicScanInterval`. Setting it to `0` disables periodic scanning. Changes to the setting take effect immediately (the interval is restarted on `onDidChangeConfiguration`).
+
+### Manual rebuild
+
+The **AS Notes: Rebuild Index** command (`as-notes.rebuildIndex`) uses `resetSchema()` to obtain a completely fresh WASM instance and empty database:
+
+1. `await indexService.resetSchema()` — closes the old Database, resets sql.js's internal WASM cache via `initSqlJs.resetCache()`, loads a fresh WASM instance with clean linear memory via `await initSqlJs()`, and creates a new empty Database with schema.
+2. `indexScanner.fullScan()` — repopulates the empty database from disk.
+3. `indexService.saveToFile()` — persists the rebuilt index.
+
+**Why a fresh WASM instance is required (esbuild method):**
+
+Every alternative approach on the same WASM heap fails on large workspaces (~18k files, ~280k links):
+
+| Approach | Failure mode | Files before crash |
+|---|---|---|
+| `DELETE FROM` all tables | WASM runtime hangs indefinitely on 280k rows | 0 (never starts) |
+| `DROP TABLE` with FK cascade | WASM runtime hangs on cascade checks | 0 (never starts) |
+| `db.close()` + `new Database()` on cached module | "memory access out of bounds" — fragmented heap | ~1618 |
+
+WASM linear memory can grow but never shrink. After indexing 18k files the heap is ~80 MB and fragmented. The only working path is a truly fresh WASM instance — proven by the initial index always completing successfully.
+
+**How `resetCache()` works:**
+
+sql.js caches the first `initSqlJs()` promise forever in a closure variable (`initSqlJsPromise`). The `sqlJsCacheResetPlugin` esbuild plugin (in `build.mjs`) intercepts `sql-wasm.js` during bundling and injects `initSqlJs.resetCache = function() { initSqlJsPromise = undefined; };` — this has closure access to the private variable. Calling `resetCache()` allows the next `initSqlJs()` to load a fresh WASM binary with clean memory. The old WASM module (~80 MB) becomes unreferenced and eligible for GC.
+
+### Clean workspace
+
+The **AS Notes: Clean Workspace** command (`as-notes.cleanWorkspace`) performs a full reset:
+
+1. Confirms with a modal warning dialog.
+2. Calls `exitFullMode()` — stops periodic scanning, closes the database handle, nulls all service instances (`indexService`, `indexScanner`, `ignoreService`, `completionProvider`, `logService`), disposes all full-mode disposables, and switches to passive mode.
+3. `fs.rmSync(.asnotes/, { recursive: true, force: true })` — deletes the entire `.asnotes/` directory tree (index database, logs, git hook config).
+4. Shows an informational message directing the user to run **Initialise Workspace** to start fresh.
+
+`.asnotesignore` at the workspace root is intentionally preserved — it is a user-editable, version-controlled configuration file.
+
+If the `.asnotes/` directory does not exist, the command shows an informational message and returns early. If the directory deletion fails (e.g. file lock on Windows), an error message is displayed.
 
 ---
 
@@ -629,7 +722,25 @@ This ensures:
 
 ### Debug logging
 
-When the `AS_NOTES_DEBUG=1` environment variable is set (configured in `.vscode/launch.json` for the Extension Development Host), the decoration manager logs `rebuildCache` timing, line count, and wikilink count to the debug console via `DebugLogger.ts`. All logging is no-op overhead when the variable is unset.
+Diagnostic logging is provided by `LogService` (`src/LogService.ts`), a pure Node.js rolling file logger with no VS Code dependencies.
+
+**Activation:** enabled via the `as-notes.enableLogging` setting (boolean, default `false`) or the `AS_NOTES_DEBUG=1` environment variable. Changing the setting requires a reload. When disabled, all `LogService` methods are no-ops with negligible overhead.
+
+**Output:** log files are written to `.asnotes/logs/as-notes.log`. When a file exceeds 10 MB it is rotated: `as-notes.log` → `as-notes.1.log` → `as-notes.2.log` → ... up to `as-notes.4.log` (5 files total). The oldest file is deleted on rotation.
+
+**Log format:** `[ISO timestamp] [LEVEL] tag: message`
+
+**Usage in services:** `LogService` is injected as an optional constructor parameter (defaulting to `NO_OP_LOGGER`) into `IndexService`, `IndexScanner`, `WikilinkDecorationManager`, and `WikilinkCompletionProvider`. The `extension.ts` module also uses the instance directly for lifecycle logging. A `NO_OP_LOGGER` singleton is used when logging is disabled, avoiding null checks throughout the codebase.
+
+**Timer API:** `logService.time(tag, label)` returns a closure that, when called, logs the elapsed milliseconds at INFO level — used for performance instrumentation throughout the decoration and completion pipelines.
+
+**Instrumented operations:** The following operations produce diagnostic log entries when logging is enabled:
+
+| Component | Operations logged |
+|---|---|
+| `IndexService` | `ensureSqlModule` (first vs cached load, timer), `initDatabase` (new/existing + file size, schema creation), `resetSchema` (close old DB, WASM cache reset, fresh initSqlJs timer, create new DB), `clearAllData` (timer), `close`, `saveToFile` (timer + byte count), `indexFileContent` (path → pageId), `getTotalLinkCount` (single COUNT query) |
+| `IndexScanner` | `fullScan` (file count, progress every 500 files, timer, total indexed + links via `getTotalLinkCount()`), `staleScan` (disk/index counts, new/stale/deleted/unchanged summary, timer) |
+| `extension.ts` | `enterFullMode` (DB init, stale scan, complete), `rebuildIndex` (resetSchema, fullScan, save, success with counts; errors at ERROR level), `exitFullMode` (start/complete), `cleanWorkspace` (confirmed), `startPeriodicScan` (each tick start, changes detected or no changes) |
 
 ---
 
@@ -1253,6 +1364,10 @@ The hook file is made executable via `fs.chmodSync(hookPath, 0o755)` (wrapped in
 
 ### Index exclusion
 
+Two classes of files are excluded from the index:
+
+**1. `.enc.md` files (encrypted notes)**
+
 `.enc.md` files end in `.md`, so they match the `**/*.{md,markdown}` glob used by `IndexScanner`. They are explicitly excluded at three points:
 
 1. **`IndexScanner.indexFile(uri)`** — early return if `uri.fsPath.toLowerCase().endsWith('.enc.md')`
@@ -1262,6 +1377,10 @@ The hook file is made executable via `fs.chmodSync(hookPath, 0o755)` (wrapped in
 In `extension.ts`, all index update triggers (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, etc.) use `isMarkdown(doc)` / `isMarkdownUri(uri)`, both of which have been updated to return `false` for `.enc.md` URIs.
 
 A private `isEncryptedFileUri(uri)` helper centralises the `.enc.md` check within `extension.ts`.
+
+**2. `.asnotesignore` patterns (user exclusions)**
+
+See [IgnoreService and .asnotesignore](#ignoreservice-and-asnotesignore) in the Persistent index section.
 
 ### Encryption commands
 

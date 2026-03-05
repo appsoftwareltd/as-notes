@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { IndexService, type ScanSummary } from './IndexService.js';
+import { IgnoreService } from './IgnoreService.js';
+import { LogService, NO_OP_LOGGER } from './LogService.js';
 
 /**
  * Orchestrates filesystem scanning and delegates to IndexService for DB operations.
@@ -8,10 +10,16 @@ import { IndexService, type ScanSummary } from './IndexService.js';
  */
 export class IndexScanner {
 
+    private readonly logger: LogService;
+
     constructor(
         private readonly indexService: IndexService,
         private readonly workspaceRoot: vscode.Uri,
-    ) { }
+        private readonly ignoreService?: IgnoreService,
+        logger?: LogService,
+    ) {
+        this.logger = logger ?? NO_OP_LOGGER;
+    }
 
     /**
      * Index a single file by URI. Reads content, resolves mtime, and delegates
@@ -23,6 +31,8 @@ export class IndexScanner {
         // Encrypted files are never indexed — their content is ciphertext.
         if (uri.fsPath.toLowerCase().endsWith('.enc.md')) { return; }
         const relativePath = vscode.workspace.asRelativePath(uri, false);
+        // Ignored files are silently skipped.
+        if (this.ignoreService?.isIgnored(relativePath)) { return; }
         const filename = path.basename(uri.fsPath);
 
         const contentBytes = await vscode.workspace.fs.readFile(uri);
@@ -47,7 +57,16 @@ export class IndexScanner {
         const pattern = '**/*.{md,markdown}';
         const allFiles = await vscode.workspace.findFiles(pattern);
         // Never index encrypted files — their content is ciphertext, not markdown.
-        const files = allFiles.filter(u => !u.fsPath.toLowerCase().endsWith('.enc.md'));
+        // Also filter out any file matching an .asnotesignore pattern.
+        const files = allFiles.filter(u => {
+            if (u.fsPath.toLowerCase().endsWith('.enc.md')) { return false; }
+            const rel = vscode.workspace.asRelativePath(u, false);
+            if (this.ignoreService?.isIgnored(rel)) { return false; }
+            return true;
+        });
+
+        this.logger.info('IndexScanner', `fullScan: starting — ${files.length} files (${allFiles.length} total, ${allFiles.length - files.length} filtered)`);
+        const end = this.logger.time('IndexScanner', 'fullScan');
 
         // Get all paths currently in the DB
         const existingPages = this.indexService.getAllPages();
@@ -74,6 +93,11 @@ export class IndexScanner {
                         increment: (1 / total) * 100,
                     });
                 }
+
+                // Log progress every 500 files
+                if (filesIndexed % 500 === 0) {
+                    this.logger.info('IndexScanner', `fullScan: progress ${filesIndexed}/${total} files`);
+                }
             } catch (err) {
                 console.warn(`as-notes: failed to index ${relativePath}:`, err);
             }
@@ -86,13 +110,12 @@ export class IndexScanner {
             }
         }
 
-        // Count total links
-        const allPages = this.indexService.getAllPages();
-        let linksFound = 0;
-        for (const page of allPages) {
-            linksFound += this.indexService.getLinksForPage(page.id).length;
-        }
+        // Count total links — single COUNT(*) query avoids 18k+ per-page
+        // queries that would stress the WASM heap after a large scan.
+        const linksFound = this.indexService.getTotalLinkCount();
 
+        end();
+        this.logger.info('IndexScanner', `fullScan: complete — ${filesIndexed} files indexed, ${linksFound} links found`);
         return { filesIndexed, linksFound };
     }
 
@@ -107,11 +130,20 @@ export class IndexScanner {
         const pattern = '**/*.{md,markdown}';
         const allFiles = await vscode.workspace.findFiles(pattern);
         // Never index encrypted files — their content is ciphertext, not markdown.
-        const files = allFiles.filter(u => !u.fsPath.toLowerCase().endsWith('.enc.md'));
+        // Also filter out any file matching an .asnotesignore pattern.
+        const files = allFiles.filter(u => {
+            if (u.fsPath.toLowerCase().endsWith('.enc.md')) { return false; }
+            const rel = vscode.workspace.asRelativePath(u, false);
+            if (this.ignoreService?.isIgnored(rel)) { return false; }
+            return true;
+        });
 
         const existingPages = this.indexService.getAllPages();
         const existingByPath = new Map(existingPages.map(p => [p.path, p]));
         const scannedPaths = new Set<string>();
+
+        this.logger.info('IndexScanner', `staleScan: starting — ${files.length} files on disk, ${existingPages.length} in index`);
+        const end = this.logger.time('IndexScanner', 'staleScan');
 
         const summary: ScanSummary = {
             newFiles: 0,
@@ -165,6 +197,8 @@ export class IndexScanner {
             }
         }
 
+        end();
+        this.logger.info('IndexScanner', `staleScan: complete — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted, ${summary.unchanged} unchanged`);
         return summary;
     }
 }

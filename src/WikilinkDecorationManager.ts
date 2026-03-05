@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { Wikilink } from './Wikilink.js';
 import { WikilinkService, LinkSegment } from './WikilinkService.js';
-import { debugLog, debugTime } from './DebugLogger.js';
+import { LogService } from './LogService.js';
 
 /**
  * Per-line parse cache entry.
@@ -27,6 +27,7 @@ interface LineCacheEntry {
  */
 export class WikilinkDecorationManager implements vscode.Disposable {
     private readonly wikilinkService: WikilinkService;
+    private readonly logger: LogService;
     private readonly disposables: vscode.Disposable[] = [];
 
     /** Subtle blue for all wikilink text (visible but not prominent). */
@@ -50,8 +51,9 @@ export class WikilinkDecorationManager implements vscode.Disposable {
     private debounceHandle: ReturnType<typeof setTimeout> | undefined;
     private static readonly DEBOUNCE_MS = 50;
 
-    constructor(wikilinkService: WikilinkService) {
+    constructor(wikilinkService: WikilinkService, logger: LogService) {
         this.wikilinkService = wikilinkService;
+        this.logger = logger;
 
         // React to text changes, editor switches, and cursor movement
         this.disposables.push(
@@ -130,7 +132,7 @@ export class WikilinkDecorationManager implements vscode.Disposable {
     private rebuildCacheAndDecorate(editor: vscode.TextEditor): void {
         if (!isMarkdownDocument(editor.document)) { return; }
 
-        const end = debugTime('decor', `rebuildCache (${editor.document.lineCount} lines)`);
+        const end = this.logger.time('decor', `rebuildCache (${editor.document.lineCount} lines)`);
 
         this.cacheUri = editor.document.uri.toString();
         this.cacheVersion = editor.document.version;
@@ -147,7 +149,7 @@ export class WikilinkDecorationManager implements vscode.Disposable {
             totalWikilinks += wikilinks.length;
         }
 
-        debugLog('decor', `cached ${this.lineCache.size} lines, ${totalWikilinks} wikilinks`);
+        this.logger.info('decor', `cached ${this.lineCache.size} lines, ${totalWikilinks} wikilinks`);
         end();
 
         this.applyDecorations(editor);

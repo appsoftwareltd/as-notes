@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { WikilinkService } from './WikilinkService.js';
 import { Wikilink } from './Wikilink.js';
 import { FrontMatterService } from './FrontMatterService.js';
+import { LogService, NO_OP_LOGGER } from './LogService.js';
 
 // ── Row types ──────────────────────────────────────────────────────────────
 
@@ -142,38 +143,80 @@ export function extractTitle(content: string, filename: string): string {
 
 export class IndexService {
     private db: Database | null = null;
-    private dbPath: string;
 
-    constructor(dbPath: string) {
+    // ── WASM module cache (OOM fix) ────────────────────────────────────────
+    // Each call to initSqlJs() loads a new WASM module with its own heap
+    // (~2 MB+). These heaps are outside the JS GC and are never freed,
+    // so repeated initSqlJs() calls (e.g. manual rebuilds) accumulate
+    // until the process hits an "out of memory" error.
+    // Caching the module here ensures the WASM binary is loaded once and
+    // reused for every subsequent Database() construction.
+    // ───────────────────────────────────────────────────────────────────────
+    private sqlModule: Awaited<ReturnType<typeof initSqlJs>> | null = null;
+
+    private dbPath: string;
+    private readonly logger: LogService;
+
+    constructor(dbPath: string, logger?: LogService) {
         this.dbPath = dbPath;
+        this.logger = logger ?? NO_OP_LOGGER;
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
+
+    /**
+     * Load the sql.js WASM module if not already cached.
+     *
+     * The module is kept for the lifetime of this IndexService instance
+     * so that repeated `initDatabase()` calls (e.g. manual rebuild) reuse
+     * the same WASM heap instead of allocating a new one each time.
+     *
+     * Without this cache every rebuild would call `initSqlJs()`, loading a
+     * fresh WASM binary with its own non-GC-able heap.  After a handful of
+     * rebuilds the cumulative heap allocations exhaust available memory and
+     * sql.js throws "out of memory".
+     *
+     * See also: TECHNICAL.md § Persistence strategy.
+     */
+    private async ensureSqlModule(): Promise<Awaited<ReturnType<typeof initSqlJs>>> {
+        if (!this.sqlModule) {
+            this.logger.info('IndexService', 'Loading WASM module (first load)');
+            const end = this.logger.time('IndexService', 'initSqlJs');
+            this.sqlModule = await initSqlJs();
+            end();
+        }
+        return this.sqlModule;
+    }
 
     /**
      * Initialise the database. Opens an existing file or creates a new one.
      * Creates the schema tables if they don't already exist.
      */
     async initDatabase(): Promise<void> {
-        const SQL = await initSqlJs();
+        // Reuse the cached WASM module — see ensureSqlModule() for rationale.
+        const SQL = await this.ensureSqlModule();
 
         if (fs.existsSync(this.dbPath)) {
             const fileBuffer = fs.readFileSync(this.dbPath);
+            this.logger.info('IndexService', `initDatabase: opening existing file (${fileBuffer.length} bytes)`);
             this.db = new SQL.Database(fileBuffer);
         } else {
+            this.logger.info('IndexService', 'initDatabase: creating new in-memory database');
             this.db = new SQL.Database();
         }
 
         // Enable foreign key enforcement
         this.db.run('PRAGMA foreign_keys = ON;');
         this.db.run(SCHEMA_SQL);
+        this.logger.info('IndexService', 'initDatabase: complete');
     }
 
     /**
      * Initialise from an in-memory database (for testing — no file I/O).
      */
     async initInMemory(): Promise<void> {
-        const SQL = await initSqlJs();
+        // Reuse the cached WASM module — see ensureSqlModule() for rationale.
+        const SQL = await this.ensureSqlModule();
         this.db = new SQL.Database();
         this.db.run('PRAGMA foreign_keys = ON;');
         this.db.run(SCHEMA_SQL);
@@ -189,17 +232,81 @@ export class IndexService {
         if (!this.db) { return; }
         const dir = path.dirname(this.dbPath);
         if (!fs.existsSync(dir)) { return; }
+        const end = this.logger.time('IndexService', 'saveToFile');
         const data = this.db.export();
         fs.writeFileSync(this.dbPath, Buffer.from(data));
+        this.logger.info('IndexService', `saveToFile: wrote ${data.length} bytes`);
+        end();
     }
 
     /**
-     * Close the database connection.
+     * Reset the database for a full rebuild.
+     *
+     * This is the preferred way to clear all data before a rebuild.  It:
+     * 1. Closes the current Database handle (instant — no row-level work);
+     * 2. Resets sql.js's internal WASM cache (`initSqlJsPromise`);
+     * 3. Calls `initSqlJs()` to load a **truly fresh** WASM instance with
+     *    clean, unfragmented linear memory;
+     * 4. Creates a new empty Database on that fresh instance.
+     *
+     * Why a fresh WASM instance is required:
+     * - WASM linear memory can grow but **never shrink**.  After indexing
+     *   ~18k files the heap reaches ~80 MB and becomes fragmented.
+     * - `new Database()` on the same heap crashes at ~1618 files with
+     *   "memory access out of bounds".
+     * - sql.js caches the first `initSqlJs()` promise forever in a closure
+     *   variable (`initSqlJsPromise`), so normal calls always return the
+     *   same (fragmented) WASM instance.
+     * - An esbuild plugin (see build.mjs) injects a `resetCache()` function
+     *   that sets `initSqlJsPromise = undefined`, allowing the next call
+     *   to load a fresh WASM binary with clean memory.
+     *
+     * The old WASM module (~80 MB) becomes unreferenced and eligible for GC
+     * after `this.sqlModule` is reassigned.
+     */
+    async resetSchema(): Promise<void> {
+        this.ensureOpen();
+
+        this.logger.info('IndexService', 'resetSchema: closing old database');
+        this.db!.close();
+        this.db = null;
+
+        // Reset sql.js's internal WASM promise cache so the next initSqlJs()
+        // call loads a truly fresh WASM instance with clean linear memory.
+        this.logger.info('IndexService', 'resetSchema: resetting WASM cache');
+        const resetCache = (initSqlJs as any).resetCache;
+        if (typeof resetCache === 'function') {
+            resetCache();
+        } else {
+            this.logger.warn('IndexService', 'resetSchema: resetCache() not available — WASM module will be reused (may fail on large workspaces)');
+        }
+        this.sqlModule = null;
+
+        // Load a fresh WASM instance
+        const end = this.logger.time('IndexService', 'resetSchema: initSqlJs');
+        this.sqlModule = await initSqlJs();
+        end();
+
+        this.logger.info('IndexService', 'resetSchema: creating fresh database');
+        this.db = new this.sqlModule.Database();
+        this.db.run('PRAGMA foreign_keys = ON;');
+        this.db.run(SCHEMA_SQL);
+        this.logger.info('IndexService', 'resetSchema: complete');
+    }
+
+    /**
+     * Close the database connection and release the cached WASM module.
+     *
+     * Used when the extension is fully shutting down or the workspace is
+     * being cleaned.  For rebuilds, prefer `resetSchema()` which keeps
+     * the Database and WASM module alive.
      */
     close(): void {
         if (this.db) {
+            this.logger.info('IndexService', 'close: closing database and releasing WASM module');
             this.db.close();
             this.db = null;
+            this.sqlModule = null;
         }
     }
 
@@ -374,6 +481,17 @@ export class IndexService {
     }
 
     /**
+     * Get the total number of links across all pages.
+     * Uses a single `COUNT(*)` query — O(1) regardless of table size.
+     */
+    getTotalLinkCount(): number {
+        this.ensureOpen();
+        const result = this.db!.exec(`SELECT COUNT(*) FROM links`);
+        if (result.length === 0) { return 0; }
+        return result[0].values[0][0] as number;
+    }
+
+    /**
      * Get the count of back-links pointing to a given page filename.
      * Optimised for hover tooltip display.
      */
@@ -434,6 +552,7 @@ export class IndexService {
         this.indexAliasesFromContent(pageId, content);
         this.indexTasksFromContent(pageId, content);
 
+        this.logger.info('IndexService', `indexFileContent: ${relativePath} → pageId=${pageId}`);
         return pageId;
     }
 
@@ -971,15 +1090,27 @@ export class IndexService {
     // ── Schema management ──────────────────────────────────────────────────
 
     /**
-     * Drop all tables and recreate the schema. Used by rebuild command.
+     * Delete all data from every table without dropping or recreating the schema.
+     * Unlike `resetSchema()` (which uses DROP TABLE), this preserves the
+     * prepared-statement cache that sql.js maintains internally, so subsequent
+     * queries continue to work correctly.
+     *
+     * Child tables are cleared before the parent (`pages`) to respect FK order.
      */
-    resetSchema(): void {
+    clearAllData(): void {
         this.ensureOpen();
-        this.db!.run(`DROP TABLE IF EXISTS tasks`);
-        this.db!.run(`DROP TABLE IF EXISTS aliases`);
-        this.db!.run(`DROP TABLE IF EXISTS links`);
-        this.db!.run(`DROP TABLE IF EXISTS pages`);
-        this.db!.run(SCHEMA_SQL);
+        this.logger.info('IndexService', 'clearAllData: starting');
+        const end = this.logger.time('IndexService', 'clearAllData');
+        this.logger.info('IndexService', 'clearAllData: DELETE FROM tasks');
+        this.db!.run(`DELETE FROM tasks`);
+        this.logger.info('IndexService', 'clearAllData: DELETE FROM aliases');
+        this.db!.run(`DELETE FROM aliases`);
+        this.logger.info('IndexService', 'clearAllData: DELETE FROM links');
+        this.db!.run(`DELETE FROM links`);
+        this.logger.info('IndexService', 'clearAllData: DELETE FROM pages');
+        this.db!.run(`DELETE FROM pages`);
+        end();
+        this.logger.info('IndexService', 'clearAllData: complete');
     }
 
     /**
