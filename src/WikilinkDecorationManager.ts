@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { Wikilink } from './Wikilink.js';
 import { WikilinkService, LinkSegment } from './WikilinkService.js';
 import { LogService } from './LogService.js';
 
@@ -7,40 +6,37 @@ import { LogService } from './LogService.js';
  * Per-line parse cache entry.
  */
 interface LineCacheEntry {
-    wikilinks: Wikilink[];
     segments: LinkSegment[];
 }
 
 /**
  * Manages wikilink decorations in the editor.
  *
- * - Default decoration: subtle blue text for all wikilink ranges
- * - Active decoration: distinct blue highlight for the specific link under cursor
+ * All wikilinks share a single colour — there is no separate active/hover
+ * style. While the index is loading, wikilinks are shown in a muted grey
+ * to indicate they are not yet navigable.
  *
- * When the cursor is positioned within a nested wikilink, only the innermost
- * link is highlighted with the active style; the remaining wikilink text
- * reverts to normal editor colour.
+ * The colour defaults to the theme's `textLink.foreground` but can be
+ * overridden via the `as-notes.wikilinkColour` setting (hex string).
+ * Changing the setting takes effect immediately without a reload.
  *
  * Performance: wikilinks and segments are cached per document version. Text
- * changes trigger a debounced full re-parse; selection changes only
- * re-classify the existing cached segments, avoiding redundant parsing.
+ * changes trigger a debounced full re-parse; selection changes are ignored
+ * since all wikilinks share the same decoration.
  */
 export class WikilinkDecorationManager implements vscode.Disposable {
     private readonly wikilinkService: WikilinkService;
     private readonly logger: LogService;
     private readonly disposables: vscode.Disposable[] = [];
 
-    /** Subtle blue for all wikilink text (visible but not prominent). */
-    private readonly defaultDecorationType = vscode.window.createTextEditorDecorationType({
-        color: '#6699cc',
-    });
+    /** Decoration for wikilinks when the index is ready (navigable). */
+    private defaultDecorationType: vscode.TextEditorDecorationType;
 
-    /** Bright blue + underline for the active (hovered/cursor) wikilink. */
-    private readonly activeDecorationType = vscode.window.createTextEditorDecorationType({
-        color: '#4488ff',
-        textDecoration: 'underline',
-        fontWeight: 'bold',
-    });
+    /** Muted decoration shown while the index is still loading. */
+    private loadingDecorationType: vscode.TextEditorDecorationType;
+
+    /** When false, wikilinks are shown with the muted loading style. */
+    private ready = false;
 
     /** Wikilink/segment cache keyed by document version. */
     private cacheVersion = -1;
@@ -55,11 +51,14 @@ export class WikilinkDecorationManager implements vscode.Disposable {
         this.wikilinkService = wikilinkService;
         this.logger = logger;
 
-        // React to text changes, editor switches, and cursor movement
+        this.defaultDecorationType = this.createDefaultDecoration();
+        this.loadingDecorationType = this.createLoadingDecoration();
+
+        // React to text changes and editor switches
         this.disposables.push(
             vscode.workspace.onDidChangeTextDocument((e) => this.onDocumentChanged(e)),
             vscode.window.onDidChangeActiveTextEditor((editor) => this.onActiveEditorChanged(editor)),
-            vscode.window.onDidChangeTextEditorSelection((e) => this.onSelectionChanged(e)),
+            vscode.workspace.onDidChangeConfiguration((e) => this.onConfigurationChanged(e)),
         );
 
         // Decorate the currently active editor on startup
@@ -73,9 +72,21 @@ export class WikilinkDecorationManager implements vscode.Disposable {
             clearTimeout(this.debounceHandle);
         }
         this.defaultDecorationType.dispose();
-        this.activeDecorationType.dispose();
+        this.loadingDecorationType.dispose();
         for (const d of this.disposables) {
             d.dispose();
+        }
+    }
+
+    /**
+     * Switch from loading to ready state — wikilinks change from muted grey
+     * to their normal colour, indicating navigation is now available.
+     */
+    setReady(): void {
+        this.ready = true;
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            this.applyDecorations(editor);
         }
     }
 
@@ -104,16 +115,43 @@ export class WikilinkDecorationManager implements vscode.Disposable {
         }
     }
 
-    private onSelectionChanged(event: vscode.TextEditorSelectionChangeEvent): void {
-        // Selection change on a cached document → just re-classify, no re-parse.
-        // When the cache is stale (e.g. version bumped by a keystroke that also
-        // fires onDocumentChanged), do nothing here — the 50 ms debounce will
-        // rebuild the cache shortly.  Calling rebuildCacheAndDecorate() here
-        // would bypass the debounce and cause two full re-parses per keystroke.
-        const editor = event.textEditor;
-        if (this.isCacheFresh(editor)) {
+    private onConfigurationChanged(event: vscode.ConfigurationChangeEvent): void {
+        if (!event.affectsConfiguration('as-notes.wikilinkColour')) { return; }
+
+        // Recreate decoration types with the new colour
+        this.defaultDecorationType.dispose();
+        this.loadingDecorationType.dispose();
+        this.defaultDecorationType = this.createDefaultDecoration();
+        this.loadingDecorationType = this.createLoadingDecoration();
+
+        // Re-decorate the active editor
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
             this.applyDecorations(editor);
         }
+    }
+
+    // ── Decoration type creation ───────────────────────────────────────
+
+    private getConfiguredColour(): string | vscode.ThemeColor {
+        const config = vscode.workspace.getConfiguration('as-notes');
+        const hex = config.get<string>('wikilinkColour', '').trim();
+        if (hex && /^#[0-9a-fA-F]{3,8}$/.test(hex)) {
+            return hex;
+        }
+        return new vscode.ThemeColor('textLink.foreground');
+    }
+
+    private createDefaultDecoration(): vscode.TextEditorDecorationType {
+        return vscode.window.createTextEditorDecorationType({
+            color: this.getConfiguredColour(),
+        });
+    }
+
+    private createLoadingDecoration(): vscode.TextEditorDecorationType {
+        return vscode.window.createTextEditorDecorationType({
+            color: '#888888',
+        });
     }
 
     // ── Cache management ───────────────────────────────────────────────
@@ -145,7 +183,7 @@ export class WikilinkDecorationManager implements vscode.Disposable {
             if (wikilinks.length === 0) { continue; }
 
             const segments = this.wikilinkService.computeLinkSegments(wikilinks);
-            this.lineCache.set(lineIndex, { wikilinks, segments });
+            this.lineCache.set(lineIndex, { segments });
             totalWikilinks += wikilinks.length;
         }
 
@@ -156,42 +194,30 @@ export class WikilinkDecorationManager implements vscode.Disposable {
     }
 
     /**
-     * Classify cached segments into default/active based on cursor position
-     * and set decorations. No parsing occurs here.
+     * Apply decorations to all cached segments. Uses the loading style
+     * when the index is not ready, default style when ready.
      */
     private applyDecorations(editor: vscode.TextEditor): void {
         if (!isMarkdownDocument(editor.document)) { return; }
 
-        const cursorPosition = editor.selection.active;
-        const defaultRanges: vscode.Range[] = [];
-        const activeRanges: vscode.Range[] = [];
+        const ranges: vscode.Range[] = [];
 
         for (const [lineIndex, entry] of this.lineCache) {
-            // Determine the active wikilink on the cursor line
-            let activeWikilink: Wikilink | undefined;
-            if (lineIndex === cursorPosition.line) {
-                activeWikilink = this.wikilinkService.findInnermostWikilinkAtOffset(
-                    entry.wikilinks,
-                    cursorPosition.character,
-                );
-            }
-
             for (const segment of entry.segments) {
-                const range = new vscode.Range(
+                ranges.push(new vscode.Range(
                     lineIndex, segment.startOffset,
                     lineIndex, segment.endOffset,
-                );
-
-                if (activeWikilink && segment.wikilink === activeWikilink) {
-                    activeRanges.push(range);
-                } else {
-                    defaultRanges.push(range);
-                }
+                ));
             }
         }
 
-        editor.setDecorations(this.defaultDecorationType, defaultRanges);
-        editor.setDecorations(this.activeDecorationType, activeRanges);
+        if (this.ready) {
+            editor.setDecorations(this.loadingDecorationType, []);
+            editor.setDecorations(this.defaultDecorationType, ranges);
+        } else {
+            editor.setDecorations(this.defaultDecorationType, []);
+            editor.setDecorations(this.loadingDecorationType, ranges);
+        }
     }
 }
 

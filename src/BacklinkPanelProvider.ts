@@ -62,7 +62,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             this.lockedPageId = undefined;
         }
         this.logger?.info('BacklinkPanel', `show: locked to uri="${this.lockedUri?.toString()}"`);
-        this.renderForLockedTarget();
+        void this.renderForLockedTarget(true);
     }
 
     /**
@@ -80,7 +80,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         this.lockedUri = undefined;
         this.lockedPageName = pageName;
         this.lockedPageId = undefined;
-        this.renderForLockedTarget();
+        void this.renderForLockedTarget(true);
     }
 
     /**
@@ -97,7 +97,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         this.lockedUri = undefined;
         this.lockedPageName = pageTitle;
         this.lockedPageId = pageId;
-        this.renderForLockedTarget();
+        void this.renderForLockedTarget(true);
     }
 
     /**
@@ -107,7 +107,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
      */
     refresh(): void {
         if (!this.panel) { return; }
-        this.renderForLockedTarget();
+        void this.renderForLockedTarget(false);
     }
 
     /** Whether the panel is currently visible. */
@@ -158,7 +158,16 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         }, null, this.disposables);
     }
 
-    private renderForLockedTarget(): void {
+    private async renderForLockedTarget(showLoading: boolean): Promise<void> {
+        if (!this.panel) { return; }
+
+        if (showLoading) {
+            // Show loading spinner immediately so the panel feels responsive
+            this.renderLoading();
+            // Yield to let the webview paint the loading state
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
         if (this.lockedUri && isMarkdownUri(this.lockedUri)) {
             this.renderBacklinksForUri(this.lockedUri);
         } else if (this.lockedPageId !== undefined && this.lockedPageName) {
@@ -170,6 +179,15 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         }
     }
 
+    private renderLoading(): void {
+        if (!this.panel) { return; }
+        this.panel.webview.html = this.buildHtml(
+            'Backlinks',
+            null,
+            '<div class="loading-state"><span class="codicon codicon-loading codicon-modifier-spin"></span> Loading backlinks\u2026</div>',
+        );
+    }
+
     private renderBacklinksForUri(uri: vscode.Uri): void {
         if (!this.panel || !this.indexService.isOpen) { return; }
 
@@ -177,19 +195,17 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         this.logger?.info('BacklinkPanel', `renderBacklinksForUri: looking up path="${relativePath}" from uri="${uri.toString()}"`);
         const page = this.indexService.getPageByPath(relativePath);
 
-        if (!page) {
-            this.logger?.info('BacklinkPanel', `renderBacklinksForUri: page NOT FOUND for path="${relativePath}"`);
-            this.panel.webview.html = this.buildHtml(
-                this.getPageTitle(uri),
-                null,
-                '<div class="empty-state">This file is not yet indexed (This could be because it is an ignored file).</div>',
-            );
-            return;
+        if (page) {
+            this.logger?.info('BacklinkPanel', `renderBacklinksForUri: found page id=${page.id} title="${page.title}" path="${page.path}"`);
+            const groups = this.indexService.getBacklinkChains(page.id);
+            this.renderChainGroups(page.title, page.path, groups);
+        } else {
+            // Page not in index — fall back to name-based lookup (same as forward references)
+            this.logger?.info('BacklinkPanel', `renderBacklinksForUri: page NOT FOUND for path="${relativePath}", falling back to name-based lookup`);
+            const pageName = this.getPageTitle(uri);
+            const groups = this.indexService.getBacklinkChainsByName(pageName);
+            this.renderChainGroups(pageName, null, groups);
         }
-
-        this.logger?.info('BacklinkPanel', `renderBacklinksForUri: found page id=${page.id} title="${page.title}" path="${page.path}"`);
-        const groups = this.indexService.getBacklinkChains(page.id);
-        this.renderChainGroups(page.title, page.path, groups);
     }
 
     private renderBacklinksForPage(pageId: number, pageTitle: string): void {
@@ -422,6 +438,31 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             text-align: center;
         }
 
+        /* Loading state */
+        .loading-state {
+            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.8));
+            padding: 20px 0;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .codicon-loading::before {
+            content: "\\eb19";
+            font-family: codicon;
+            font-size: 16px;
+        }
+
+        .codicon-modifier-spin {
+            animation: codicon-spin 1.5s linear infinite;
+        }
+
+        @keyframes codicon-spin {
+            100% { transform: rotate(360deg); }
+        }
+
         /* Codicon support */
         .codicon-file-text::before {
             content: "\\eb60";
@@ -451,17 +492,17 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 5px 6px;
+            padding: 5px 8px;
             cursor: pointer;
             border-radius: 3px;
             font-weight: 600;
-            color: var(--vscode-foreground);
-            border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128,128,128,0.15)));
+            color: #fff;
+            background: var(--vscode-textLink-foreground, #3794ff);
             margin-bottom: 6px;
         }
 
         .chain-group-header:hover {
-            background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
+            filter: brightness(1.15);
         }
 
         .group-chevron {
@@ -478,7 +519,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         }
 
         .pattern-link {
-            color: var(--vscode-foreground);
+            color: #fff;
         }
 
         .chain-arrow {
@@ -486,11 +527,15 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             font-size: 0.85em;
         }
 
+        .chain-group-header .chain-arrow {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
         .group-count {
             font-size: 0.8em;
             font-weight: 400;
-            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.7));
-            background: var(--vscode-badge-background, rgba(128,128,128,0.15));
+            color: rgba(255, 255, 255, 0.85);
+            background: rgba(255, 255, 255, 0.2);
             padding: 1px 6px;
             border-radius: 8px;
             min-width: 18px;
@@ -569,9 +614,12 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
             font-size: var(--vscode-editor-font-size, 13px);
             color: #999;
-            white-space: pre;
+            white-space: normal;     /* Allows text to wrap naturally */
+            overflow: visible;       /* Ensures the wrapped text is shown */
+            text-overflow: ellipsis; 
+            /*white-space: pre;
             overflow: hidden;
-            text-overflow: ellipsis;
+            text-overflow: ellipsis;*/
             border-radius: 0 3px 3px 0;
             line-height: 1.5;
         }
@@ -616,7 +664,46 @@ export class BacklinkPanelProvider implements vscode.Disposable {
                     chevron.className = 'group-chevron codicon codicon-chevron-down';
                 }
             }
+            saveState();
         }
+
+        function saveState() {
+            const collapsed = [];
+            document.querySelectorAll('.chain-group-body.collapsed').forEach(el => {
+                if (el.id) { collapsed.push(el.id); }
+            });
+            vscode.setState({
+                scrollTop: document.documentElement.scrollTop || document.body.scrollTop,
+                collapsedGroups: collapsed,
+            });
+        }
+
+        function restoreState() {
+            const state = vscode.getState();
+            if (!state) { return; }
+            if (state.collapsedGroups) {
+                state.collapsedGroups.forEach(id => {
+                    const body = document.getElementById(id);
+                    const chevronId = 'chevron-' + id.replace('group-', '');
+                    const chevron = document.getElementById(chevronId);
+                    if (body) { body.classList.add('collapsed'); }
+                    if (chevron) { chevron.className = 'group-chevron codicon codicon-chevron-right'; }
+                });
+            }
+            if (typeof state.scrollTop === 'number') {
+                window.scrollTo(0, state.scrollTop);
+            }
+        }
+
+        // Debounced scroll save
+        let scrollTimer;
+        window.addEventListener('scroll', () => {
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(saveState, 100);
+        });
+
+        // Restore on load
+        restoreState();
     </script>
 </body>
 </html>`;

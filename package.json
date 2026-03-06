@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "1.0.10",
+    "version": "1.0.11",
     "publisher": "appsoftwareltd",
     "license": "CC-BY-NC-SA-4.0",
     "icon": "images/icon.png",
@@ -180,6 +180,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Enable diagnostic logging to .asnotes/logs/. Rolling 10 MB files, max 5. Requires reload after changing."
+                },
+                "as-notes.wikilinkColour": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Hex colour for wikilinks in the editor (e.g. #3794ff). Leave empty to use your theme's link colour."
                 }
             }
         },

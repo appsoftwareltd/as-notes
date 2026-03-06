@@ -255,6 +255,21 @@ async function enterFullMode(
     ignoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
     indexScanner = new IndexScanner(indexService, workspaceRoot, ignoreService, logService);
 
+    // Shared services — WikilinkService is index-independent, so create early
+    const wikilinkService = new WikilinkService();
+
+    // Decoration manager — created before scan so wikilinks are visually
+    // marked (muted grey) immediately, then switch to blue once the index
+    // is ready and setReady() is called.
+    const decorationManager = new WikilinkDecorationManager(wikilinkService, logService);
+    fullModeDisposables.push(decorationManager);
+
+    // Status bar: show indexing spinner
+    statusBarItem.text = '$(sync~spin) AS Notes: Indexing...';
+    statusBarItem.tooltip = 'Building the wikilink index';
+    statusBarItem.command = undefined as unknown as string;
+    statusBarItem.show();
+
     if (schemaReset) {
         // Schema was outdated and reset — run a full rebuild with progress notification
         logService.info('extension', 'enterFullMode: schema was reset, running full rebuild');
@@ -282,13 +297,11 @@ async function enterFullMode(
         }
     }
 
-    // Shared services
-    const wikilinkService = new WikilinkService();
-    const fileService = new WikilinkFileService(indexService);
+    // Index is ready — switch decorations from muted grey to active blue
+    decorationManager.setReady();
+    updateFullModeStatusBar();
 
-    // Decoration manager
-    const decorationManager = new WikilinkDecorationManager(wikilinkService, logService);
-    fullModeDisposables.push(decorationManager);
+    const fileService = new WikilinkFileService(indexService);
 
     // Document link provider — Ctrl/Cmd+Click navigation (alias-aware tooltips)
     const linkProvider = new WikilinkDocumentLinkProvider(wikilinkService, fileService, indexService);

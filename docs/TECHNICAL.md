@@ -791,22 +791,46 @@ Each segment is registered as a separate `DocumentLink` and a separate decoratio
 
 | Decoration | Colour | Style | Applied to |
 |---|---|---|---|
-| Default | `#6699cc` (subtle blue) | Normal weight | All wikilink segments not under cursor |
-| Active | `#4488ff` (bright blue) | Bold + underline | Segments of the innermost wikilink under the cursor |
+| Loading | `#888888` (muted grey) | Normal weight | All wikilink segments while index is loading |
+| Default | Theme's `textLink.foreground` (or `as-notes.wikilinkColour` override) | Normal weight | All wikilink segments after index is ready |
+
+All wikilinks share the same colour — there is no separate active/hover style.
+
+### Configurable colour
+
+The wikilink colour defaults to the VS Code theme's `textLink.foreground` colour (the same colour used by the backlinks panel). Users can override it via the `as-notes.wikilinkColour` setting:
+
+| Setting | Default | Description |
+|---|---|---|
+| `as-notes.wikilinkColour` | _(empty — uses theme colour)_ | Hex colour for wikilinks (e.g. `#3794ff`). Leave empty to follow the theme. |
+
+Changing the setting takes effect immediately — no reload required. Internally, decoration types are immutable in VS Code, so changing the colour disposes the old types and creates new ones.
+
+### Loading state
+
+The decoration manager is created **before** the index scan starts, so wikilinks are visually recognised immediately on activation. While the index is loading (`ready = false`), all wikilinks are shown with the muted grey `loadingDecorationType`. The active (hover/cursor) highlight is suppressed — there is nothing to navigate to yet.
+
+Once the scan completes, `extension.ts` calls `decorationManager.setReady()`, which flips `ready = true` and re-applies decorations to the active editor. Wikilinks shift from grey to their normal blue, signalling that Ctrl+Click navigation and hover tooltips are now available.
+
+The status bar shows `$(sync~spin) AS Notes: Indexing...` during the scan, then switches to the normal `$(database) AS Notes — N pages` display.
 
 ### Why segments prevent decoration conflicts
 
-Earlier versions registered one decoration range per wikilink. With overlapping ranges, the outer wikilink's default-blue decoration would override the inner wikilink's active-blue decoration (VS Code renders overlapping decorations in registration order, with later ones winning).
+Earlier versions registered one decoration range per wikilink. With overlapping nested wikilinks (e.g. `[[outer [[inner]]]]`), overlapping ranges would cause unpredictable results as VS Code renders overlapping decorations in registration order.
 
-By using segments, each character position has exactly one range in either the default or active array. No overlap, no conflict.
-
-**Active wikilink determination:**
-
-1. For the cursor's line, call `findInnermostWikilinkAtOffset(wikilinks, cursorCharacter)`.
-2. When building segments for that line, compare `segment.wikilink === activeWikilink` (reference equality).
-3. Matching segments go to `activeRanges`; all others go to `defaultRanges`.
+By using segments, each character position has exactly one range. No overlap, no conflict.
 
 ### Decoration caching and debouncing
+
+Parsing every line on every event is expensive for large documents. Segments are cached per `(document.uri, document.version)`. A full re-parse only occurs when the document version changes (text edit) or a different document is focused.
+
+- **Debounced text changes:** `onDidChangeTextDocument` is debounced at 50 ms. Rapidly fired edit events are batched into a single re-parse.
+
+This ensures:
+- Opening a document parses once and applies decorations immediately.
+- Typing triggers at most one re-parse per 50 ms burst.
+
+### Debug logging
 
 Parsing every line on every event (keystroke, cursor move) is expensive for large documents. The decoration manager uses a two-tier strategy:
 
@@ -1248,11 +1272,11 @@ The backlinks panel displays all incoming links to a target page — either the 
 
 `BacklinkPanelProvider` (`src/BacklinkPanelProvider.ts`) manages the webview panel lifecycle:
 
-- **`show()`** — creates or reveals the panel for the currently active editor file. Resolves the active file's page in the index and displays its backlink chains.
-- **`showForPage(pageId, pageTitle)`** — opens the panel locked to a specific page by its database ID. Used when the target page exists in the index (e.g. right-clicking a wikilink that resolves to a known page, including via alias resolution).
-- **`showForName(pageName)`** — opens the panel locked to a page name without requiring a page to exist. Used for forward references (wikilinks to pages that haven't been created yet).
+- **`show()`** — creates or reveals the panel for the currently active editor file. Resolves the active file's page in the index and displays its backlink chains. If the page is not in the index (e.g. newly created file), falls back to name-based lookup via `getBacklinkChainsByName()` — returning the same results as a forward reference. Shows a loading spinner while content loads.
+- **`showForPage(pageId, pageTitle)`** — opens the panel locked to a specific page by its database ID. Used when the target page exists in the index (e.g. right-clicking a wikilink that resolves to a known page, including via alias resolution). Shows a loading spinner while content loads.
+- **`showForName(pageName)`** — opens the panel locked to a page name without requiring a page to exist. Used for forward references (wikilinks to pages that haven't been created yet). Shows a loading spinner while content loads.
 - **`update(uri)`** — called when the active editor changes. Re-renders backlinks for the given file unless the panel is locked to a specific page/name.
-- **`refresh()`** — re-renders the current target's backlinks. Called by all index update triggers.
+- **`refresh()`** — re-renders the current target's backlinks without a loading spinner. Called by all index update triggers. Preserves webview scroll position and collapsed group state across re-renders.
 - **`dispose()`** — cleans up the panel and listeners.
 
 ### Chain-first grouping
@@ -1337,6 +1361,17 @@ Each chain group renders as a collapsible section with:
 Chain link names in instance rows use `font-weight: 600` for emphasis. The instance chain bar matches the editor font family and size.
 
 The HTML uses VS Code CSS variables for automatic light/dark theme support. Chain arrows use dimmed description foreground. Clickable elements have hover states.
+
+### State preservation
+
+The webview preserves scroll position and collapsed group state across re-renders using the VS Code webview state API (`vscode.setState()` / `vscode.getState()`):
+
+- **Collapsed groups**: each call to `toggleGroup()` saves the list of collapsed group element IDs to state. On page load, the script reads state and re-applies the `collapsed` class and chevron direction to matching groups.
+- **Scroll position**: a debounced `scroll` event listener (100ms) saves `document.documentElement.scrollTop` to state. On page load, the script calls `window.scrollTo()` with the saved value.
+
+This is critical because `refresh()` replaces `webview.html` on every index update — navigation clicks trigger `onDidChangeActiveTextEditor` which re-indexes and refreshes the panel. Without state preservation, the user loses their scroll position every time they click a backlink.
+
+The loading spinner (`renderLoading()`) is only shown on initial panel opens (`show()`, `showForName()`, `showForPage()`), not on background refreshes. This avoids a visible flash when index events trigger a re-render.
 
 ### Sync strategy
 
@@ -1625,9 +1660,12 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 4. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
    - Sets the `as-notes.fullMode` context key (controls view/keybinding `when` clauses)
    - Opens the SQLite database
-   - Runs a stale scan to catch external changes
-   - Creates shared `WikilinkService`, `WikilinkFileService`, `IndexService`, `IndexScanner`
-   - Registers all providers: `WikilinkDecorationManager`, `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`, `BacklinkPanelProvider`
+   - Creates `WikilinkDecorationManager` **before** the scan (wikilinks appear muted grey immediately)
+   - Shows status bar spinner `$(sync~spin) AS Notes: Indexing...`
+   - Runs a stale scan (or full rebuild on schema reset) to catch external changes
+   - Calls `decorationManager.setReady()` — wikilinks shift from grey to blue
+   - Creates shared `WikilinkFileService`, `IndexService`, `IndexScanner`
+   - Registers all providers: `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`, `BacklinkPanelProvider`
    - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
