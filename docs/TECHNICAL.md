@@ -832,19 +832,6 @@ This ensures:
 
 ### Debug logging
 
-Parsing every line on every event (keystroke, cursor move) is expensive for large documents. The decoration manager uses a two-tier strategy:
-
-- **Document-version cache:** Parsed wikilinks and computed segments are cached per `(document.uri, document.version)`. A full re-parse only occurs when the document version changes (text edit) or a different document is focused.
-- **Debounced text changes:** `onDidChangeTextDocument` is debounced at 50 ms. Rapidly fired edit events are batched into a single re-parse.
-- **Instant selection updates:** `onDidChangeTextEditorSelection` skips re-parsing when the cache is fresh — it only re-classifies existing segments as active/default based on the new cursor position.
-
-This ensures:
-- Opening a document parses once and applies decorations immediately.
-- Typing triggers at most one re-parse per 50 ms burst.
-- Moving the cursor (arrow keys, click) never re-parses — only re-classifies.
-
-### Debug logging
-
 Diagnostic logging is provided by `LogService` (`src/LogService.ts`), a pure Node.js rolling file logger with no VS Code dependencies.
 
 **Activation:** enabled via the `as-notes.enableLogging` setting (boolean, default `false`) or the `AS_NOTES_DEBUG=1` environment variable. Changing the setting requires a reload. When disabled, all `LogService` methods are no-ops with negligible overhead.
