@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { IndexService, type BacklinkChainGroup, type BacklinkChainInstance, type PageRow } from './IndexService.js';
+import type { LogService } from './LogService.js';
 import * as path from 'path';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
     constructor(
         private indexService: IndexService,
         private workspaceRoot: vscode.Uri,
+        private logger?: LogService,
     ) { }
 
     // ── Public API ─────────────────────────────────────────────────────────
@@ -59,6 +61,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             this.lockedPageName = undefined;
             this.lockedPageId = undefined;
         }
+        this.logger?.info('BacklinkPanel', `show: locked to uri="${this.lockedUri?.toString()}"`);
         this.renderForLockedTarget();
     }
 
@@ -171,17 +174,20 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         if (!this.panel || !this.indexService.isOpen) { return; }
 
         const relativePath = vscode.workspace.asRelativePath(uri, false);
+        this.logger?.info('BacklinkPanel', `renderBacklinksForUri: looking up path="${relativePath}" from uri="${uri.toString()}"`);
         const page = this.indexService.getPageByPath(relativePath);
 
         if (!page) {
+            this.logger?.info('BacklinkPanel', `renderBacklinksForUri: page NOT FOUND for path="${relativePath}"`);
             this.panel.webview.html = this.buildHtml(
                 this.getPageTitle(uri),
                 null,
-                '<div class="empty-state">This file is not yet indexed.</div>',
+                '<div class="empty-state">This file is not yet indexed (This could be because it is an ignored file).</div>',
             );
             return;
         }
 
+        this.logger?.info('BacklinkPanel', `renderBacklinksForUri: found page id=${page.id} title="${page.title}" path="${page.path}"`);
         const groups = this.indexService.getBacklinkChains(page.id);
         this.renderChainGroups(page.title, page.path, groups);
     }
@@ -261,16 +267,29 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             const contextLines = lastLink.context.split('\n');
             // The wikilink's own line is in the middle (or first if no preceding line)
             // Determine which line in the snippet is the wikilink line
-            const wikiLinkLineIndex = lastLink.line > 0 ? 1 : 0;
+            // Clamp to actual context length for single-line context (e.g. stale index entries)
+            const wikiLinkLineIndex = contextLines.length >= 2 && lastLink.line > 0 ? 1 : 0;
+
+            // Strip common leading whitespace so indented notes don't waste space
+            const nonEmptyLines = contextLines.filter(l => l.trimEnd().length > 0);
+            const commonIndent = nonEmptyLines.length > 0
+                ? Math.min(...nonEmptyLines.map(l => l.match(/^\s*/)?.[0].length ?? 0))
+                : 0;
+            // Track how much we stripped so startCol/endCol still work
+            const wikiLinkLine = contextLines[wikiLinkLineIndex] ?? '';
+            const wikiLinkIndent = wikiLinkLine.match(/^\s*/)?.[0].length ?? 0;
+            const colOffset = Math.min(commonIndent, wikiLinkIndent);
+
             const rendered = contextLines.map((line, i) => {
-                const trimmed = line.trimEnd();
+                const stripped = commonIndent > 0 ? line.substring(Math.min(commonIndent, line.length)) : line;
+                const trimmed = stripped.trimEnd();
                 if (i === wikiLinkLineIndex) {
-                    const startCol = lastLink.startCol;
-                    const endCol = lastLink.endCol + 1; // endCol is inclusive, substring needs exclusive
+                    const startCol = lastLink.startCol - colOffset;
+                    const endCol = lastLink.endCol + 1 - colOffset; // endCol is inclusive, substring needs exclusive
                     const before = escapeHtml(trimmed.substring(0, startCol));
                     const highlight = escapeHtml(trimmed.substring(startCol, endCol));
                     const after = escapeHtml(trimmed.substring(endCol));
-                    return `${before}<span class="context-highlight">${highlight}</span>${after}`;
+                    return `${before}<span class="context-highlight" onclick="event.stopPropagation(); navigate('${pagePath}', ${lastLink.line})">${highlight}</span>${after}`;
                 }
                 return escapeHtml(trimmed);
             }).join('\n');
@@ -455,11 +474,11 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             align-items: center;
             flex-wrap: wrap;
             gap: 2px;
-            font-size: 0.95em;
+            font-size: var(--vscode-editor-font-size, 13px);
         }
 
         .pattern-link {
-            color: var(--vscode-textLink-foreground, #3794ff);
+            color: var(--vscode-foreground);
         }
 
         .chain-arrow {
@@ -528,6 +547,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             cursor: pointer;
             padding: 1px 3px;
             border-radius: 2px;
+            font-weight: 600;
         }
 
         .instance-link:hover {
@@ -538,7 +558,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
 
         .line-ref {
             font-size: 0.8em;
-            color: var(--vscode-editorLineNumber-foreground, rgba(128,128,128,0.5));
+            color: #666;
         }
 
         .instance-context {
@@ -548,7 +568,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             background: var(--vscode-textBlockQuote-background, rgba(128,128,128,0.05));
             font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
             font-size: var(--vscode-editor-font-size, 13px);
-            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.7));
+            color: #999;
             white-space: pre;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -559,6 +579,11 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         .context-highlight {
             color: var(--vscode-textLink-foreground, #3794ff);
             font-weight: 600;
+            cursor: pointer;
+        }
+
+        .context-highlight:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
