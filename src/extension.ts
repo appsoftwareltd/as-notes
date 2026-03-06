@@ -89,7 +89,9 @@ let extensionContext: vscode.ExtensionContext | undefined;
 /** Current licence validation result — updated on activation and config change. */
 let licenceStatus: LicenceStatus = 'not-entered';
 
-/** True only when running as the official appsoftwareltd.as-notes build. */
+/** True only when running as the official appsoftwareltd.as-notes build. 
+ *  This is deliberately a **deterrent, not a lock** - The legal protection is the licence; the ID check is friction on misuse and a clear indication to the user that the version violates licence terms.
+*/
 const OFFICIAL_EXTENSION_ID = 'appsoftwareltd.as-notes';
 let isOfficialBuild = false;
 
