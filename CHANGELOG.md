@@ -2,6 +2,12 @@
 
 All notable changes to AS Notes will be documented here.
 
+## Pending Release
+
+### Added
+
+- Slash `/` editor commands - Today, Date Picker, Markdown Table tools
+
 ## [1.0.13] - 2026-03-06
 
 - Documentation: LICENCE
