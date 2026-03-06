@@ -1,0 +1,10 @@
+# AS Notes ignore file — uses .gitignore pattern syntax.
+# Paths matching these patterns are excluded from the AS Notes index.
+# See https://github.com/appsoftwareltd/as-notes#asnotesignore for recommended patterns.
+#
+# Logseq metadata and backup directories
+logseq/
+#
+# Obsidian metadata and trash directories
+.obsidian/
+.trash/
