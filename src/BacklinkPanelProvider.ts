@@ -11,7 +11,17 @@ interface NavigateMessage {
     line: number;
 }
 
-type WebviewMessage = NavigateMessage;
+interface ToggleGroupModeMessage {
+    command: 'toggleGroupMode';
+    groupByChain: boolean;
+}
+
+interface ToggleContextWrapMessage {
+    command: 'toggleContextWrap';
+    wrapContext: boolean;
+}
+
+type WebviewMessage = NavigateMessage | ToggleGroupModeMessage | ToggleContextWrapMessage;
 
 // ── Provider ───────────────────────────────────────────────────────────────
 
@@ -33,12 +43,19 @@ export class BacklinkPanelProvider implements vscode.Disposable {
     private lockedPageName: string | undefined;
     /** The page id when targeting a known page (includes alias resolution). */
     private lockedPageId: number | undefined;
+    /** Whether backlinks are grouped by chain pattern (true) or flat by page (false). */
+    private groupByChain: boolean;
+    /** Whether context blocks wrap text (true) or truncate to one line (false). */
+    private wrapContext: boolean;
 
     constructor(
         private indexService: IndexService,
         private workspaceRoot: vscode.Uri,
         private logger?: LogService,
-    ) { }
+    ) {
+        this.groupByChain = vscode.workspace.getConfiguration('as-notes').get<boolean>('backlinkGroupByChain', false);
+        this.wrapContext = vscode.workspace.getConfiguration('as-notes').get<boolean>('backlinkWrapContext', false);
+    }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
@@ -146,6 +163,12 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             this.panel.webview.onDidReceiveMessage((msg: WebviewMessage) => {
                 if (msg.command === 'navigate') {
                     this.navigateToBacklink(msg.pagePath, msg.line);
+                } else if (msg.command === 'toggleGroupMode') {
+                    this.groupByChain = msg.groupByChain;
+                    void this.renderForLockedTarget(false);
+                } else if (msg.command === 'toggleContextWrap') {
+                    this.wrapContext = msg.wrapContext;
+                    void this.renderForLockedTarget(false);
                 }
             }),
         );
@@ -234,11 +257,101 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         }
 
         const totalInstances = groups.reduce((sum, g) => sum + g.instances.length, 0);
-        const summaryHtml = `<div class="summary">${totalInstances} backlink${totalInstances === 1 ? '' : 's'} in ${groups.length} pattern${groups.length === 1 ? '' : 's'}</div>`;
 
-        const groupsHtml = groups.map(group => this.renderChainGroup(group)).join('');
+        if (this.groupByChain) {
+            const summaryHtml = `<div class="summary">${totalInstances} backlink${totalInstances === 1 ? '' : 's'} in ${groups.length} pattern${groups.length === 1 ? '' : 's'}</div>`;
+            const groupsHtml = groups.map(group => this.renderChainGroup(group)).join('');
+            this.panel.webview.html = this.buildHtml(pageTitle, originPagePath, summaryHtml + groupsHtml);
+        } else {
+            const summaryHtml = `<div class="summary">${totalInstances} backlink${totalInstances === 1 ? '' : 's'}</div>`;
+            const flatHtml = this.renderFlatInstances(groups);
+            this.panel.webview.html = this.buildHtml(pageTitle, originPagePath, summaryHtml + flatHtml);
+        }
+    }
 
-        this.panel.webview.html = this.buildHtml(pageTitle, originPagePath, summaryHtml + groupsHtml);
+    private renderFlatInstances(groups: BacklinkChainGroup[]): string {
+        const allInstances = groups.flatMap(g => g.instances);
+
+        // Group instances by source page
+        const byPage = new Map<string, { page: PageRow; instances: BacklinkChainInstance[] }>();
+        for (const instance of allInstances) {
+            const key = instance.sourcePage.path;
+            let entry = byPage.get(key);
+            if (!entry) {
+                entry = { page: instance.sourcePage, instances: [] };
+                byPage.set(key, entry);
+            }
+            entry.instances.push(instance);
+        }
+
+        // Sort pages: journal (YYYY_MM_DD) descending (latest first), then non-journal alphabetical
+        const journalPattern = /^\d{4}_\d{2}_\d{2}$/;
+        const sortedPages = [...byPage.values()].sort((a, b) => {
+            const nameA = (a.page.title || a.page.filename).replace(/\.md$/, '');
+            const nameB = (b.page.title || b.page.filename).replace(/\.md$/, '');
+            const aJournal = journalPattern.test(nameA);
+            const bJournal = journalPattern.test(nameB);
+            if (aJournal && bJournal) { return nameB.localeCompare(nameA); } // descending
+            if (aJournal && !bJournal) { return -1; }
+            if (!aJournal && bJournal) { return 1; }
+            return nameA.toLowerCase().localeCompare(nameB.toLowerCase());
+        });
+
+        return sortedPages.map(({ page, instances }) => {
+            const pageTitle = escapeHtml(page.title || page.filename.replace(/\.md$/, ''));
+            const pagePath = escapeAttr(page.path);
+            const instancesHtml = instances.map(instance => this.renderFlatChainInstance(instance)).join('');
+            return `<div class="flat-page-group">
+                <div class="instance-source" onclick="navigate('${pagePath}', 0)">
+                    <span class="source-title">${pageTitle}</span>
+                </div>
+                ${instancesHtml}
+            </div>`;
+        }).join('');
+    }
+
+    private renderFlatChainInstance(instance: BacklinkChainInstance): string {
+        const pagePath = escapeAttr(instance.sourcePage.path);
+
+        const chainLinksHtml = instance.chain.map(link => {
+            const lineNum = link.line + 1;
+            return `<span class="instance-link" onclick="event.stopPropagation(); navigate('${pagePath}', ${link.line})">[[${escapeHtml(link.pageName)}]] <span class="line-ref">L${lineNum}</span></span>`;
+        }).join('<span class="chain-arrow">\u2009\u2192\u2009</span>');
+
+        const lastLink = instance.chain[instance.chain.length - 1];
+        let contextHtml = '';
+        if (lastLink?.context) {
+            const contextLines = lastLink.context.split('\n');
+            const wikiLinkLineIndex = contextLines.length >= 2 && lastLink.line > 0 ? 1 : 0;
+
+            const nonEmptyLines = contextLines.filter(l => l.trimEnd().length > 0);
+            const commonIndent = nonEmptyLines.length > 0
+                ? Math.min(...nonEmptyLines.map(l => l.match(/^\s*/)?.[0].length ?? 0))
+                : 0;
+            const wikiLinkLine = contextLines[wikiLinkLineIndex] ?? '';
+            const wikiLinkIndent = wikiLinkLine.match(/^\s*/)?.[0].length ?? 0;
+            const colOffset = Math.min(commonIndent, wikiLinkIndent);
+
+            const rendered = contextLines.map((line, i) => {
+                const stripped = commonIndent > 0 ? line.substring(Math.min(commonIndent, line.length)) : line;
+                const trimmed = stripped.trimEnd();
+                if (i === wikiLinkLineIndex) {
+                    const startCol = lastLink.startCol - colOffset;
+                    const endCol = lastLink.endCol + 1 - colOffset;
+                    const before = escapeHtml(trimmed.substring(0, startCol));
+                    const highlight = escapeHtml(trimmed.substring(startCol, endCol));
+                    const after = escapeHtml(trimmed.substring(endCol));
+                    return `${before}<span class="context-highlight" onclick="event.stopPropagation(); navigate('${pagePath}', ${lastLink.line})">${highlight}</span>${after}`;
+                }
+                return escapeHtml(trimmed);
+            }).join('\n');
+            contextHtml = `<pre class="instance-context ${this.wrapContext ? 'context-wrap' : 'context-compact'}">${rendered}</pre>`;
+        }
+
+        return `<div class="chain-instance">
+            <div class="instance-chain">${chainLinksHtml}</div>
+            ${contextHtml}
+        </div>`;
     }
 
     private renderChainGroup(group: BacklinkChainGroup): string {
@@ -309,12 +422,11 @@ export class BacklinkPanelProvider implements vscode.Disposable {
                 }
                 return escapeHtml(trimmed);
             }).join('\n');
-            contextHtml = `<pre class="instance-context">${rendered}</pre>`;
+            contextHtml = `<pre class="instance-context ${this.wrapContext ? 'context-wrap' : 'context-compact'}">${rendered}</pre>`;
         }
 
         return `<div class="chain-instance">
             <div class="instance-source" onclick="navigate('${pagePath}', 0)">
-                <span class="codicon codicon-file-text"></span>
                 <span class="source-title">${pageTitle}</span>
             </div>
             <div class="instance-chain">${chainLinksHtml}</div>
@@ -353,6 +465,8 @@ export class BacklinkPanelProvider implements vscode.Disposable {
     }
 
     private buildHtml(pageTitle: string, originPagePath: string | null, bodyContent: string): string {
+        const groupByChain = this.groupByChain;
+        const wrapContext = this.wrapContext;
         const originLink = originPagePath
             ? `<div class="origin-link" onclick="navigate('${escapeAttr(originPagePath)}', 0)">
                     <span class="codicon codicon-arrow-left"></span>
@@ -390,6 +504,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         }
 
         .page-header h1 {
+            flex: 1;
             font-size: 1.15em;
             font-weight: 600;
             color: var(--vscode-foreground);
@@ -464,13 +579,6 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         }
 
         /* Codicon support */
-        .codicon-file-text::before {
-            content: "\\eb60";
-            font-family: codicon;
-            font-size: 14px;
-            color: var(--vscode-descriptionForeground);
-        }
-
         .codicon-chevron-down::before {
             content: "\\eab4";
             font-family: codicon;
@@ -485,6 +593,11 @@ export class BacklinkPanelProvider implements vscode.Disposable {
 
         /* Chain group */
         .chain-group {
+            margin-bottom: 14px;
+        }
+
+        /* Flat page group */
+        .flat-page-group {
             margin-bottom: 14px;
         }
 
@@ -614,14 +727,19 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
             font-size: var(--vscode-editor-font-size, 13px);
             color: #999;
-            white-space: normal;     /* Allows text to wrap naturally */
-            overflow: visible;       /* Ensures the wrapped text is shown */
-            text-overflow: ellipsis; 
-            /*white-space: pre;
-            overflow: hidden;
-            text-overflow: ellipsis;*/
             border-radius: 0 3px 3px 0;
             line-height: 1.5;
+        }
+
+        .instance-context.context-compact {
+            white-space: pre;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .instance-context.context-wrap {
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .context-highlight {
@@ -633,17 +751,56 @@ export class BacklinkPanelProvider implements vscode.Disposable {
         .context-highlight:hover {
             text-decoration: underline;
         }
+
+        .toggle-group-mode {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128,128,128,0.3)));
+            font-size: 0.8em;
+            white-space: nowrap;
+        }
+
+        .toggle-segment {
+            padding: 2px 8px;
+            cursor: pointer;
+            color: var(--vscode-descriptionForeground, rgba(128,128,128,0.7));
+            transition: background 0.1s, color 0.1s;
+        }
+
+        .toggle-segment:hover {
+            color: var(--vscode-foreground);
+            background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
+        }
+
+        .toggle-segment.active {
+            color: #fff;
+            background: var(--vscode-textLink-foreground, #3794ff);
+            cursor: default;
+        }
     </style>
 </head>
 <body>
     <div class="page-header">
         <h1>Backlinks: ${escapeHtml(pageTitle)}</h1>
+        <div class="toggle-group-mode">
+            <span class="toggle-segment ${wrapContext ? '' : 'active'}" onclick="${wrapContext ? 'toggleContextWrap()' : ''}">Compact</span>
+            <span class="toggle-segment ${wrapContext ? 'active' : ''}" onclick="${wrapContext ? '' : 'toggleContextWrap()'}">Wrap</span>
+        </div>
+        <div class="toggle-group-mode">
+            <span class="toggle-segment ${groupByChain ? '' : 'active'}" onclick="${groupByChain ? 'toggleGroupMode()' : ''}">Flat</span>
+            <span class="toggle-segment ${groupByChain ? 'active' : ''}" onclick="${groupByChain ? '' : 'toggleGroupMode()'}">Grouped</span>
+        </div>
     </div>
     ${originLink}
     ${bodyContent}
 
     <script>
         const vscode = acquireVsCodeApi();
+        let currentGroupByChain = ${groupByChain};
+        let currentWrapContext = ${wrapContext};
 
         function navigate(pagePath, line) {
             vscode.postMessage({
@@ -667,6 +824,24 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             saveState();
         }
 
+        function toggleGroupMode() {
+            currentGroupByChain = !currentGroupByChain;
+            saveState();
+            vscode.postMessage({
+                command: 'toggleGroupMode',
+                groupByChain: currentGroupByChain,
+            });
+        }
+
+        function toggleContextWrap() {
+            currentWrapContext = !currentWrapContext;
+            saveState();
+            vscode.postMessage({
+                command: 'toggleContextWrap',
+                wrapContext: currentWrapContext,
+            });
+        }
+
         function saveState() {
             const collapsed = [];
             document.querySelectorAll('.chain-group-body.collapsed').forEach(el => {
@@ -675,6 +850,8 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             vscode.setState({
                 scrollTop: document.documentElement.scrollTop || document.body.scrollTop,
                 collapsedGroups: collapsed,
+                groupByChain: currentGroupByChain,
+                wrapContext: currentWrapContext,
             });
         }
 

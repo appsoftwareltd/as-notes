@@ -2,44 +2,56 @@
 
 All notable changes to AS Notes will be documented here.
 
-## [1.0.10] — 2026-03-05
+## [1.0.12] - 2026-03-06
+
+### Added
+
+- Feature: Backlink pane improved layout and options for compact / wrapped context, flat ordering or grouping by wiki link chain.
+
+## [1.0.11] - 2026-03-06
+
+### Added
+
+- Feature: Backlinks now based on mention and on indentation relationships - "outliner" style.
+
+## [1.0.10] - 2026-03-05
 
 ### Added
 
 - Bug Fix: Resolution of OOM on rebuild index for large (20k) `.md` file knowledge bases.
 
-## [1.0.9] — 2026-03-04
+## [1.0.9] - 2026-03-04
 
 ### Added
 
 - Feature: Added image drag drop / copy paste path handling and hover preview for images
 
-## [1.0.8] — 2026-03-03
+## [1.0.8] - 2026-03-03
 
 ### Added
 
 - Feature: Added encryption (`.enc.md`) files (Pro feature)
 
-## [1.0.7] — 2026-03-02
+## [1.0.7] - 2026-03-02
 
 ### Added
 
 - Documentation: Documentation / README
 
-## [1.0.6] — 2026-03-02
+## [1.0.6] - 2026-03-02
 
 ### Added
 
 - Feature: Daily journal
 
-## [1.0.5] — 2026-03-02
+## [1.0.5] - 2026-03-02
 
 ### Added
 
 - Feature: Backlinks panel
 - Feature: Tasks panel
 
-## [1.0.4] — 2026-03-02
+## [1.0.4] - 2026-03-02
 
 ### Added
 

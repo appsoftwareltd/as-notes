@@ -371,6 +371,29 @@ async function enterFullMode(
         }),
     );
 
+    // Navigate to the wikilink page under cursor (context menu)
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.navigateToPage', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !fileService) { return; }
+
+            const line = editor.document.lineAt(editor.selection.active.line);
+            const wikilinks = wikilinkService.extractWikilinks(line.text);
+            const wikilink = wikilinkService.findInnermostWikilinkAtOffset(
+                wikilinks,
+                editor.selection.active.character,
+            );
+
+            if (!wikilink) {
+                vscode.window.showInformationMessage('No wikilink found at cursor position.');
+                return;
+            }
+
+            const targetUri = fileService.resolveTargetUri(editor.document.uri, wikilink.pageFileName);
+            await fileService.navigateToFile(targetUri, wikilink.pageFileName, editor.document.uri);
+        }),
+    );
+
     // View backlinks for the wikilink under cursor (context menu)
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.viewBacklinks', () => {

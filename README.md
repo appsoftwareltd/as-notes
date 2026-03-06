@@ -58,13 +58,13 @@ Marker for todo removed
 
 Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal page.
 
-Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from a `journal_template.md` template — edit it to add your own sections and prompts. The `YYYY-MM-DD` placeholder in the template is replaced with today's date on creation.
+Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from a `journal_template.md` template - edit it to add your own sections and prompts. The `YYYY-MM-DD` placeholder in the template is replaced with today's date on creation.
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
 ### File Drag & Drop / Copy + Paste
 
-Drag files from your file manager onto a markdown editor, or paste images from the clipboard — VS Code's built-in markdown editor handles the copy and link insertion automatically.
+Drag files from your file manager onto a markdown editor, or paste images from the clipboard - VS Code's built-in markdown editor handles the copy and link insertion automatically.
 
 AS Notes configures the built-in `markdown.copyFiles.destination` workspace setting so that dropped/pasted files are saved to a dedicated asset folder instead of next to your markdown file.
 
@@ -76,11 +76,11 @@ The setting is applied automatically when AS Notes initialises or the value chan
 
 **Tips:**
 
-- **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing — useful for placing the link precisely within your text.
+- **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing - useful for placing the link precisely within your text.
 
 ### Image Hover Preview
 
-Hover over any image link in a markdown file to see a preview of the image inline. This is provided by VS Code's built-in markdown extension and requires no configuration — it works with both standard `![alt](path)` links and dropped/pasted images.
+Hover over any image link in a markdown file to see a preview of the image inline. This is provided by VS Code's built-in markdown extension and requires no configuration - it works with both standard `![alt](path)` links and dropped/pasted images.
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/image-preview.png" alt="AS Notes Image Preview" style="max-height:300px; margin-top: 10px; margin-bottom: 10px;">
 
@@ -96,14 +96,14 @@ To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/c
 
 ### Encrypted notes
 
-Pro users can store sensitive notes in encrypted files. Any file with the `.enc.md` extension is treated as an encrypted note — it is excluded from the search index and never read as plain text by the extension.
+Pro users can store sensitive notes in encrypted files. Any file with the `.enc.md` extension is treated as an encrypted note - it is excluded from the search index and never read as plain text by the extension.
 
 **Getting started with encryption:**
 
-1. Run **AS Notes: Set Encryption Key** from the Command Palette. Your passphrase is stored securely in the OS keychain (VS Code SecretStorage) — it is never written to disk or settings files.
+1. Run **AS Notes: Set Encryption Key** from the Command Palette. Your passphrase is stored securely in the OS keychain (VS Code SecretStorage) - it is never written to disk or settings files.
 2. Create an encrypted note with **AS Notes: Create Encrypted Note** (or **AS Notes: Create Encrypted Journal Note** for a dated journal entry).
-3. Write your note in the editor. When you want to lock it, run **AS Notes: Encrypt [All|Current] Note(s)** — all plaintext `.enc.md` files will be encrypted in place.
-4. To read a note, run **AS Notes: [All|Current] Note(s)** — files are decrypted in place using your stored passphrase.
+3. Write your note in the editor. When you want to lock it, run **AS Notes: Encrypt [All|Current] Note(s)** - all plaintext `.enc.md` files will be encrypted in place.
+4. To read a note, run **AS Notes: [All|Current] Note(s)** - files are decrypted in place using your stored passphrase.
 
 **Encryption details:**
 - Algorithm: AES-256-GCM with a per-encryption random 12-byte nonce
@@ -111,14 +111,14 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 - File format: a single-line `ASNOTES_ENC_V1:<base64url payload>` marker - used to help prevent accidental commits via a Git pre-commit hook.
 
 **Commands:**
-- `AS Notes: Set Encryption Key` — save passphrase to OS keychain
-- `AS Notes: Clear Encryption Key` — remove the stored passphrase
-- `AS Notes: Create Encrypted Note` — create a new named `.enc.md` file
-- `AS Notes: Create Encrypted Journal Note` — create today's journal entry as `.enc.md`
-- `AS Notes: Encrypt All Notes` — encrypt all plaintext `.enc.md` files
-- `AS Notes: Decrypt All Notes` — decrypt all encrypted `.enc.md` files
-- `AS Notes: Encrypt Current Note` — encrypt the active `.enc.md` file (reads unsaved editor content)
-- `AS Notes: Decrypt Current Note` — decrypt the active `.enc.md` file (reads from disk)
+- `AS Notes: Set Encryption Key` - save passphrase to OS keychain
+- `AS Notes: Clear Encryption Key` - remove the stored passphrase
+- `AS Notes: Create Encrypted Note` - create a new named `.enc.md` file
+- `AS Notes: Create Encrypted Journal Note` - create today's journal entry as `.enc.md`
+- `AS Notes: Encrypt All Notes` - encrypt all plaintext `.enc.md` files
+- `AS Notes: Decrypt All Notes` - decrypt all encrypted `.enc.md` files
+- `AS Notes: Encrypt Current Note` - encrypt the active `.enc.md` file (reads unsaved editor content)
+- `AS Notes: Decrypt Current Note` - decrypt the active `.enc.md` file (reads from disk)
 
 ## VS Code Marketplace
 
@@ -131,7 +131,7 @@ For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-de
 
 ### Initialise a workspace
 
-AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** — you'll see a status bar item inviting you to initialise.
+AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** - you'll see a status bar item inviting you to initialise.
 
 To initialise:
 
@@ -168,9 +168,9 @@ logseq/
 .trash/
 ```
 
-Patterns without a leading `/` match at any depth — `logseq/` excludes `logseq/pages/foo.md` and `vaults/work/logseq/pages/foo.md` equally. Prefix with `/` to anchor a pattern to the workspace root only (e.g. `/logseq/`).
+Patterns without a leading `/` match at any depth - `logseq/` excludes `logseq/pages/foo.md` and `vaults/work/logseq/pages/foo.md` equally. Prefix with `/` to anchor a pattern to the workspace root only (e.g. `/logseq/`).
 
-Edit `.asnotesignore` at any time. AS Notes watches the file and automatically re-scans the index when it changes — newly ignored files are removed from the index and un-ignored files are added.
+Edit `.asnotesignore` at any time. AS Notes watches the file and automatically re-scans the index when it changes - newly ignored files are removed from the index and un-ignored files are added.
 
 > **Note:** `.asnotesignore` is a user-editable, version-controlled file. AS Notes will never overwrite it after initial creation.
 
@@ -178,7 +178,7 @@ Edit `.asnotesignore` at any time. AS Notes watches the file and automatically r
 
 ### Wikilink highlighting
 
-Every `[[wikilink]]` in a markdown file is highlighted in blue. When your cursor is inside a link, that specific link is highlighted with a brighter blue, bold, and underlined — so you always know which link you're about to interact with.
+Every `[[wikilink]]` in a markdown file is highlighted in blue. When your cursor is inside a link, that specific link is highlighted with a brighter blue, bold, and underlined - so you always know which link you're about to interact with.
 
 ### Nested wikilinks
 
@@ -224,7 +224,7 @@ When you edit a wikilink's text and move your cursor away (or switch files), AS 
 
 A single confirmation dialog covers all affected nesting levels. For example, editing `[[Inner]]` inside `[[Outer [[Inner]] text]]` offers to rename both the inner and outer pages.
 
-You can decline — the link text change is kept but files and other links are left untouched.
+You can decline - the link text change is kept but files and other links are left untouched.
 
 ### Case-insensitive file matching
 
@@ -258,10 +258,10 @@ aliases: [Short Name, Another Name]
 ---
 ```
 
-Linking to `[[Short Name]]` or `[[Another Name]]` navigates to the page that declares those aliases — no extra file is created.
+Linking to `[[Short Name]]` or `[[Another Name]]` navigates to the page that declares those aliases - no extra file is created.
 
 - **Hover tooltips** show alias resolution: `Short Name.md → ActualPage.md`
-- **Rename tracking** is alias-aware — editing an alias link offers to update front matter and all matching references
+- **Rename tracking** is alias-aware - editing an alias link offers to update front matter and all matching references
 - **Backlink counts** include both direct and alias references
 - Alias values are plain strings; accidental `[[` / `]]` brackets are stripped automatically
 
@@ -271,11 +271,11 @@ Wikilinks resolve globally across the workspace, not just in the current directo
 
 **Resolution order:**
 
-1. **Direct filename match** — `[[My Page]]` finds `My Page.md` anywhere in the workspace
-2. **Alias match** — if no file matches, check page aliases
-3. **Auto-create** — if nothing matches, create the file in the same directory as the source
+1. **Direct filename match** - `[[My Page]]` finds `My Page.md` anywhere in the workspace
+2. **Alias match** - if no file matches, check page aliases
+3. **Auto-create** - if nothing matches, create the file in the same directory as the source
 
-**Disambiguation** — when multiple files share the same name (e.g. `notes/Topic.md` and `archive/Topic.md`):
+**Disambiguation** - when multiple files share the same name (e.g. `notes/Topic.md` and `archive/Topic.md`):
 
 1. A file in the **same directory** as the source always wins
 2. Otherwise, the **closest folder** is preferred (measured by directory distance)
@@ -286,18 +286,18 @@ Type `[[` in any markdown file to trigger autocomplete, listing all indexed page
 
 - **Page suggestions** show the page name (without `.md`), with folder paths for disambiguation when names collide
 - **Alias suggestions** show the alias with an arrow to the canonical page (e.g. `→ ActualPage`)
-- **Auto-close** — selecting a suggestion inserts the name and appends `]]`
-- **Nested wikilinks** — `[[` inside an unclosed `[[...` starts a new autocompletion for the inner link
+- **Auto-close** - selecting a suggestion inserts the name and appends `]]`
+- **Nested wikilinks** - `[[` inside an unclosed `[[...` starts a new autocompletion for the inner link
 - Completions are **suppressed inside front matter** blocks
 
 ### Persistent index
 
 AS Notes maintains a SQLite database (`.asnotes/index.db`) that indexes all markdown files in the workspace. The index tracks:
 
-- **Pages** — file paths, filenames, titles (extracted from the first `# heading`)
-- **Links** — every wikilink in every file, with line, column, nesting depth, and parent references
-- **Aliases** — alternative names declared in YAML front matter, with sanitised filenames
-- **Backlinks** — reverse lookups for hover tooltips (including alias references)
+- **Pages** - file paths, filenames, titles (extracted from the first `# heading`)
+- **Links** - every wikilink in every file, with line, column, nesting depth, and parent references
+- **Aliases** - alternative names declared in YAML front matter, with sanitised filenames
+- **Backlinks** - reverse lookups for hover tooltips (including alias references)
 
 The index is kept up-to-date automatically:
 
@@ -324,45 +324,56 @@ Press **Ctrl+Shift+Enter** (Cmd+Shift+Enter on macOS) on any line in a markdown 
 
 The **AS Notes Tasks** panel appears in the Explorer sidebar when the workspace is initialised. It provides a tree view of all todo items across your markdown files, grouped by page.
 
-- **Show TODO only** (default: on) — filters the list to show only unchecked (`- [ ]`) tasks. Toggle this with the filter icon in the panel title bar or via the **AS Notes: Toggle Show TODO Only** command.
-- **Click to navigate** — clicking a task opens the file and scrolls to the exact line.
-- **Inline toggle** — each task has a check button that toggles its done/todo state directly from the panel, without stealing focus from your active editor.
-- **Keyboard shortcut** — press `Ctrl+Alt+T` (Cmd+Alt+T on macOS) to toggle the task panel's visibility.
-- **Live sync** — the panel refreshes automatically on file save, edit, create, delete, rename, todo toggle, and periodic background scans.
+- **Show TODO only** (default: on) - filters the list to show only unchecked (`- [ ]`) tasks. Toggle this with the filter icon in the panel title bar or via the **AS Notes: Toggle Show TODO Only** command.
+- **Click to navigate** - clicking a task opens the file and scrolls to the exact line.
+- **Inline toggle** - each task has a check button that toggles its done/todo state directly from the panel, without stealing focus from your active editor.
+- **Keyboard shortcut** - press `Ctrl+Alt+T` (Cmd+Alt+T on macOS) to toggle the task panel's visibility.
+- **Live sync** - the panel refreshes automatically on file save, edit, create, delete, rename, todo toggle, and periodic background scans.
 
 ### Backlinks panel
 
 The **Backlinks** panel shows all incoming links to a target page. Open it with `Ctrl+Alt+B` (Cmd+Alt+B on macOS) for the active file, or right-click any wikilink and choose **"View Backlinks"** to see backlinks for that specific page (including forward references to pages that don't exist yet).
 
-Every backlink is displayed as a **chain** — the full outline context path from root to the link. A standalone mention (with no outline nesting) is simply a chain of length 1. Chains are grouped by their pattern (the sequence of page names), so identical structures from different source files appear together.
+Every backlink is displayed as a **chain** - the full outline context path from root to the link. A standalone mention (with no outline nesting) is simply a chain of length 1.
+
+#### View modes
+
+The panel supports two view modes, toggled via a button in the panel header:
+
+- **Flat by page** (default) - all backlink instances sorted alphabetically by source page name. Gives a linear timeline view where journal files sort chronologically.
+- **Grouped by chain** - backlinks grouped by their chain pattern (the sequence of page names), with collapsible headers. Useful for concept-based exploration.
+
+The default mode is configured via `as-notes.backlinkGroupByChain` (default `false`).
+
+A separate toggle controls **context verbosity** - compact (single-line, truncated) or wrapped (full text visible). Default configured via `as-notes.backlinkWrapContext` (default `false`).
 
 #### Chain-first display
 
-- **Pattern grouping** — backlinks are grouped by their chain pattern (e.g. all `[[Project]] → [[Tasks]] → [[NGINX]]` from different files appear in one group).
-- **Standalone mentions** — direct `[[wikilink]]` references appear as single-link chains, sorted first.
-- **Outline context** — if a wikilink is indented below another wikilink, the full hierarchy is shown as a chain (e.g. `Page A → Page B → Page C`), with each link clickable.
-- **Per-link line numbers** — each chain link shows its line number (e.g. `[L12]`) for precise navigation.
-- **Line context** — each chain instance shows the surrounding line text with the wikilink highlighted, giving immediate context without opening the file.
-- **Case-insensitive grouping** — `[[server]]` and `[[Server]]` produce the same chain pattern.
+- **Pattern grouping** - backlinks are grouped by their chain pattern (e.g. all `[[Project]] → [[Tasks]] → [[NGINX]]` from different files appear in one group).
+- **Standalone mentions** - direct `[[wikilink]]` references appear as single-link chains, sorted first.
+- **Outline context** - if a wikilink is indented below another wikilink, the full hierarchy is shown as a chain (e.g. `Page A → Page B → Page C`), with each link clickable.
+- **Per-link line numbers** - each chain link shows its line number (e.g. `[L12]`) for precise navigation.
+- **Line context** - each chain instance shows the surrounding line text with the wikilink highlighted, giving immediate context without opening the file.
+- **Case-insensitive grouping** - `[[server]]` and `[[Server]]` produce the same chain pattern.
 
-#### Context menu — View Backlinks
+#### Context menu - View Backlinks
 
 Right-click any wikilink in the editor to open backlinks for that specific page:
-- Works with aliases — if the wikilink targets an alias, backlinks for the canonical page are shown.
-- Works with forward references — pages that don't exist yet still show any incoming links.
+- Works with aliases - if the wikilink targets an alias, backlinks for the canonical page are shown.
+- Works with forward references - pages that don't exist yet still show any incoming links.
 
 ---
 
 **Common features:**
 
-- **Alias-aware** — includes links that target the page via its aliases, not just direct filename references.
-- **Live sync** — the panel auto-updates when you switch files, save, or when the index changes.
-- **Editor-side display** — opens beside your active editor, giving you a spacious view of backlink context.
-- **Collapsible groups** — click a chain group header to expand or collapse its instances.
+- **Alias-aware** - includes links that target the page via its aliases, not just direct filename references.
+- **Live sync** - the panel auto-updates when you switch files, save, or when the index changes.
+- **Editor-side display** - opens beside your active editor, giving you a spacious view of backlink context.
+- **Collapsible groups** - click a chain group header to expand or collapse its instances.
 
 ### Daily journal
 
-Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal. The extension creates a dated markdown file in a dedicated journal folder — one file per day.
+Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal. The extension creates a dated markdown file in a dedicated journal folder - one file per day.
 
 - **Filename format:** `YYYY_MM_DD.md` (e.g. `2026_03_02.md`)
 - **Journal folder:** defaults to `journals/` (configurable via `as-notes.journalFolder`)
@@ -410,9 +421,9 @@ The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and 
 
 The backlinks panel shows this message when the current file is not in the AS Notes index. Common causes:
 
-- **VS Code `files.exclude` / `search.exclude` settings** — AS Notes uses `vscode.workspace.findFiles()` to discover markdown files, which respects these VS Code settings. Files in excluded folders (e.g. `logseq/version-files/`) are silently omitted from the scan and will never be indexed. Check **Settings → Files: Exclude** and **Settings → Search: Exclude** if a file you expect to be indexed is missing.
-- **`.asnotesignore` patterns** — Files matching patterns in `.asnotesignore` at the workspace root are excluded from the index. See [Excluding files from the index](#excluding-files-from-the-index) above.
-- **File not yet saved** — New unsaved files are not indexed until they are saved to disk for the first time.
+- **VS Code `files.exclude` / `search.exclude` settings** - AS Notes uses `vscode.workspace.findFiles()` to discover markdown files, which respects these VS Code settings. Files in excluded folders (e.g. `logseq/version-files/`) are silently omitted from the scan and will never be indexed. Check **Settings → Files: Exclude** and **Settings → Search: Exclude** if a file you expect to be indexed is missing.
+- **`.asnotesignore` patterns** - Files matching patterns in `.asnotesignore` at the workspace root are excluded from the index. See [Excluding files from the index](#excluding-files-from-the-index) above.
+- **File not yet saved** - New unsaved files are not indexed until they are saved to disk for the first time.
 
 To resolve, check your workspace settings and `.asnotesignore` file. If the file should be indexed, ensure it is not matched by any exclusion pattern, then run **AS Notes: Rebuild Index** from the Command Palette.
 
@@ -451,11 +462,11 @@ Unit tests use [vitest](https://vitest.dev/) and cover the wikilink parser, offs
 
 Releases are published to the VS Code Marketplace manually, then a GitHub Release is created automatically when a version tag is pushed.
 
-**Step 1 — bump the version**
+**Step 1 - bump the version**
 
 Update `version` in `package.json` and add an entry to `CHANGELOG.md`.
 
-**Step 2 — publish to the VS Code Marketplace**
+**Step 2 - publish to the VS Code Marketplace**
 
 ```bash
 npm run build
@@ -464,7 +475,7 @@ npx @vscode/vsce login appsoftwareltd   # enter PAT token if auth expired
 npx @vscode/vsce publish
 ```
 
-**Step 3 — tag and push**
+**Step 3 - tag and push**
 
 ```bash
 git add package.json CHANGELOG.md README.md

@@ -82,6 +82,7 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Chain-first grouping](#chain-first-grouping)
   - [Data flow](#data-flow-1)
   - [Context menu — View Backlinks](#context-menu--view-backlinks)
+  - [Context menu — Navigate to Page](#context-menu--navigate-to-page)
   - [Types](#types)
   - [Chain building](#chain-building)
   - [Message protocol](#message-protocol)
@@ -1301,6 +1302,17 @@ The `as-notes.viewBacklinks` command (registered in `extension.ts`) enables righ
 
 The command appears in the `editor/context` menu when `as-notes.fullMode` is active and the editor language is markdown.
 
+### Context menu — Navigate to Page
+
+The `as-notes.navigateToPage` command (registered in `extension.ts`) enables right-clicking any wikilink in the editor to navigate directly to the target page:
+
+1. Extracts all wikilinks from the current line
+2. Finds the innermost wikilink at the cursor position via `WikilinkService.findInnermostWikilinkAtOffset()`
+3. Resolves the target URI via `WikilinkFileService.resolveTargetUri()`
+4. Calls `WikilinkFileService.navigateToFile()` — which uses index-aware resolution (global filename match, alias support, case-insensitive fallback) and auto-creates the file if it doesn't exist
+
+This provides the same navigation as Ctrl+click (DocumentLink) but via an explicit context menu entry. The command appears in the `editor/context` menu alongside "View Backlinks" when `as-notes.fullMode` is active and the editor language is markdown.
+
 ### Types
 
 ```typescript
@@ -1337,6 +1349,28 @@ The `BacklinkEntry` interface and `getBacklinksIncludingAliases()` method are re
 The webview communicates with the extension via `postMessage`:
 
 - **`navigate`** — sent when the user clicks a chain link or source page header. Payload: `{ command: 'navigate', pagePath: string, line: number }`. The provider opens the file in `ViewColumn.One` and scrolls to the line.
+- **`toggleGroupMode`** — sent when the user clicks the view mode toggle button. Payload: `{ command: 'toggleGroupMode', groupByChain: boolean }`. The provider stores the new mode and re-renders without a loading spinner.
+- **`toggleContextWrap`** — sent when the user clicks the context verbosity toggle. Payload: `{ command: 'toggleContextWrap', wrapContext: boolean }`. The provider stores the mode and re-renders without a loading spinner.
+
+### View modes
+
+The backlinks panel supports two view modes, toggled via a button in the page header:
+
+- **Flat by page** (default, `groupByChain: false`): All backlink instances from all chain groups are flattened and grouped by source page. Pages are sorted in two tiers: journal-format filenames (`YYYY_MM_DD`) appear first in **reverse chronological order** (latest date at top), followed by non-journal pages in standard case-insensitive alphabetical order. Instances within each page are listed under a shared page header (rendered once). This mode gives a timeline-first view — the most recent journal entries are always at the top.
+- **Grouped by chain** (`groupByChain: true`): The current chain-first grouping with collapsible headers showing the pattern. Instances within each group are sorted by source page title.
+
+Both toggles are rendered as **segmented pill controls** with two segments each (e.g. `[Flat | Grouped]`). The active segment is highlighted with `--vscode-textLink-foreground` background and white text; the inactive segment is clickable. This makes the current state and available action immediately clear. Codicon-based icons were removed because the webview's bundled codicon font does not reliably include newer glyphs. The mode is persisted in webview state via `vscode.setState()` alongside scroll position and collapsed groups.
+
+The default mode is configured via the `as-notes.backlinkGroupByChain` setting (boolean, default `false`). The setting provides the initial default when the panel first opens. Once the user toggles via the UI button, the extension-side `groupByChain` property overrides the setting for that session.
+
+### Context verbosity
+
+The backlinks panel supports two context display modes, toggled via a text button ("Compact" / "Wrap") in the page header:
+
+- **Compact** (default, `wrapContext: false`): `white-space: pre; overflow: hidden; text-overflow: ellipsis;` — single-line truncated context with ellipsis for overflow.
+- **Wrap** (`wrapContext: true`): `white-space: pre-wrap; word-break: break-word;` — full context visible, text wraps naturally.
+
+The default is configured via `as-notes.backlinkWrapContext` (boolean, default `false`). The mode is persisted in webview state alongside the other toggle states.
 
 ### Rendering
 
@@ -1355,6 +1389,8 @@ The webview preserves scroll position and collapsed group state across re-render
 
 - **Collapsed groups**: each call to `toggleGroup()` saves the list of collapsed group element IDs to state. On page load, the script reads state and re-applies the `collapsed` class and chevron direction to matching groups.
 - **Scroll position**: a debounced `scroll` event listener (100ms) saves `document.documentElement.scrollTop` to state. On page load, the script calls `window.scrollTo()` with the saved value.
+- **View mode**: the `groupByChain` boolean is stored in webview state. On toggle, the mode is saved before the `toggleGroupMode` message is posted to the extension.
+- **Context verbosity**: the `wrapContext` boolean is stored in webview state. On toggle, the mode is saved before the `toggleContextWrap` message is posted to the extension.
 
 This is critical because `refresh()` replaces `webview.html` on every index update — navigation clicks trigger `onDidChangeActiveTextEditor` which re-indexes and refreshes the panel. Without state preservation, the user loses their scroll position every time they click a backlink.
 

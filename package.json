@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "publisher": "appsoftwareltd",
     "license": "CC-BY-NC-SA-4.0",
     "icon": "images/icon.png",
@@ -82,7 +82,11 @@
             },
             {
                 "command": "as-notes.viewBacklinks",
-                "title": "AS Notes: View Backlinks for Wikilink"
+                "title": "AS Notes: View Backlinks"
+            },
+            {
+                "command": "as-notes.navigateToPage",
+                "title": "AS Notes: Navigate to Page"
             },
             {
                 "command": "as-notes.openDailyJournal",
@@ -185,6 +189,16 @@
                     "type": "string",
                     "default": "",
                     "description": "Hex colour for wikilinks in the editor (e.g. #3794ff). Leave empty to use your theme's link colour."
+                },
+                "as-notes.backlinkGroupByChain": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Default backlink view mode. When true, backlinks are grouped by wikilink chain pattern. When false, backlinks are listed flat by page filename."
+                },
+                "as-notes.backlinkWrapContext": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Default context display in the backlinks panel. When false, context is compact (single line, truncated). When true, context wraps to show full text."
                 }
             }
         },
@@ -210,6 +224,11 @@
                 }
             ],
             "editor/context": [
+                {
+                    "command": "as-notes.navigateToPage",
+                    "when": "as-notes.fullMode && editorLangId == markdown",
+                    "group": "navigation"
+                },
                 {
                     "command": "as-notes.viewBacklinks",
                     "when": "as-notes.fullMode && editorLangId == markdown",
