@@ -1,16 +1,3 @@
-.vscode/**
-.vscode-test/**
-temp-src/**
-agents/**
-src/**
-!dist/**
-node_modules/**
-docs/**
-.gitignore
-tsconfig.json
-vitest.config.ts
-build.mjs
-package-lock.json
-AGENTS.md
-AGENTS.md.sync
-images/README.md
+# Extension packaging is handled from vs-code-extension/ subdirectory.
+# See vs-code-extension/.vscodeignore for the active packaging rules.
+**

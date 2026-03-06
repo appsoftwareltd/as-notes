@@ -3,20 +3,6 @@
 agents/
 AGENTS.md
 
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Publish package files
-
-*.vsix
-
 # Sync files
 
 *.sync

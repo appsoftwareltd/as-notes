@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  test-vs-code-extension:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,5 +15,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: vs-code-extension/package-lock.json
       - run: npm ci
+        working-directory: vs-code-extension
       - run: npm test
+        working-directory: vs-code-extension

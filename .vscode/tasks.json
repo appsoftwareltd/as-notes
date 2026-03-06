@@ -4,6 +4,7 @@
         {
             "type": "npm",
             "script": "build",
+            "path": "vs-code-extension/",
             "presentation": {
                 "reveal": "silent"
             },

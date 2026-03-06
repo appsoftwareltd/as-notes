@@ -6,11 +6,11 @@
             "type": "extensionHost",
             "request": "launch",
             "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}",
+                "--extensionDevelopmentPath=${workspaceFolder}/vs-code-extension",
                 "--disable-extensions"
             ],
             "outFiles": [
-                "${workspaceFolder}/dist/**/*.js"
+                "${workspaceFolder}/vs-code-extension/dist/**/*.js"
             ],
             "preLaunchTask": "${defaultBuildTask}",
             "env": {

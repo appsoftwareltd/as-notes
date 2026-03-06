@@ -1,0 +1,9 @@
+src/**
+!dist/**
+node_modules/**
+.vscode-test/**
+.gitignore
+tsconfig.json
+vitest.config.ts
+build.mjs
+package-lock.json
