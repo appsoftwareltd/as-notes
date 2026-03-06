@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { IndexService } from '../IndexService.js';
-import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter } from '../CompletionUtils.js';
+import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter, isPositionInsideCode } from '../CompletionUtils.js';
 
 // ── Bracket detection ──────────────────────────────────────────────────────
 
@@ -158,6 +158,128 @@ describe('WikilinkCompletionProvider — isLineInsideFrontMatter', () => {
         const lines = ['not front matter', '---', 'stuff', '---'];
         expect(check(lines, 0)).toBe(false);
         expect(check(lines, 1)).toBe(false);
+    });
+});
+
+// ── Code block / inline code detection ─────────────────────────────────────
+
+describe('WikilinkCompletionProvider — isPositionInsideCode', () => {
+    const check = isPositionInsideCode;
+
+    it('should return false for plain text', () => {
+        const lines = ['# Heading', '', 'Some text here'];
+        expect(check(lines, 2, 5)).toBe(false);
+    });
+
+    it('should return true inside a fenced code block (backticks)', () => {
+        const lines = ['# Heading', '```', 'const x = 1;', '```', 'after'];
+        expect(check(lines, 2, 0)).toBe(true);
+    });
+
+    it('should return true inside a fenced code block (tildes)', () => {
+        const lines = ['text', '~~~', 'code here', '~~~', 'after'];
+        expect(check(lines, 2, 3)).toBe(true);
+    });
+
+    it('should return false after a closed fenced code block', () => {
+        const lines = ['```', 'code', '```', 'not code'];
+        expect(check(lines, 3, 0)).toBe(false);
+    });
+
+    it('should return true on the opening fence line', () => {
+        const lines = ['text', '```js', 'code', '```'];
+        expect(check(lines, 1, 0)).toBe(true);
+    });
+
+    it('should return false on the closing fence line (fence is closed)', () => {
+        const lines = ['text', '```', 'code', '```', 'after'];
+        expect(check(lines, 3, 0)).toBe(false);
+    });
+
+    it('should return true inside an unclosed fenced block (EOF)', () => {
+        const lines = ['text', '```', 'still code', 'more code'];
+        expect(check(lines, 2, 0)).toBe(true);
+        expect(check(lines, 3, 5)).toBe(true);
+    });
+
+    it('should handle multiple fenced blocks', () => {
+        const lines = [
+            'intro',       // 0
+            '```',         // 1 open
+            'block 1',     // 2
+            '```',         // 3 close
+            'between',     // 4
+            '~~~',         // 5 open
+            'block 2',     // 6
+            '~~~',         // 7 close
+            'after',       // 8
+        ];
+        expect(check(lines, 2, 0)).toBe(true);
+        expect(check(lines, 4, 0)).toBe(false);
+        expect(check(lines, 6, 0)).toBe(true);
+        expect(check(lines, 8, 0)).toBe(false);
+    });
+
+    it('should not close a backtick fence with tildes', () => {
+        const lines = ['```', 'code', '~~~', 'still code'];
+        expect(check(lines, 2, 0)).toBe(true);
+        expect(check(lines, 3, 0)).toBe(true);
+    });
+
+    it('should require closing fence to have at least as many markers', () => {
+        const lines = ['````', 'code', '```', 'still in fence', '````', 'out'];
+        // ``` (3) cannot close ```` (4), so lines 2-3 are still inside
+        expect(check(lines, 2, 0)).toBe(true);
+        expect(check(lines, 3, 0)).toBe(true);
+        // ```` (4) closes the fence
+        expect(check(lines, 5, 0)).toBe(false);
+    });
+
+    it('should detect / trigger inside a multiline fenced block (bug regression)', () => {
+        // The specific bug: slash command menu appeared inside fenced code blocks
+        const lines = [
+            '# My Note',
+            '',
+            '```',
+            'function hello() {',
+            '  // type / here',
+            '}',
+            '```',
+            '',
+            'Normal text',
+        ];
+        // Inside the fence
+        expect(check(lines, 4, 2)).toBe(true);
+        // Outside the fence
+        expect(check(lines, 8, 0)).toBe(false);
+    });
+
+    it('should return true for cursor inside inline code span', () => {
+        const lines = ['Some `inline code` here'];
+        // charIndex 7 is 'n' inside the backticks
+        expect(check(lines, 0, 7)).toBe(true);
+    });
+
+    it('should return false for cursor outside inline code span', () => {
+        const lines = ['Some `inline code` here'];
+        // charIndex 20 is 'h' in "here"
+        expect(check(lines, 0, 20)).toBe(false);
+    });
+
+    it('should return false for cursor before inline code span', () => {
+        const lines = ['Some `inline` rest'];
+        // charIndex 2 is 'm' in "Some"
+        expect(check(lines, 0, 2)).toBe(false);
+    });
+
+    it('should handle indented fence markers', () => {
+        const lines = ['text', '   ```', 'code', '   ```', 'after'];
+        expect(check(lines, 2, 0)).toBe(true);
+        expect(check(lines, 4, 0)).toBe(false);
+    });
+
+    it('should return false for empty document', () => {
+        expect(check([], 0, 0)).toBe(false);
     });
 });
 

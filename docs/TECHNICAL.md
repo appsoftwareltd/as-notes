@@ -622,7 +622,9 @@ The `sortText` prefix ensures pages always appear before aliases in the list. Bo
 
 **Front matter suppression:** `isLineInsideFrontMatter()` checks whether the cursor is between the first two `---` lines. If so, no completions are returned — front matter aliases are plain strings, not wikilinks.
 
-All three pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, and `isLineInsideFrontMatter()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
+All four pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, `isLineInsideFrontMatter()`, and `isPositionInsideCode()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
+
+**Code block detection:** `isPositionInsideCode(lines, lineIndex, charIndex)` scans lines 0 through `lineIndex` tracking fenced code block open/close state (supports both `` ` `` and `~` fences, respects fence length — a closing fence must use the same character and at least as many markers as the opener). If a fence is still open at `lineIndex`, the position is inside a code block. Separately checks inline code spans (`` ` ``) on the target line.
 
 ### Caching strategy
 
@@ -1454,6 +1456,93 @@ AS Notes is released under the **Elastic Licence 2.0 (ELv2)**. The full text is 
 - You may **not** provide the software as a hosted/managed service or competing product
 - You may **not** remove or circumvent licence key functionality
 - Corporate use with a Pro licence is explicitly permitted
+
+## Slash command menu
+
+Typing `/` in any markdown file (except inside front matter, inline code, or fenced code blocks) triggers a VS Code completion list showing available in-editor commands. If the user presses any non-matching key or Escape, the list is dismissed and the `/` is rendered as typed.
+
+### SlashCommandProvider
+
+`src/SlashCommandProvider.ts` — a `vscode.CompletionItemProvider` registered on trigger character `/`.
+
+**Suppression rules** (same pattern as `WikilinkCompletionProvider`):
+- YAML front matter (`---` fences)
+- Fenced code blocks (` ``` ` or `~~~`)
+- Inline code spans (`` ` ``)
+
+Detection for the latter two is handled by `isPositionInsideCode()` in `CompletionUtils.ts`.
+
+**Commands available:**
+
+| Label | Action |
+|---|---|
+| `Today` | Replaces `/` with `[[YYYY_MM_DD]]` for the current date, inline |
+| `Date Picker` | Replaces `/` with `""` and fires `as-notes.openDatePicker` |
+| `Code (inline)` | Replaces `/` with a SnippetString `` `$0` `` — cursor lands between the backticks |
+| `Code (multiline)` | Replaces `/` with a SnippetString `` ```$0\n\n``` `` — cursor lands after the opening fence for lang entry |
+| `Table` | Replaces `/` with `""` and fires `as-notes.insertTable` |
+| `Table: Add Column(s)` | Replaces `/` with `""` and fires `as-notes.tableAddColumn` |
+| `Table: Add Row(s)` | Replaces `/` with `""` and fires `as-notes.tableAddRow` |
+| `Table: Format` | Replaces `/` with `""` and fires `as-notes.tableFormat` |
+| `Table: Remove Row (Current)` | Replaces `/` with `""` and fires `as-notes.tableRemoveRow` |
+| `Table: Remove Column (Current)` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumn` |
+| `Table: Remove Row(s) Above` | Replaces `/` with `""` and fires `as-notes.tableRemoveRowsAbove` |
+| `Table: Remove Row(s) Below` | Replaces `/` with `""` and fires `as-notes.tableRemoveRowsBelow` |
+| `Table: Remove Column(s) Right` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumnsRight` |
+| `Table: Remove Column(s) Left` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumnsLeft` |
+
+Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced.
+
+The completion range covers only the `/` character.
+
+### Date Picker — DatePickerService
+
+`src/DatePickerService.ts` — a `showInputBox`-based date entry.
+
+**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking — e.g. rejects Feb 30), then inserts `[[YYYY_MM_DD]]` at every active cursor position via `insertDateAtCursor()`.
+
+**Validation:** `parseInputDate(input)` splits on `-`, validates each component as a number, checks month 1–12, day 1–maxDaysInMonth, and confirms no date overflow (via `Date` constructor round-trip). Returns `null` on any failure.
+
+`formatWikilinkDate(date)` (exported from `SlashCommandProvider.ts`) is the single canonical place that produces the `[[YYYY_MM_DD]]` string.
+
+### Registration
+
+The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, and all ten table commands are registered in `enterFullMode()` in `extension.ts`. Table commands are Pro-gated via `isProLicenced()`.
+
+### Table Service
+
+`src/TableService.ts` — pure functions for markdown table manipulation, no VS Code dependencies.
+
+**Core functions:**
+
+| Function | Purpose |
+|---|---|
+| `generateTable(cols, rows, cellWidth?)` | Generate a new markdown table string with header labels |
+| `addColumns(lines, cursorLine, cursorChar, count, cellWidth?)` | Add N columns after the cursor’s column in an existing table |
+| `addRows(lines, cursorLine, count)` | Add N rows after the cursor’s row (inserts after separator if cursor is on header/separator) |
+| `formatTable(lines, lineIndex, minWidth?)` | Normalise all column widths to `max(longestContent, minWidth)` |
+| `removeCurrentRow(lines, cursorLine)` | Remove the row at the cursor (refuses header/separator) |
+| `removeCurrentColumn(lines, cursorLine, cursorChar)` | Remove the column at the cursor (refuses single-column tables) |
+| `removeRowsAbove(lines, cursorLine, count)` | Remove up to N data rows above cursor (clamps to available, never removes header/separator) |
+| `removeRowsBelow(lines, cursorLine, count)` | Remove up to N rows below cursor (clamps to available) |
+| `removeColumnsRight(lines, cursorLine, cursorChar, count)` | Remove up to N columns right of cursor (clamps to available) |
+| `removeColumnsLeft(lines, cursorLine, cursorChar, count)` | Remove up to N columns left of cursor (clamps to available, preserves indent) |
+
+**Supporting utilities:** `isTableRow`, `isSeparatorRow`, `parseTableRow`, `findTableBounds`, `findCursorColumn`, `buildRow`, `buildSeparator`.
+
+**Indent preservation:** `formatTable`, `addRows`, and all remove-column functions detect the leading whitespace of the first table row and prepend it to every rebuilt/inserted line. `addColumns` preserves indent naturally since it splices into existing lines.
+
+**Column removal:** `removeCurrentColumn`, `removeColumnsRight`, and `removeColumnsLeft` all delegate to an internal `rebuildTableWithoutColumns()` helper that parses all rows, filters out specified column indices, recalculates optimal widths, and rebuilds with `buildRow`/`buildSeparator`.
+
+**Clamping:** The four "Remove N" functions (`removeRowsAbove`, `removeRowsBelow`, `removeColumnsRight`, `removeColumnsLeft`) clamp the requested count to the maximum available, gracefully removing as many as possible.
+
+**Cell width rules:**
+- New table: default width (7 chars content area)
+- Add columns: default width for new columns
+- Add rows: widths from header row
+- Format: `max(longest cell content, default minimum)` per column
+
+**Pro gating:** All ten table commands show in the slash menu for all users but append ` (Pro)` to the label only when the user is not Pro licenced. Execution is gated via `isProLicenced()` with a warning notification for free users. `SlashCommandProvider` receives an `isProLicenced: () => boolean` callback via its constructor.
 
 ## Pro licence
 

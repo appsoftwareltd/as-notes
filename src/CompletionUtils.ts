@@ -89,3 +89,61 @@ export function isLineInsideFrontMatter(lines: string[], lineIndex: number): boo
     // Unclosed front matter — treat entire document as front matter
     return true;
 }
+
+/**
+ * Check whether the cursor position falls inside an inline code span (` ` `)
+ * or a fenced code block (``` ``` ``` or ~~~ ~~~ ~~~) on the given line/document.
+ *
+ * @param lines - All lines of the document
+ * @param lineIndex - The 0-based line index of the cursor
+ * @param charIndex - The 0-based character index of the cursor on that line
+ * @returns true if the cursor is inside a code span or fenced block
+ */
+export function isPositionInsideCode(lines: string[], lineIndex: number, charIndex: number): boolean {
+    // Check fenced code block — scan up to lineIndex tracking open/close state
+    const fencePattern = /^(\s*(`{3,}|~{3,}))/;
+    let inFence = false;
+    let fenceChar = '';
+    let fenceLen = 0;
+    for (let i = 0; i <= lineIndex; i++) {
+        const m = fencePattern.exec(lines[i]);
+        if (m) {
+            const char = m[2][0]; // ` or ~
+            const len = m[2].length;
+            if (!inFence) {
+                // Opening fence
+                inFence = true;
+                fenceChar = char;
+                fenceLen = len;
+            } else if (char === fenceChar && len >= fenceLen) {
+                // Closing fence — same char, at least as many markers
+                inFence = false;
+                fenceChar = '';
+                fenceLen = 0;
+            }
+            // Otherwise it's a different fence type or shorter — ignored
+        }
+    }
+    // If we're still inside a fence at lineIndex, cursor is in a code block.
+    // The opening fence line itself is part of the block, but content starts
+    // on the next line — however for suppression purposes we treat the opening
+    // fence line as code too (no completions on a ``` line).
+    if (inFence) {
+        return true;
+    }
+
+    // Check inline code span on this line
+    const line = lines[lineIndex] ?? '';
+    let inCode = false;
+    for (let c = 0; c < line.length; c++) {
+        if (line[c] === '`') {
+            inCode = !inCode;
+            continue;
+        }
+        if (inCode && c === charIndex) {
+            return true;
+        }
+    }
+
+    return false;
+}

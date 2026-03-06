@@ -29,6 +29,9 @@ import { applyAssetPathSettings } from './ImageDropProvider.js';
 import { LogService, NO_OP_LOGGER } from './LogService.js';
 import { findInnermostOpenBracket } from './CompletionUtils.js';
 import { IgnoreService } from './IgnoreService.js';
+import { SlashCommandProvider } from './SlashCommandProvider.js';
+import { openDatePicker } from './DatePickerService.js';
+import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -333,6 +336,319 @@ async function enterFullMode(
     completionProvider.refresh(); // Warm the cache so first [[ is instant
     fullModeDisposables.push(
         vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
+    );
+
+    // Slash command provider — in-editor command menu triggered by /
+    fullModeDisposables.push(
+        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, new SlashCommandProvider(() => isProLicenced()), '/'),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.openDatePicker', () => openDatePicker()),
+    );
+
+    // ── Table commands (Pro) ───────────────────────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.insertTable', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const colsStr = await vscode.window.showInputBox({
+                prompt: 'Number of columns',
+                value: '3',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (colsStr === undefined) { return; }
+            const rowsStr = await vscode.window.showInputBox({
+                prompt: 'Number of rows (excluding header)',
+                value: '3',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (rowsStr === undefined) { return; }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const table = generateTable(parseInt(colsStr.trim(), 10), parseInt(rowsStr.trim(), 10));
+            await editor.insertSnippet(new vscode.SnippetString(table), editor.selection.active);
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableAddColumn', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const countStr = await vscode.window.showInputBox({
+                prompt: 'Number of columns to add',
+                value: '1',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (countStr === undefined) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = addColumns(lines, editor.selection.active.line, editor.selection.active.character, parseInt(countStr.trim(), 10));
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: Cursor is not inside a markdown table.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableAddRow', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const countStr = await vscode.window.showInputBox({
+                prompt: 'Number of rows to add',
+                value: '1',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (countStr === undefined) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = addRows(lines, editor.selection.active.line, parseInt(countStr.trim(), 10));
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: Cursor is not inside a markdown table.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const pos = new vscode.Position(result.insertAfterLine, lines[result.insertAfterLine].length);
+                editBuilder.insert(pos, '\n' + result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableFormat', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = formatTable(lines, editor.selection.active.line);
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: Cursor is not inside a markdown table.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    // ── Table remove commands (Pro) ────────────────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableRemoveRow', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = removeCurrentRow(lines, editor.selection.active.line);
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: Cannot remove the header or separator row.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableRemoveColumn', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = removeCurrentColumn(lines, editor.selection.active.line, editor.selection.active.character);
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: Cannot remove column (single-column table or cursor not in table).');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableRemoveRowsAbove', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const countStr = await vscode.window.showInputBox({
+                prompt: 'Number of rows to remove above',
+                value: '1',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (countStr === undefined) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = removeRowsAbove(lines, editor.selection.active.line, parseInt(countStr.trim(), 10));
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: No removable rows above the cursor.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableRemoveRowsBelow', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const countStr = await vscode.window.showInputBox({
+                prompt: 'Number of rows to remove below',
+                value: '1',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (countStr === undefined) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = removeRowsBelow(lines, editor.selection.active.line, parseInt(countStr.trim(), 10));
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: No rows below the cursor to remove.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableRemoveColumnsRight', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const countStr = await vscode.window.showInputBox({
+                prompt: 'Number of columns to remove to the right',
+                value: '1',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (countStr === undefined) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = removeColumnsRight(lines, editor.selection.active.line, editor.selection.active.character, parseInt(countStr.trim(), 10));
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: No columns to the right of the cursor to remove.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.tableRemoveColumnsLeft', async () => {
+            if (!isProLicenced()) {
+                vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const countStr = await vscode.window.showInputBox({
+                prompt: 'Number of columns to remove to the left',
+                value: '1',
+                validateInput: v => /^[1-9]\d*$/.test(v.trim()) ? null : 'Enter a positive integer',
+            });
+            if (countStr === undefined) { return; }
+            const lines: string[] = [];
+            for (let i = 0; i < editor.document.lineCount; i++) {
+                lines.push(editor.document.lineAt(i).text);
+            }
+            const result = removeColumnsLeft(lines, editor.selection.active.line, editor.selection.active.character, parseInt(countStr.trim(), 10));
+            if (!result) {
+                vscode.window.showWarningMessage('AS Notes: No columns to the left of the cursor to remove.');
+                return;
+            }
+            await editor.edit(editBuilder => {
+                const range = new vscode.Range(
+                    new vscode.Position(result.startLine, 0),
+                    new vscode.Position(result.endLine, lines[result.endLine].length),
+                );
+                editBuilder.replace(range, result.newText);
+            });
+        }),
     );
 
     // Configure the built-in markdown copy-files destination to use our asset path

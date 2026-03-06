@@ -62,6 +62,33 @@ Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
+### Slash Commands
+
+Type `/` in any markdown file to open a quick command menu. The following commands are available:
+
+| Command | Action |
+|---|---|
+| **Today** | Inserts a wikilink for today's date, e.g. `[[2026_03_06]]` |
+| **Date Picker** | Opens a date input box pre-filled with today's date — edit the date or press Enter to insert it as a wikilink |
+| **Code (inline)** | Inserts `` ` `` `` ` `` with the cursor placed between the backticks |
+| **Code (multiline)** | Inserts a fenced code block with the cursor after the opening ` ``` ` — type the language identifier (e.g. `js`) then press Enter |
+| **Table** | Prompts for column and row count, then inserts a formatted markdown table |
+| **Table: Add Column(s)** | Prompts for count, then adds columns after the cursor's current column in the surrounding table |
+| **Table: Add Row(s)** | Prompts for count, then adds rows after the cursor's current row in the surrounding table |
+| **Table: Format** | Normalises all column widths in the surrounding table to the longest cell content |
+| **Table: Remove Row (Current)** | Removes the row at the cursor (refuses header/separator) |
+| **Table: Remove Column (Current)** | Removes the column at the cursor (refuses single-column tables) |
+| **Table: Remove Row(s) Above** | Prompts for count, then removes data rows above the cursor (clamps to available) |
+| **Table: Remove Row(s) Below** | Prompts for count, then removes rows below the cursor (clamps to available) |
+| **Table: Remove Column(s) Right** | Prompts for count, then removes columns to the right of the cursor (clamps to available) |
+| **Table: Remove Column(s) Left** | Prompts for count, then removes columns to the left of the cursor (clamps to available, preserves indent) |
+
+Table commands are labelled **(Pro)** for free users. Pro users see clean names.
+
+The menu appears inline as you type and supports filtering — just keep typing to narrow the list. Press Escape or any non-matching key to dismiss and keep the `/` as-is.
+
+Slash commands are suppressed inside fenced code blocks, inline code spans, and YAML front matter.
+
 ### File Drag & Drop / Copy + Paste
 
 Drag files from your file manager onto a markdown editor, or paste images from the clipboard - VS Code's built-in markdown editor handles the copy and link insertion automatically.
