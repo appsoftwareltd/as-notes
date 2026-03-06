@@ -266,7 +266,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
                 const trimmed = line.trimEnd();
                 if (i === wikiLinkLineIndex) {
                     const startCol = lastLink.startCol;
-                    const endCol = lastLink.endCol;
+                    const endCol = lastLink.endCol + 1; // endCol is inclusive, substring needs exclusive
                     const before = escapeHtml(trimmed.substring(0, startCol));
                     const highlight = escapeHtml(trimmed.substring(startCol, endCol));
                     const after = escapeHtml(trimmed.substring(endCol));

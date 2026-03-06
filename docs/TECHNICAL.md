@@ -184,6 +184,14 @@ Because ignored files are not present in `scannedPaths`, the "deleted files" cle
 
 In `enterFullMode()`, a `vscode.workspace.createFileSystemWatcher` is registered on `.asnotesignore`. On any change (create, modify, or delete), `ignoreService.reload()` is called, followed by a `staleScan()`. The stale scan handles both removal of newly-ignored entries and addition of newly-un-ignored files. The watcher disposable is pushed to `fullModeDisposables` and torn down on mode transition.
 
+**VS Code `files.exclude` interaction:**
+
+`IndexScanner.fullScan()` and `staleScan()` use `vscode.workspace.findFiles()` without an explicit exclude parameter. This means VS Code's built-in `files.exclude` and `search.exclude` settings are applied — files matching those patterns are silently omitted from scan results and never indexed. This is by design: if a user has excluded folders in their workspace settings, those files should not appear in the index.
+
+If a user opens an excluded file (e.g. via the command palette) and triggers the backlinks panel, the panel will display a message indicating the file is not indexed, with a note that it may be an ignored file. The `onDidSaveTextDocument` and `onDidChangeTextDocument` handlers will index such files on save/edit, but this is incidental — the file will not persist in the index across rebuilds.
+
+**Future option:** If demand arises, on-the-fly indexing could be added to `BacklinkPanelProvider.renderBacklinksForUri()` — when `getPageByPath()` returns null, index the file from the open editor buffer before querying. This was deferred as the current behaviour (showing an informative message) is sufficient.
+
 **Module-level state:**
 
 `ignoreService` is kept as a module-level variable (alongside `indexService` and `indexScanner`) and is set to `undefined` in `exitFullMode()`. In `initWorkspace()`, a temporary `IgnoreService` is constructed (after creating the file) and passed to the one-time `IndexScanner` used for the initial full scan, so newly initialised workspaces also respect default exclusions immediately.
@@ -1324,7 +1332,9 @@ The webview communicates with the extension via `postMessage`:
 Each chain group renders as a collapsible section with:
 - **Header**: the chain pattern displayed as clickable page name links separated by `→` arrows, with an instance count badge
 - **Instances**: each instance shows the source page title followed by the chain with per-link line numbers (e.g. `[L12]`), each clickable for navigation
-- **Context block**: below each chain instance, a multi-line context snippet (±1 surrounding lines) of the last link (the target link) is displayed in a blockquote-styled `<pre>` block. The wikilink text on the relevant line is highlighted using `--vscode-textLink-foreground`. The blockquote uses `--vscode-textBlockQuote-border` for the left border and `--vscode-textBlockQuote-background` for the background fill.
+- **Context block**: below each chain instance, a multi-line context snippet (±1 surrounding lines) of the last link (the target link) is displayed in a blockquote-styled `<pre>` block. Common leading whitespace is stripped so that outliner-indented content doesn't waste horizontal space (relative indentation is preserved). The wikilink text on the relevant line is highlighted using `--vscode-textLink-foreground`. The blockquote uses `--vscode-textBlockQuote-border` for the left border and `--vscode-textBlockQuote-background` for the background fill. Context text uses `--vscode-descriptionForeground` for a muted secondary appearance.
+
+Chain link names in instance rows use `font-weight: 600` for emphasis. The instance chain bar matches the editor font family and size.
 
 The HTML uses VS Code CSS variables for automatic light/dark theme support. Chain arrows use dimmed description foreground. Clickable elements have hover states.
 

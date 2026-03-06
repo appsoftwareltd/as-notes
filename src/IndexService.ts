@@ -434,6 +434,7 @@ export class IndexService {
             [pagePath],
         );
         if (result.length === 0 || result[0].values.length === 0) {
+            this.logger.info('IndexService', `getPageByPath: path="${pagePath}" → NOT FOUND`);
             return undefined;
         }
         const row = result[0].values[0];

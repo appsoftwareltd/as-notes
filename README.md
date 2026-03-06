@@ -404,6 +404,18 @@ Wikilinks can be nested by adding more bracket pairs:
 
 The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and `]]` that balances correctly forms a valid wikilink. See [docs/TECHNICAL.md](docs/TECHNICAL.md) for a detailed explanation of the parsing algorithm and edge cases.
 
+## Troubleshooting
+
+### "This file is not yet indexed"
+
+The backlinks panel shows this message when the current file is not in the AS Notes index. Common causes:
+
+- **VS Code `files.exclude` / `search.exclude` settings** — AS Notes uses `vscode.workspace.findFiles()` to discover markdown files, which respects these VS Code settings. Files in excluded folders (e.g. `logseq/version-files/`) are silently omitted from the scan and will never be indexed. Check **Settings → Files: Exclude** and **Settings → Search: Exclude** if a file you expect to be indexed is missing.
+- **`.asnotesignore` patterns** — Files matching patterns in `.asnotesignore` at the workspace root are excluded from the index. See [Excluding files from the index](#excluding-files-from-the-index) above.
+- **File not yet saved** — New unsaved files are not indexed until they are saved to disk for the first time.
+
+To resolve, check your workspace settings and `.asnotesignore` file. If the file should be indexed, ensure it is not matched by any exclusion pattern, then run **AS Notes: Rebuild Index** from the Command Palette.
+
 ## Development
 
 ```bash

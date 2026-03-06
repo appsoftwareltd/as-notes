@@ -349,7 +349,7 @@ async function enterFullMode(
     );
 
     // Backlink panel
-    backlinkPanelProvider = new BacklinkPanelProvider(indexService, workspaceRoot);
+    backlinkPanelProvider = new BacklinkPanelProvider(indexService, workspaceRoot, logService);
     fullModeDisposables.push(backlinkPanelProvider);
 
     fullModeDisposables.push(
