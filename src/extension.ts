@@ -89,19 +89,24 @@ let extensionContext: vscode.ExtensionContext | undefined;
 /** Current licence validation result — updated on activation and config change. */
 let licenceStatus: LicenceStatus = 'not-entered';
 
+/** True only when running as the official appsoftwareltd.as-notes build. */
+const OFFICIAL_EXTENSION_ID = 'appsoftwareltd.as-notes';
+let isOfficialBuild = false;
+
 /**
- * Returns true when a valid Pro licence key is configured.
- * Use this at every pro feature gate — one place to change when real
- * server-side verification is added.
+ * Returns true when a valid Pro licence key is configured AND the extension
+ * is running as the official published build. Unofficial forks will never
+ * pass this check regardless of licence key.
  */
 export function isProLicenced(): boolean {
-    return isValidStatus(licenceStatus);
+    return isOfficialBuild && isValidStatus(licenceStatus);
 }
 
 // ── Activation ─────────────────────────────────────────────────────────────
 
 export async function activate(context: vscode.ExtensionContext): Promise<{ extendMarkdownIt: (md: any) => any }> {
     extensionContext = context;
+    isOfficialBuild = context.extension.id === OFFICIAL_EXTENSION_ID;
 
     // Status bar — always present
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
@@ -1149,7 +1154,7 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
             indexService = new IndexService(dbPath, logService);
             await indexService.initDatabase();
 
-            const initIgnoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));            indexScanner = new IndexScanner(indexService, workspaceRoot, initIgnoreService, logService);
+            const initIgnoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE)); indexScanner = new IndexScanner(indexService, workspaceRoot, initIgnoreService, logService);
 
             const result = await indexScanner.fullScan(progress);
             indexService.saveToFile();

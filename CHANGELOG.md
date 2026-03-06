@@ -2,6 +2,12 @@
 
 All notable changes to AS Notes will be documented here.
 
+## [1.0.13] - 2026-03-06
+
+- Documentation: LICENCE
+
+### Added
+
 ## [1.0.12] - 2026-03-06
 
 ### Added

@@ -1446,6 +1446,15 @@ The template file is indexed like any other markdown file. If the user deletes i
 
 ---
 
+## Source Licence
+
+AS Notes is released under the **Elastic Licence 2.0 (ELv2)**. The full text is in `LICENSE` at the repository root. Key points:
+
+- You may read, fork, modify, and distribute the source
+- You may **not** provide the software as a hosted/managed service or competing product
+- You may **not** remove or circumvent licence key functionality
+- Corporate use with a Pro licence is explicitly permitted
+
 ## Pro licence
 
 The Pro Licence system gates premium features behind a validated licence key. The design is split into two components and a small amount of wiring in `extension.ts`.
@@ -1497,6 +1506,11 @@ A single exported function in `extension.ts` is the only place pro status is che
 ```typescript
 export function isProLicenced(): boolean
 ```
+
+`isProLicenced()` requires **both** conditions to be true:
+
+1. `isOfficialBuild` — set once during `activate()` by comparing `context.extension.id` against the constant `'appsoftwareltd.as-notes'`. This is `false` for unofficial forks that republish under a different publisher/name, silently disabling Pro features. Local debug sessions (F5 Extension Development Host) are unaffected because the extension loads with its real ID from `package.json`.
+2. `isValidStatus(licenceStatus)` — the licence key is valid.
 
 All pro-gated features call `isProLicenced()` directly. When real server verification arrives, only `LicenceActivationService` and `LicenceService` change — call sites are unaffected.
 
