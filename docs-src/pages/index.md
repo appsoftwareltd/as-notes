@@ -4,7 +4,9 @@
 
 AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS). It brings [[Wikilinks]], backlinks, daily journaling, encrypted notes, and a task panel — all without ever sending your data anywhere.
 
-> **Install:** [AS Notes on the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+> **Install:** [https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+
+> **GitHub:** [https://github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
 
 ## Why VS Code?
 
