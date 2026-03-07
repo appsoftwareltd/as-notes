@@ -7,7 +7,9 @@
 [![License](https://img.shields.io/badge/license-Elastic--2.0-lightgrey)](https://github.com/appsoftwareltd/as-notes/blob/main/LICENSE)
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
-> [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+> Install: [AS Notes on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+
+> Docs: [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)
 
 AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
 
