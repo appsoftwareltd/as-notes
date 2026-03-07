@@ -132,7 +132,7 @@ as-notes/
 ├── vs-code-extension/       # VS Code extension (imports from common via file: dep)
 ├── html-conversion/         # CLI: markdown+wikilinks → static HTML
 │   ├── src/
-│   │   ├── convert.ts       # CLI entry point (--input, --output)
+│   │   ├── convert.ts       # CLI entry point (--input, --output, --stylesheet, --asset)
 │   │   └── FileResolver.ts  # Flat-file wikilink→href resolver
 │   └── test/
 │       └── FileResolver.test.ts  # 16 tests
@@ -161,10 +161,12 @@ The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alon
 A standalone CLI tool for converting an AS Notes workspace (markdown files with `[[wikilinks]]`) into static HTML:
 
 - **FileResolver** — scans a directory for `.md` files, builds a case-insensitive filename→href lookup map (same semantics as the extension: spaces URL-encoded). Tracks missing targets during resolution and exposes them via `getMissingTargets()` so placeholder pages can be generated.
-- **convert.ts** — CLI entry point: parses `--input <dir>` and `--output <dir>` args, wipes the output directory, runs markdown-it with the shared `wikilinkPlugin`, wraps each page in an HTML shell with `<nav>` sidebar, writes `.html` files. After converting real pages, generates placeholder pages for any missing wikilink targets with a "This page has not been created yet" message and the same nav sidebar.
-- **Nav generation** — `index.html` appears as "Home", other pages sorted alphabetically. Minimal semantic markup with class names (`site-nav`, `nav-current`, `content`, `missing-page`) for future CSS styling
-- **CI integration** — the `build-docs` job in `.github/workflows/ci.yml` builds and runs the conversion: `docs-src/pages/` → `docs/`
-- **npm script** — `npm run convert -- --input <dir> --output <dir>` runs the built CLI from `dist/convert.js`
+- **convert.ts** — CLI entry point. Args: `--input <dir>`, `--output <dir>`, `--stylesheet <url>` (repeatable), `--asset <file>` (repeatable). Wipes the output directory, copies any assets, runs markdown-it with the shared `wikilinkPlugin`, wraps each page in an HTML shell with `<nav>` sidebar, writes `.html` files. After converting real pages, generates placeholder pages for any missing wikilink targets with a "This page has not been created yet" message and the same nav sidebar.
+- **Styling flags** — `--stylesheet` injects `<link rel="stylesheet" href="...">` tags into every page's `<head>` (CDN URL or relative path). `--asset` copies a local file to the output directory. Zero tags if no `--stylesheet` flags are passed — completely unstyled by default. Content is always wrapped in `<article class="markdown-body">` for compatibility with `github-markdown-css`.
+- **Nav generation** — `index.html` appears as "Home", other pages sorted alphabetically. Semantic markup with class names: `site-nav`, `nav-current`, `markdown-body` (on article), `missing-page`.
+- **CI integration** — the `build-docs` job in `.github/workflows/ci.yml` builds and runs the conversion (`docs-src/pages/` → `docs/`) passing the CDN stylesheet and the local `docs-src/docs.css` asset.
+- **npm script** — `npm run convert -- --input <dir> --output <dir> [--stylesheet <url>]... [--asset <file>]...` runs the built CLI from `dist/convert.js`.
+- **`docs-src/docs.css`** — AS Notes-specific stylesheet (not distributed with the tool). CSS grid layout (`220px nav | 1fr content`), styled nav with active state, `prefers-color-scheme: dark` dark mode, responsive single-column collapse below 700 px.
 
 ---
 

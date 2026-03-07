@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Publishing a Static Site</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="Licence%20Rationale.html">Licence Rationale</a></li>
+        <li><a href="Nested%20%5B%5BWikilinks%5D%5D.html">Nested [[Wikilinks]]</a></li>
+        <li class="nav-current"><a href="Publishing%20a%20Static%20Site.html">Publishing a Static Site</a></li>
+        <li><a href="Wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+<h1>Publishing a Static Site</h1>
+<p>AS Notes includes a built-in HTML conversion tool that turns your markdown notes into a static website. You can use this to publish your knowledge base as a standalone site or deploy it to GitHub Pages.</p>
+<h2>How It Works</h2>
+<p>The <code>html-conversion</code> package scans a folder of markdown files and converts them to HTML. <a href="Wikilinks.html" class="wikilink">Wikilinks</a> between pages are automatically resolved to the correct HTML links.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li><a href="https://nodejs.org">Node.js</a> 20 or later</li>
+<li>Your notes in a folder of <code>.md</code> files</li>
+</ul>
+<h2>Standalone Usage</h2>
+<h3>1. Install the converter</h3>
+<p>Clone or download the <code>html-conversion</code> package from the AS Notes repository, then install dependencies:</p>
+<pre><code class="language-bash">cd html-conversion
+npm install
+npm run build
+</code></pre>
+<h3>2. Convert your notes</h3>
+<pre><code class="language-bash">npm run convert -- --input /path/to/your/notes --output /path/to/output
+</code></pre>
+<p>The output folder will be wiped and regenerated on each run. Point any static file server at the output folder to preview the result.</p>
+<h3>Local preview</h3>
+<p>You can serve the output locally using any static file server, for example:</p>
+<pre><code class="language-bash">npx serve /path/to/output
+</code></pre>
+<h2>Publishing to GitHub Pages</h2>
+<h3>1. Add a CI workflow</h3>
+<p>Create <code>.github/workflows/pages.yml</code> in your repository:</p>
+<pre><code class="language-yaml">name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+        working-directory: html-conversion
+      - run: npm run build
+        working-directory: html-conversion
+      - run: npm run convert -- --input ../notes --output ../site
+        working-directory: html-conversion
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+</code></pre>
+<p>Adjust the <code>--input</code> path to match the folder containing your notes.</p>
+<h3>2. Enable GitHub Pages</h3>
+<p>In your repository go to <strong>Settings → Pages</strong> and set the source to <strong>GitHub Actions</strong>.</p>
+<h3>Custom Domain</h3>
+<p>If you want to serve from a custom domain (e.g. <code>docs.example.com</code>):</p>
+<ol>
+<li>Add a DNS <code>CNAME</code> record (non-proxied if using Cloudflare):<pre><code>docs.example.com  CNAME  &lt;your-github-username&gt;.github.io
+</code></pre>
+</li>
+<li>Add a step to your workflow to write the <code>CNAME</code> file into the output folder (the converter wipes the output on each run, so this must be done after conversion):<pre><code class="language-yaml">- run: echo &quot;docs.example.com&quot; &gt; ../site/CNAME
+  working-directory: html-conversion
+</code></pre>
+</li>
+<li>Enter the domain in <strong>Settings → Pages → Custom domain</strong> and wait for DNS verification.</li>
+<li>Once verified, enable <strong>Enforce HTTPS</strong>.</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> If your repository belongs to a GitHub organisation that has a custom domain configured at the org level, GitHub will apply that domain automatically to all repos. In that case you either configure a per-repo custom domain as above, or complete the org-level DNS setup to make the org domain work.</p>
+</blockquote>
+
+    </article>
+</body>
+</html>

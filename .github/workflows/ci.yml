@@ -71,7 +71,13 @@ jobs:
         working-directory: html-conversion
       - run: npm run build
         working-directory: html-conversion
-      - run: npm run convert -- --input ../docs-src/pages --output ../docs
+      - run: >
+          npm run convert --
+          --input ../docs-src/pages
+          --output ../docs
+          --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css
+          --stylesheet docs.css
+          --asset ../docs-src/docs.css
         working-directory: html-conversion
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

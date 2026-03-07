@@ -502,6 +502,26 @@ The conversion:
 - Creates placeholder pages for missing wikilink targets with a "This page has not been created yet" message
 - Wipes the output directory before each run
 
+**Styling** (optional):
+
+| Flag | Description |
+|---|---|
+| `--stylesheet <url>` | Injects a `<link rel="stylesheet">` into every page's `<head>`. Repeatable; tags appear in order. Accepts CDN URLs or relative paths (e.g. `docs.css`). |
+| `--asset <file>` | Copies a local file into the output directory. Use with `--stylesheet` to reference local CSS by filename. Repeatable. |
+
+Example with `github-markdown-css` and a custom local stylesheet:
+
+```bash
+npm run convert -- \
+  --input ../docs-src/pages \
+  --output ../docs \
+  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css \
+  --stylesheet docs.css \
+  --asset ../docs-src/docs.css
+```
+
+Content is always wrapped in `<article class="markdown-body">`, making it natively compatible with `github-markdown-css`.
+
 In CI, the `build-docs` job runs the same steps automatically on push/PR to `main` (see `.github/workflows/ci.yml`).
 
 ### Debugging

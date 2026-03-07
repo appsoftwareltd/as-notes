@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wikilinks</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css">
+    <link rel="stylesheet" href="docs.css">
 </head>
 <body>
     <nav class="site-nav">
@@ -11,11 +13,58 @@
         <li><a href="index.html">Home</a></li>
         <li><a href="Licence%20Rationale.html">Licence Rationale</a></li>
         <li><a href="Nested%20%5B%5BWikilinks%5D%5D.html">Nested [[Wikilinks]]</a></li>
+        <li><a href="Publishing%20a%20Static%20Site.html">Publishing a Static Site</a></li>
         <li class="nav-current"><a href="Wikilinks.html">Wikilinks</a></li>
       </ul>
     </nav>
-    <main class="content">
+    <article class="markdown-body">
+<h1>Wikilinks</h1>
+<p>Wikilinks are a way to link between notes using a simple double-bracket syntax. They are the core navigation primitive in AS Notes, popularised by tools like Roam Research, Logseq, and Obsidian.</p>
+<h2>Basic Syntax</h2>
+<p>Wrap any page name in double square brackets to create a link:</p>
+<pre><code>[[Page Name]]
+</code></pre>
+<p>AS Notes resolves the link to the matching file anywhere in your workspace — you do not need to specify a folder path or file extension. If a file called <code>Page Name.md</code> exists anywhere in the workspace, the link will navigate to it.</p>
+<h2>How Resolution Works</h2>
+<p>Links are resolved by page name only. Given a workspace with these files:</p>
+<pre><code>notes/
+  Project Ideas.md
+  journal/
+    2026_03_07.md
+</code></pre>
+<p>The link <code>[[Project Ideas]]</code> resolves correctly regardless of which file it appears in or how deeply nested the files are.</p>
+<h2>Nested Wikilinks</h2>
+<p>AS Notes supports wikilinks nested inside other wikilinks. This allows page names to themselves reference other pages, making it possible to build composite page names that remain fully navigable.</p>
+<h3>Single nesting</h3>
+<p>The outer link's page name includes the inner link text (brackets and all):</p>
+<pre><code>[[[[AS Notes]] Features]]
+</code></pre>
+<p>This creates two links:</p>
+<ul>
+<li><code>[[[[AS Notes]] Features]]</code> — links to a page named <code>[[AS Notes]] Features</code></li>
+<li><code>[[AS Notes]]</code> — links to a page named <code>AS Notes</code></li>
+</ul>
+<h3>Double nesting</h3>
+<pre><code>[[[[[[Deep]] Nested]] Page]]
+</code></pre>
+<p>This resolves three links:</p>
+<ul>
+<li><code>[[[[[[Deep]] Nested]] Page]]</code> — links to <code>[[[[Deep]] Nested]] Page</code></li>
+<li><code>[[[[Deep]] Nested]]</code> — links to <code>[[Deep]] Nested</code></li>
+<li><code>[[Deep]]</code> — links to <code>Deep</code></li>
+</ul>
+<h3>Practical use</h3>
+<p>Nested wikilinks are useful when you have a topic hierarchy where sub-pages share their parent's name. For example, if you have a page called <code>AS Notes</code> and a page called <code>[[AS Notes]] Changelog</code>, you can write:</p>
+<pre><code>See the [[[[AS Notes]] Changelog]] for recent changes.
+</code></pre>
+<p>Both the parent and the composite page name remain independently navigable.</p>
+<h2>Backlinks</h2>
+<p>AS Notes maintains a backlink index as you write. The <strong>Backlinks Panel</strong> (<code>Ctrl+Alt+B</code> / <code>Cmd+Alt+B</code>) shows every note that links to the currently open page, including links via nested wikilinks.</p>
+<h2>Rename Tracking</h2>
+<p>When you rename a file, AS Notes automatically updates all wikilinks that reference that file across your entire workspace — including nested wikilinks where the renamed page appears as an inner component.</p>
+<h2>Missing Links</h2>
+<p>A wikilink to a page that does not yet exist is still valid syntax. AS Notes will highlight it differently and you can navigate to it to create the page. This makes it easy to link-first and write later.</p>
 
-    </main>
+    </article>
 </body>
 </html>

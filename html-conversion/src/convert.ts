@@ -4,24 +4,30 @@ import MarkdownIt from 'markdown-it';
 import { WikilinkService, wikilinkPlugin } from 'as-notes-common';
 import { FileResolver } from './FileResolver.js';
 
-function parseArgs(argv: string[]): { input: string; output: string } {
+function parseArgs(argv: string[]): { input: string; output: string; stylesheets: string[]; assets: string[] } {
     let input = '';
     let output = '';
+    const stylesheets: string[] = [];
+    const assets: string[] = [];
 
     for (let i = 2; i < argv.length; i++) {
         if (argv[i] === '--input' && i + 1 < argv.length) {
             input = argv[++i];
         } else if (argv[i] === '--output' && i + 1 < argv.length) {
             output = argv[++i];
+        } else if (argv[i] === '--stylesheet' && i + 1 < argv.length) {
+            stylesheets.push(argv[++i]);
+        } else if (argv[i] === '--asset' && i + 1 < argv.length) {
+            assets.push(argv[++i]);
         }
     }
 
     if (!input || !output) {
-        console.error('Usage: as-notes-convert --input <dir> --output <dir>');
+        console.error('Usage: as-notes-convert --input <dir> --output <dir> [--stylesheet <url>]... [--asset <file>]...');
         process.exit(1);
     }
 
-    return { input: path.resolve(input), output: path.resolve(output) };
+    return { input: path.resolve(input), output: path.resolve(output), stylesheets, assets };
 }
 
 function scanMarkdownFiles(dir: string): string[] {
@@ -41,19 +47,23 @@ function buildNav(resolver: FileResolver, currentPage: string): string {
     return `    <nav class="site-nav">\n      <ul>\n${items.join('\n')}\n      </ul>\n    </nav>`;
 }
 
-function wrapHtml(title: string, nav: string, body: string): string {
+function wrapHtml(title: string, nav: string, body: string, stylesheets: string[] = []): string {
+    const linkTags = stylesheets.length > 0
+        ? '\n' + stylesheets.map(s => `    <link rel="stylesheet" href="${escapeHtml(s)}">`).join('\n')
+        : '';
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapeHtml(title)}</title>
+    <title>${escapeHtml(title)}</title>${linkTags}
 </head>
 <body>
 ${nav}
-    <main class="content">
+    <article class="markdown-body">
 ${body}
-    </main>
+    </article>
 </body>
 </html>
 `;
@@ -68,13 +78,21 @@ function escapeHtml(text: string): string {
 }
 
 function main(): void {
-    const { input, output } = parseArgs(process.argv);
+    const { input, output, stylesheets, assets } = parseArgs(process.argv);
 
     // Wipe output directory
     if (fs.existsSync(output)) {
         fs.rmSync(output, { recursive: true });
     }
     fs.mkdirSync(output, { recursive: true });
+
+    // Copy assets into output directory
+    for (const assetPath of assets) {
+        const resolvedAsset = path.resolve(assetPath);
+        const assetFilename = path.basename(resolvedAsset);
+        fs.copyFileSync(resolvedAsset, path.join(output, assetFilename));
+        console.log(`  [asset] ${assetFilename}`);
+    }
 
     // Scan input for markdown files
     const mdFiles = scanMarkdownFiles(input);
@@ -105,7 +123,7 @@ function main(): void {
 
         const title = pageName === 'index' ? 'AS Notes Documentation' : pageName;
         const nav = buildNav(resolver, pageName);
-        const html = wrapHtml(title, nav, htmlBody);
+        const html = wrapHtml(title, nav, htmlBody, stylesheets);
 
         fs.writeFileSync(outputPath, html, 'utf-8');
         console.log(`  ${filename} -> ${pageName}.html`);
@@ -117,7 +135,7 @@ function main(): void {
         const outputPath = path.join(output, pageName + '.html');
         const nav = buildNav(resolver, pageName);
         const body = '    <p class="missing-page">This page has not been created yet.</p>';
-        const html = wrapHtml(pageName, nav, body);
+        const html = wrapHtml(pageName, nav, body, stylesheets);
 
         fs.writeFileSync(outputPath, html, 'utf-8');
         console.log(`  [missing] ${pageName}.html (placeholder)`);
