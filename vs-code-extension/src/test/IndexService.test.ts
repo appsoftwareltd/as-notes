@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { IndexService, extractTitle, SCHEMA_VERSION } from '../IndexService.js';
-import { WikilinkService } from '../WikilinkService.js';
+import { WikilinkService } from 'as-notes-common';
 import type { LinkInsert, OutlinerEntry } from '../IndexService.js';
 import * as os from 'os';
 import * as fs from 'fs';

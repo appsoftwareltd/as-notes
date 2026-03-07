@@ -7,7 +7,22 @@ on:
     branches: [main]
 
 jobs:
+  test-common:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: common/package-lock.json
+      - run: npm ci
+        working-directory: common
+      - run: npm test
+        working-directory: common
+
   test-vs-code-extension:
+    needs: test-common
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +32,62 @@ jobs:
           cache: 'npm'
           cache-dependency-path: vs-code-extension/package-lock.json
       - run: npm ci
+        working-directory: common
+      - run: npm ci
         working-directory: vs-code-extension
       - run: npm test
         working-directory: vs-code-extension
+
+  test-html-conversion:
+    needs: test-common
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: html-conversion/package-lock.json
+      - run: npm ci
+        working-directory: common
+      - run: npm ci
+        working-directory: html-conversion
+      - run: npm test
+        working-directory: html-conversion
+
+  build-docs:
+    needs: test-html-conversion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: html-conversion/package-lock.json
+      - run: npm ci
+        working-directory: common
+      - run: npm ci
+        working-directory: html-conversion
+      - run: npm run build
+        working-directory: html-conversion
+      - run: npm run convert -- --input ../docs-src/pages --output ../docs
+        working-directory: html-conversion
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        with:
+          path: docs
+
+  deploy-pages:
+    needs: build-docs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -269,6 +269,7 @@
         "vitest": "^3.0.0"
     },
     "dependencies": {
+        "as-notes-common": "file:../common",
         "ignore": "^7.0.5",
         "sql.js": "^1.14.0"
     }

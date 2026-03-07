@@ -1,0 +1,27 @@
+{
+    "name": "as-notes-html-conversion",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/convert.js",
+    "bin": {
+        "as-notes-convert": "./dist/convert.js"
+    },
+    "scripts": {
+        "build": "node build.mjs",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "tsc --noEmit",
+        "convert": "node dist/convert.js"
+    },
+    "dependencies": {
+        "as-notes-common": "file:../common",
+        "markdown-it": "^14.1.1"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "esbuild": "^0.24.0",
+        "typescript": "^5.7.0",
+        "vitest": "^3.0.0"
+    }
+}

@@ -465,22 +465,44 @@ To resolve, check your workspace settings and `.asnotesignore` file. If the file
 
 ## Development
 
+The repository is structured as a monorepo with three packages:
+
+| Package | Description |
+|---|---|
+| `common/` | Shared wikilink parsing library (`Wikilink`, `WikilinkService`, `MarkdownItWikilinkPlugin`) |
+| `vs-code-extension/` | The VS Code extension |
+| `html-conversion/` | CLI utility that converts an AS Notes notebook (markdown + wikilinks) to static HTML |
+
+Documentation source lives in `docs-src/` (an AS Notes workspace). The `html-conversion` tool converts it to `docs/`.
+
+### VS Code Extension
+
 ```bash
-# Install dependencies
+cd vs-code-extension
 npm install
-
-# Build the extension
-npm run build
-
-# Watch mode (rebuilds on changes)
-npm run watch
-
-# Run unit tests
-npm test
-
-# Type-check
-npm run lint
+npm run build    # Build the extension
+npm run watch    # Watch mode (rebuilds on changes)
+npm test         # Run unit tests
+npm run lint     # Type-check
 ```
+
+### HTML Conversion
+
+```bash
+cd html-conversion
+npm install
+npm run build
+npm run convert -- --input ../docs-src/pages --output ../docs
+```
+
+The conversion:
+- Scans the input directory for `.md` files
+- Resolves `[[wikilinks]]` to relative `.html` links
+- Generates a `<nav>` sidebar on each page
+- Creates placeholder pages for missing wikilink targets with a "This page has not been created yet" message
+- Wipes the output directory before each run
+
+In CI, the `build-docs` job runs the same steps automatically on push/PR to `main` (see `.github/workflows/ci.yml`).
 
 ### Debugging
 

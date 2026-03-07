@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { Wikilink } from './Wikilink.js';
-import { WikilinkService } from './WikilinkService.js';
+import { Wikilink, WikilinkService } from 'as-notes-common';
 import { WikilinkFileService } from './WikilinkFileService.js';
 import type { IndexService, LinkRow } from './IndexService.js';
 import type { IndexScanner } from './IndexScanner.js';

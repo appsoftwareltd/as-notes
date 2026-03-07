@@ -28,7 +28,7 @@ vi.mock('vscode', () => {
 });
 
 import { WikilinkRenameTracker } from '../WikilinkRenameTracker.js';
-import { WikilinkService } from '../WikilinkService.js';
+import { WikilinkService } from 'as-notes-common';
 
 // ── Minimal dependency stubs ──────────────────────────────────────────────────
 

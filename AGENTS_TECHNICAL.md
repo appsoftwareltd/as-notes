@@ -115,17 +115,56 @@ This document explains the internal architecture, algorithms, and design decisio
 
 ## Overview
 
-as-notes is a VS Code extension that turns `[[double bracket]]` text in markdown files into navigable links. Each wikilink maps to a `.md` file in the same directory. The extension provides highlighting, click navigation, hover tooltips, auto-creation of missing pages, and automated rename synchronisation between link text and filenames.
+as-notes is a monorepo containing a VS Code extension, a shared wikilink parsing library, and an HTML conversion utility.
+
+### Repository structure
+
+```
+as-notes/
+├── common/                  # Shared wikilink parsing library
+│   ├── src/
+│   │   ├── Wikilink.ts              # Wikilink data model
+│   │   ├── WikilinkService.ts       # Stack-based parser + segment computation
+│   │   ├── MarkdownItWikilinkPlugin.ts  # markdown-it inline rule plugin
+│   │   └── index.ts                 # Barrel export
+│   └── test/
+│       └── WikilinkService.test.ts  # 23 tests
+├── vs-code-extension/       # VS Code extension (imports from common via file: dep)
+├── html-conversion/         # CLI: markdown+wikilinks → static HTML
+│   ├── src/
+│   │   ├── convert.ts       # CLI entry point (--input, --output)
+│   │   └── FileResolver.ts  # Flat-file wikilink→href resolver
+│   └── test/
+│       └── FileResolver.test.ts  # 16 tests
+└── docs-src/                # Documentation source (AS Notes workspace)
+    └── pages/               # Markdown files converted to docs/
+```
+
+### Cross-package dependency
+
+`vs-code-extension` and `html-conversion` both depend on `as-notes-common` via `"file:../common"` in `package.json`. This creates a symlink in `node_modules/as-notes-common` — no npm publish needed. esbuild resolves the symlink and bundles the shared code.
+
+### VS Code extension
 
 The extension is built with:
 
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external). Includes a custom `sqlJsCacheResetPlugin` that patches sql.js at bundle time — see [Manual rebuild](#manual-rebuild)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (219 tests across 8 test files)
+- **vitest 3.x** for unit tests (448 tests across 13 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
+
+### HTML conversion utility
+
+A standalone CLI tool for converting an AS Notes workspace (markdown files with `[[wikilinks]]`) into static HTML:
+
+- **FileResolver** — scans a directory for `.md` files, builds a case-insensitive filename→href lookup map (same semantics as the extension: spaces URL-encoded). Tracks missing targets during resolution and exposes them via `getMissingTargets()` so placeholder pages can be generated.
+- **convert.ts** — CLI entry point: parses `--input <dir>` and `--output <dir>` args, wipes the output directory, runs markdown-it with the shared `wikilinkPlugin`, wraps each page in an HTML shell with `<nav>` sidebar, writes `.html` files. After converting real pages, generates placeholder pages for any missing wikilink targets with a "This page has not been created yet" message and the same nav sidebar.
+- **Nav generation** — `index.html` appears as "Home", other pages sorted alphabetically. Minimal semantic markup with class names (`site-nav`, `nav-current`, `content`, `missing-page`) for future CSS styling
+- **CI integration** — the `build-docs` job in `.github/workflows/ci.yml` builds and runs the conversion: `docs-src/pages/` → `docs/`
+- **npm script** — `npm run convert -- --input <dir> --output <dir>` runs the built CLI from `dist/convert.js`
 
 ---
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WikilinkService } from '../WikilinkService.js';
+import { WikilinkService } from '../src/WikilinkService.js';
 
 describe('WikilinkService', () => {
     const testCases = [

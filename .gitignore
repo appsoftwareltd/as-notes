@@ -1,6 +1,8 @@
 # Agents files
 
-agents/
+agents/*
+!agents/
+!agents/TECHNICAL.md
 AGENTS.md
 
 # Sync files

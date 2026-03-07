@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { WikilinkService, LinkSegment } from './WikilinkService.js';
+import { WikilinkService, type LinkSegment } from 'as-notes-common';
 import { LogService } from './LogService.js';
 
 /**

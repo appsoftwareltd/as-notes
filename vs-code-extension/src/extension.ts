@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { WikilinkService } from './WikilinkService.js';
+import { WikilinkService, wikilinkPlugin, type WikilinkResolverFn } from 'as-notes-common';
 import { WikilinkFileService } from './WikilinkFileService.js';
 import { WikilinkDecorationManager } from './WikilinkDecorationManager.js';
 import { WikilinkDocumentLinkProvider } from './WikilinkDocumentLinkProvider.js';
@@ -10,7 +10,6 @@ import { WikilinkRenameTracker } from './WikilinkRenameTracker.js';
 import { IndexService } from './IndexService.js';
 import { IndexScanner } from './IndexScanner.js';
 import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
-import { wikilinkPlugin, type WikilinkResolverFn } from './MarkdownItWikilinkPlugin.js';
 import { getPathDistance, sanitiseFileName } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 import { TaskPanelProvider } from './TaskPanelProvider.js';

@@ -1,8 +1,7 @@
 import initSqlJs, { type Database } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
-import { WikilinkService } from './WikilinkService.js';
-import { Wikilink } from './Wikilink.js';
+import { WikilinkService, Wikilink } from 'as-notes-common';
 import { FrontMatterService } from './FrontMatterService.js';
 import { LogService, NO_OP_LOGGER } from './LogService.js';
 
