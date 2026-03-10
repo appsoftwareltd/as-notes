@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { IndexService, type TaskViewItem } from './IndexService.js';
+import { toggleTodoLine } from './TodoToggleService.js';
 
 // ── Provider ───────────────────────────────────────────────────────────────
 
@@ -69,13 +70,23 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
                     msg.line as number,
                 );
                 break;
-            case 'toggleTask':
-                vscode.commands.executeCommand(
-                    'as-notes.toggleTaskAtLine',
-                    msg.pagePath as string,
-                    msg.line as number,
-                );
+            case 'toggleTask': {
+                const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+                if (!workspaceRoot) { break; }
+                const pagePath = msg.pagePath as string;
+                const line = msg.line as number;
+                const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
+                vscode.workspace.openTextDocument(fileUri).then(doc => {
+                    const lineText = doc.lineAt(line).text;
+                    const toggled = toggleTodoLine(lineText);
+                    const edit = new vscode.WorkspaceEdit();
+                    edit.replace(doc.uri, doc.lineAt(line).range, toggled);
+                    return vscode.workspace.applyEdit(edit).then(() => doc.save());
+                }).then(undefined, err => {
+                    console.warn('as-notes: failed to toggle task from panel:', err);
+                });
                 break;
+            }
         }
     }
 
