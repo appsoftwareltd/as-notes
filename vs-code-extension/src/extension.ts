@@ -276,6 +276,29 @@ async function enterFullMode(
     const decorationManager = new WikilinkDecorationManager(wikilinkService, logService);
     fullModeDisposables.push(decorationManager);
 
+    // Task panel — registered early so the sidebar is visible immediately,
+    // even during a long schema-reset rebuild. The provider handles an empty
+    // index gracefully (returns []); refresh() is called after scan completes.
+    taskPanelProvider = new TaskPanelProvider(context.extensionUri, indexService);
+    fullModeDisposables.push(
+        vscode.window.registerWebviewViewProvider(
+            TaskPanelProvider.VIEW_ID,
+            taskPanelProvider,
+            { webviewOptions: { retainContextWhenHidden: true } },
+        ),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleTaskPanel', () => {
+            vscode.commands.executeCommand('as-notes-tasks.focus');
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleShowTodoOnly', () => {
+            // Filter state now lives in the webview; this command is kept for
+            // backward compatibility but has no effect in the webview UI.
+        }),
+    );
+
     // Status bar: show indexing spinner
     statusBarItem.text = '$(sync~spin) AS Notes: Indexing...';
     statusBarItem.tooltip = 'Building the wikilink index';
@@ -312,6 +335,9 @@ async function enterFullMode(
     // Index is ready — switch decorations from muted grey to active blue
     decorationManager.setReady();
     updateFullModeStatusBar();
+
+    // Refresh task panel now that the index is populated
+    taskPanelProvider?.refresh();
 
     const fileService = new WikilinkFileService(indexService);
 
@@ -663,30 +689,8 @@ async function enterFullMode(
         vscode.commands.registerCommand('as-notes.toggleTodo', () => toggleTodoCommand()),
     );
 
-    // Task panel — WebviewView in AS Notes sidebar
-    taskPanelProvider = new TaskPanelProvider(context.extensionUri, indexService);
-    const taskViewDisposable = vscode.window.registerWebviewViewProvider(
-        TaskPanelProvider.VIEW_ID,
-        taskPanelProvider,
-        { webviewOptions: { retainContextWhenHidden: true } },
-    );
-    fullModeDisposables.push(taskViewDisposable);
-
     // Set context key so the view/keybinding `when` clauses activate
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', true);
-
-    // Task panel commands
-    fullModeDisposables.push(
-        vscode.commands.registerCommand('as-notes.toggleTaskPanel', () => {
-            vscode.commands.executeCommand('as-notes-tasks.focus');
-        }),
-    );
-    fullModeDisposables.push(
-        vscode.commands.registerCommand('as-notes.toggleShowTodoOnly', () => {
-            // Filter state now lives in the webview; this command is kept for
-            // backward compatibility but has no effect in the webview UI.
-        }),
-    );
 
     // Backlink panel
     backlinkPanelProvider = new BacklinkPanelProvider(indexService, workspaceRoot, logService);

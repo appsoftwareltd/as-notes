@@ -210,8 +210,7 @@
                 {
                     "type": "webview",
                     "id": "as-notes-tasks",
-                    "name": "Tasks",
-                    "when": "as-notes.fullMode"
+                    "name": "Tasks"
                 }
             ]
         },
