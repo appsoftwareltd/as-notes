@@ -1,5 +1,7 @@
 # AS Notes
 
+By [appsoftware.com](https://www.appsoftware.com)
+
 [![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/appsoftwareltd.as-notes?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 [![Downloads](https://img.shields.io/visual-studio-marketplace/d/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
@@ -599,8 +601,8 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.0.1"   # change version
-git tag v2.0.1                   # change version
+git commit -m "Release v2.1.0"   # change version
+git tag v2.1.0                   # change version
 git push origin main --tags
 ```
 

@@ -6,11 +6,21 @@ All notable changes to AS Notes will be documented here.
 
 ### Added
 
+## [2.1.0] - 2026-03-010
+
+### Added
+
+- Add outliner mode
+
 ## [2.0.1] - 2026-03-010
+
+### Added
 
 - Fix sidebar display / readiness bug
 
 ## [2.0.0] - 2026-03-010
+
+### Added
 
 - Updated task view with hash tags for priority, due date, waiting
 
