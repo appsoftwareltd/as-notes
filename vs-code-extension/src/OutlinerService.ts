@@ -5,6 +5,7 @@
  * - Enter on a bullet line inserts a new bullet at the same indentation.
  * - Enter on a todo line (`- [ ]` / `- [x]`) inserts a new unchecked todo.
  * - Tab / Shift+Tab indent and outdent bullet lines.
+ * - Todo toggle (Ctrl+Shift+Enter) cycles: plain bullet → unchecked → done → plain bullet.
  *
  * No VS Code dependencies — fully unit-testable.
  */
@@ -19,6 +20,15 @@ const TODO_LINE = /^(\s*)- \[[ xX]\] /;
 
 /** Captures the leading indentation of a bullet line. */
 const BULLET_INDENT = /^(\s*)- /;
+
+/** Matches a done todo: optional indent, `- [x]` or `- [X]`, then content. */
+const DONE_TODO = /^(\s*)- \[(?:x|X)\] ?(.*)/;
+
+/** Matches an unchecked todo: optional indent, `- [ ]`, then content. */
+const UNCHECKED_TODO = /^(\s*)- \[ \] ?(.*)/;
+
+/** Matches a plain bullet (no checkbox): optional indent, `- `, then content. */
+const PLAIN_BULLET = /^(\s*)- (.*)/;
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -52,4 +62,43 @@ export function getOutlinerEnterInsert(lineText: string): string {
     }
 
     return `\n${indent}- `;
+}
+
+/**
+ * Toggle a bullet line through the outliner-specific 3-state todo cycle:
+ *
+ *   1. Done todo  (`- [x]` / `- [X]`)  →  plain bullet (`- text`)
+ *   2. Unchecked  (`- [ ] ...`)         →  done (`- [x] ...`)
+ *   3. Plain bullet (`- ...`)           →  unchecked (`- [ ] ...`)
+ *
+ * This differs from the default `toggleTodoLine` cycle only at step 1:
+ * in outliner mode a done todo becomes a plain bullet rather than plain text,
+ * so the `- ` prefix is always preserved.
+ *
+ * Only call this when `isOnBulletLine` is true.
+ */
+export function toggleOutlinerTodoLine(lineText: string): string {
+    // 1. Done → plain bullet
+    const doneMatch = lineText.match(DONE_TODO);
+    if (doneMatch) {
+        const [, indent, rest] = doneMatch;
+        return `${indent}- ${rest}`;
+    }
+
+    // 2. Unchecked → done
+    const uncheckedMatch = lineText.match(UNCHECKED_TODO);
+    if (uncheckedMatch) {
+        const [, indent, rest] = uncheckedMatch;
+        return `${indent}- [x] ${rest}`;
+    }
+
+    // 3. Plain bullet → unchecked todo
+    const plainMatch = lineText.match(PLAIN_BULLET);
+    if (plainMatch) {
+        const [, indent, rest] = plainMatch;
+        return `${indent}- [ ] ${rest}`;
+    }
+
+    // Fallback: return unchanged (should not be reached if isOnBulletLine was checked)
+    return lineText;
 }

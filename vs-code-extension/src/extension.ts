@@ -31,7 +31,7 @@ import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
 import { openDatePicker } from './DatePickerService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
-import { isOnBulletLine, getOutlinerEnterInsert } from './OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -298,10 +298,14 @@ function toggleTodoCommand(): void {
     // Collect unique line numbers across all selections/cursors
     const lineNumbers = [...new Set(editor.selections.map(sel => sel.active.line))];
 
+    const outlinerMode = vscode.workspace.getConfiguration('as-notes').get<boolean>('outlinerMode', false);
+
     editor.edit(editBuilder => {
         for (const lineNum of lineNumbers) {
             const line = editor.document.lineAt(lineNum);
-            const toggled = toggleTodoLine(line.text);
+            const toggled = outlinerMode && isOnBulletLine(line.text)
+                ? toggleOutlinerTodoLine(line.text)
+                : toggleTodoLine(line.text);
             editBuilder.replace(line.range, toggled);
         }
     }).then(success => {

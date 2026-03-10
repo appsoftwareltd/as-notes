@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isOnBulletLine, getOutlinerEnterInsert } from '../OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from '../OutlinerService.js';
 
 // ── isOnBulletLine ─────────────────────────────────────────────────────────
 
@@ -106,5 +106,65 @@ describe('getOutlinerEnterInsert', () => {
 
     it('returns new indented unchecked todo for an indented done todo', () => {
         expect(getOutlinerEnterInsert('    - [x] nested done')).toBe('\n    - [ ] ');
+    });
+});
+
+// ── toggleOutlinerTodoLine ─────────────────────────────────────────────────
+
+describe('toggleOutlinerTodoLine', () => {
+    // ── Plain bullet → unchecked todo ──────────────────────────────────────
+
+    it('converts plain bullet to unchecked todo', () => {
+        expect(toggleOutlinerTodoLine('- item')).toBe('- [ ] item');
+    });
+
+    it('converts indented plain bullet to unchecked todo preserving indent', () => {
+        expect(toggleOutlinerTodoLine('    - item')).toBe('    - [ ] item');
+    });
+
+    it('converts empty bullet to unchecked todo', () => {
+        expect(toggleOutlinerTodoLine('- ')).toBe('- [ ] ');
+    });
+
+    // ── Unchecked todo → done todo ─────────────────────────────────────────
+
+    it('marks unchecked todo as done', () => {
+        expect(toggleOutlinerTodoLine('- [ ] item')).toBe('- [x] item');
+    });
+
+    it('marks indented unchecked todo as done', () => {
+        expect(toggleOutlinerTodoLine('    - [ ] nested')).toBe('    - [x] nested');
+    });
+
+    // ── Done todo → plain bullet (outliner diverges from default here) ─────
+
+    it('converts done todo to plain bullet (not plain text)', () => {
+        expect(toggleOutlinerTodoLine('- [x] item')).toBe('- item');
+    });
+
+    it('converts done todo with uppercase X to plain bullet', () => {
+        expect(toggleOutlinerTodoLine('- [X] item')).toBe('- item');
+    });
+
+    it('converts indented done todo to indented plain bullet', () => {
+        expect(toggleOutlinerTodoLine('    - [x] nested')).toBe('    - nested');
+    });
+
+    it('converts empty done todo to empty plain bullet', () => {
+        expect(toggleOutlinerTodoLine('- [x] ')).toBe('- ');
+    });
+
+    // ── Full outliner cycle ────────────────────────────────────────────────
+
+    it('completes a full outliner cycle: plain bullet → unchecked → done → plain bullet', () => {
+        const bullet = '- write docs';
+        const unchecked = toggleOutlinerTodoLine(bullet);
+        expect(unchecked).toBe('- [ ] write docs');
+
+        const done = toggleOutlinerTodoLine(unchecked);
+        expect(done).toBe('- [x] write docs');
+
+        const backToBullet = toggleOutlinerTodoLine(done);
+        expect(backToBullet).toBe('- write docs');
     });
 });
