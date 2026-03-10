@@ -598,9 +598,9 @@ npx @vscode/vsce publish
 **Step 3 - tag and push**
 
 ```bash
-git add package.json CHANGELOG.md README.md
-git commit -m "Release v1.x.x"   # change version
-git tag v1.x.x                   # change version
+git add .
+git commit -m "Release v2.0.0"   # change version
+git tag v2.0.0                   # change version
 git push origin main --tags
 ```
 
