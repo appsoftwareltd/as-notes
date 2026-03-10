@@ -49,6 +49,9 @@ const DEFAULT_IGNORE_CONTENT = [
     '# Obsidian metadata and trash directories',
     '.obsidian/',
     '.trash/',
+    '#',
+    '# Node.js dependencies',
+    'node_modules/',
     '',
 ].join('\n');
 

@@ -13,3 +13,7 @@ AGENTS.md
 
 *.sync
 *.sync-conflict*
+
+# VS Code Agent Kanban
+
+.agentkanban
