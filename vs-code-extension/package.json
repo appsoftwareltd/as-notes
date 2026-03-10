@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "1.0.13",
+    "version": "2.0.0",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -245,10 +245,22 @@
             "view/title": [],
             "view/item/context": [],
             "commandPalette": [
-                { "command": "as-notes.showBacklinks", "when": "false" },
-                { "command": "as-notes.viewBacklinks", "when": "false" },
-                { "command": "as-notes.viewBacklinksForPage", "when": "false" },
-                { "command": "as-notes.navigateToPage", "when": "false" }
+                {
+                    "command": "as-notes.showBacklinks",
+                    "when": "false"
+                },
+                {
+                    "command": "as-notes.viewBacklinks",
+                    "when": "false"
+                },
+                {
+                    "command": "as-notes.viewBacklinksForPage",
+                    "when": "false"
+                },
+                {
+                    "command": "as-notes.navigateToPage",
+                    "when": "false"
+                }
             ]
         }
     },
@@ -265,6 +277,7 @@
         "@types/node": "^20.11.0",
         "@types/sql.js": "^1.4.9",
         "@types/vscode": "^1.85.0",
+        "as-notes-common": "file:../common",
         "esbuild": "^0.24.0",
         "markdown-it": "^14.1.1",
         "postcss": "^8.5.8",
@@ -273,7 +286,6 @@
         "vitest": "^3.0.0"
     },
     "dependencies": {
-        "as-notes-common": "file:../common",
         "ignore": "^7.0.5",
         "sql.js": "^1.14.0"
     }
