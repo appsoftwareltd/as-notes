@@ -6,8 +6,13 @@ All notable changes to AS Notes will be documented here.
 
 ### Added
 
-- Added node_modules to default `.asnotesignore`
-- Slash `/` editor commands - Today, Date Picker, Markdown Table tools
+## [2.0.1] - 2026-03-010
+
+- Fix sidebar display / readiness bug
+
+## [2.0.0] - 2026-03-010
+
+- Updated task view with hash tags for priority, due date, waiting
 
 ## [1.0.13] - 2026-03-06
 
