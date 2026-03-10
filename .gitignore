@@ -2,13 +2,6 @@
 
 docs/
 
-# Agents files
-
-agents/*
-!agents/
-!agents/TECHNICAL.md
-AGENTS.md
-
 # Sync files
 
 *.sync
@@ -16,4 +9,12 @@ AGENTS.md
 
 # VS Code Agent Kanban
 
-.agentkanban
+.agentkanban/
+
+# Legacy agents files
+
+agents/
+
+# Agents files
+
+AGENTS.md

@@ -117,6 +117,10 @@
             {
                 "command": "as-notes.cleanWorkspace",
                 "title": "AS Notes: Clean Workspace"
+            },
+            {
+                "command": "as-notes.toggleOutlinerMode",
+                "title": "AS Notes: Toggle Outliner Mode"
             }
         ],
         "keybindings": [
@@ -143,6 +147,21 @@
                 "key": "ctrl+alt+j",
                 "mac": "cmd+alt+j",
                 "when": "as-notes.fullMode"
+            },
+            {
+                "command": "as-notes.outlinerEnter",
+                "key": "enter",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible"
+            },
+            {
+                "command": "as-notes.outlinerIndent",
+                "key": "tab",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine"
+            },
+            {
+                "command": "as-notes.outlinerOutdent",
+                "key": "shift+tab",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine"
             }
         ],
         "configuration": {
@@ -189,6 +208,12 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Default context display in the backlinks panel. When false, context is compact (single line, truncated). When true, context wraps to show full text."
+                },
+                "as-notes.outlinerMode": {
+                    "type": "boolean",
+                    "default": false,
+                    "scope": "window",
+                    "description": "Enable Outliner Mode for markdown files. In outliner mode, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents the bullet line, and Shift+Tab outdents it. Only applies to lines beginning with `- `."
                 }
             }
         },

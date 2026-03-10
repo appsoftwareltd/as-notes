@@ -31,6 +31,7 @@ import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
 import { openDatePicker } from './DatePickerService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
+import { isOnBulletLine, getOutlinerEnterInsert } from './OutlinerService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -118,6 +119,90 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     // Status bar — always present
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
     context.subscriptions.push(statusBarItem);
+
+    // ── Outliner mode ────────────────────────────────────────────────────────
+
+    // Sync context key with setting on activation
+    const syncOutlinerModeContext = () => {
+        const enabled = vscode.workspace.getConfiguration('as-notes').get<boolean>('outlinerMode', false);
+        vscode.commands.executeCommand('setContext', 'as-notes.outlinerMode', enabled);
+    };
+    syncOutlinerModeContext();
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.toggleOutlinerMode', () => {
+            const config = vscode.workspace.getConfiguration('as-notes');
+            const current = config.get<boolean>('outlinerMode', false);
+            config.update('outlinerMode', !current, vscode.ConfigurationTarget.Workspace).then(
+                () => vscode.window.showInformationMessage(
+                    `AS Notes: Outliner Mode ${!current ? 'enabled' : 'disabled'}.`,
+                ),
+            );
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('as-notes.outlinerMode')) {
+                syncOutlinerModeContext();
+            }
+        }),
+    );
+
+    // Track whether the active cursor is on a bullet line
+    const syncOnBulletLineContext = (editor: vscode.TextEditor | undefined) => {
+        if (!editor || editor.document.languageId !== 'markdown') {
+            vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', false);
+            return;
+        }
+        // True if ANY cursor's active line is a bullet line (consistent with multi-cursor outliner behaviour)
+        const onBullet = editor.selections.some(
+            sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
+        );
+        vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', onBullet);
+    };
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorSelection((e) => syncOnBulletLineContext(e.textEditor)),
+    );
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor((editor) => syncOnBulletLineContext(editor)),
+    );
+    // Initialise for currently active editor
+    syncOnBulletLineContext(vscode.window.activeTextEditor);
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerEnter', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            editor.edit(editBuilder => {
+                for (const selection of editor.selections) {
+                    const lineText = editor.document.lineAt(selection.active.line).text;
+                    const insertText = getOutlinerEnterInsert(lineText);
+                    // Delete from cursor to end of line, then insert the new bullet prefix.
+                    // This preserves any text before the cursor on the current line.
+                    const lineEnd = new vscode.Position(
+                        selection.active.line,
+                        editor.document.lineAt(selection.active.line).range.end.character,
+                    );
+                    editBuilder.delete(new vscode.Range(selection.active, lineEnd));
+                    editBuilder.insert(selection.active, insertText);
+                }
+            });
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerIndent', () => {
+            vscode.commands.executeCommand('editor.action.indentLines');
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerOutdent', () => {
+            vscode.commands.executeCommand('editor.action.outdentLines');
+        }),
+    );
 
     // Register commands — always available (init can be called from passive mode)
     context.subscriptions.push(
