@@ -65,6 +65,23 @@ export interface TaskRow {
     text: string;
     done: number;
     line_text: string;
+    priority: number | null;
+    waiting: number;
+    due_date: string | null;
+}
+
+/** A task row joined with its source page path and title, for webview display. */
+export interface TaskViewItem {
+    id: number;
+    source_page_id: number;
+    pagePath: string;
+    pageTitle: string;
+    line: number;
+    text: string;
+    done: boolean;
+    priority: number | null;
+    waiting: boolean;
+    dueDate: string | null;
 }
 
 export interface BacklinkEntry {
@@ -109,7 +126,7 @@ export interface BacklinkChainGroup {
  * is dropped and rebuilt from scratch. Because the DB is a pure derived index
  * (fully regeneratable from markdown files), drop-and-rebuild is always safe.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS pages (
@@ -157,10 +174,16 @@ CREATE TABLE IF NOT EXISTS tasks (
     line INTEGER NOT NULL,
     text TEXT NOT NULL,
     done INTEGER NOT NULL DEFAULT 0,
-    line_text TEXT NOT NULL
+    line_text TEXT NOT NULL,
+    priority INTEGER,
+    waiting INTEGER NOT NULL DEFAULT 0,
+    due_date TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source_page_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
+CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+CREATE INDEX IF NOT EXISTS idx_tasks_waiting ON tasks(waiting);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 `;
 
 // ── Title extraction ───────────────────────────────────────────────────────
@@ -1314,6 +1337,36 @@ export class IndexService {
     private static readonly TASK_DONE = /^(\s*)([-*])\s+\[(?:x|X)\]\s?(.*)/;
 
     /**
+     * Parse structured metadata tags from task text.
+     * Strips `#P1`/`#P2`/`#P3` (priority), `#W` (waiting), `#D-YYYY-MM-DD` (due date).
+     * All tags must appear at the start of the text (before any other content),
+     * separated by spaces. Returns cleaned text and parsed metadata.
+     */
+    static parseTaskMeta(text: string): { cleanText: string; priority: number | null; waiting: number; dueDate: string | null } {
+        let remaining = text.trimStart();
+        let priority: number | null = null;
+        let waiting = 0;
+        let dueDate: string | null = null;
+
+        const tagRe = /^(#P([123])|#W|#D-(\d{4}-\d{2}-\d{2}))\s*/;
+        let match: RegExpMatchArray | null;
+        while ((match = remaining.match(tagRe)) !== null) {
+            if (match[2]) {
+                // #P1, #P2, #P3
+                if (priority === null) { priority = parseInt(match[2], 10); }
+            } else if (match[0].startsWith('#W')) {
+                waiting = 1;
+            } else if (match[3]) {
+                // #D-YYYY-MM-DD
+                if (dueDate === null) { dueDate = match[3]; }
+            }
+            remaining = remaining.slice(match[0].length);
+        }
+
+        return { cleanText: remaining.trimEnd(), priority, waiting, dueDate };
+    }
+
+    /**
      * Parse and store tasks from file content for a given page.
      * Clears existing tasks for the page before inserting new ones.
      */
@@ -1328,20 +1381,22 @@ export class IndexService {
             // Check done first (same order as TodoToggleService)
             const doneMatch = lineText.match(IndexService.TASK_DONE);
             if (doneMatch) {
-                const text = doneMatch[3];
+                const rawText = doneMatch[3];
+                const { cleanText, priority, waiting, dueDate } = IndexService.parseTaskMeta(rawText);
                 this.db!.run(
-                    `INSERT INTO tasks (source_page_id, line, text, done, line_text) VALUES (?, ?, ?, ?, ?)`,
-                    [pageId, lineNum, text, 1, lineText],
+                    `INSERT INTO tasks (source_page_id, line, text, done, line_text, priority, waiting, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [pageId, lineNum, cleanText, 1, lineText, priority, waiting, dueDate],
                 );
                 continue;
             }
 
             const uncheckedMatch = lineText.match(IndexService.TASK_UNCHECKED);
             if (uncheckedMatch) {
-                const text = uncheckedMatch[3];
+                const rawText = uncheckedMatch[3];
+                const { cleanText, priority, waiting, dueDate } = IndexService.parseTaskMeta(rawText);
                 this.db!.run(
-                    `INSERT INTO tasks (source_page_id, line, text, done, line_text) VALUES (?, ?, ?, ?, ?)`,
-                    [pageId, lineNum, text, 0, lineText],
+                    `INSERT INTO tasks (source_page_id, line, text, done, line_text, priority, waiting, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [pageId, lineNum, cleanText, 0, lineText, priority, waiting, dueDate],
                 );
             }
         }
@@ -1353,11 +1408,43 @@ export class IndexService {
     getTasksForPage(pageId: number, todoOnly?: boolean): TaskRow[] {
         this.ensureOpen();
         const sql = todoOnly
-            ? `SELECT id, source_page_id, line, text, done, line_text FROM tasks WHERE source_page_id = ? AND done = 0 ORDER BY line`
-            : `SELECT id, source_page_id, line, text, done, line_text FROM tasks WHERE source_page_id = ? ORDER BY line`;
+            ? `SELECT id, source_page_id, line, text, done, line_text, priority, waiting, due_date FROM tasks WHERE source_page_id = ? AND done = 0 ORDER BY line`
+            : `SELECT id, source_page_id, line, text, done, line_text, priority, waiting, due_date FROM tasks WHERE source_page_id = ? ORDER BY line`;
         const result = this.db!.exec(sql, [pageId]);
         if (result.length === 0) { return []; }
         return this.mapTaskRows(result[0].values);
+    }
+
+    /**
+     * Get all tasks joined with their source page, for the task webview panel.
+     * Optionally filter to undone only and/or waiting only.
+     */
+    getAllTasksForWebview(opts?: { todoOnly?: boolean; waitingOnly?: boolean }): TaskViewItem[] {
+        this.ensureOpen();
+        const conditions: string[] = [];
+        if (opts?.todoOnly) { conditions.push('t.done = 0'); }
+        if (opts?.waitingOnly) { conditions.push('t.waiting = 1'); }
+        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const result = this.db!.exec(
+            `SELECT t.id, t.source_page_id, p.path, p.title, t.line, t.text, t.done, t.priority, t.waiting, t.due_date
+             FROM tasks t
+             JOIN pages p ON t.source_page_id = p.id
+             ${where}
+             ORDER BY p.title COLLATE NOCASE, t.line`,
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            id: row[0] as number,
+            source_page_id: row[1] as number,
+            pagePath: row[2] as string,
+            pageTitle: row[3] as string,
+            line: row[4] as number,
+            text: row[5] as string,
+            done: (row[6] as number) === 1,
+            priority: row[7] as number | null,
+            waiting: (row[8] as number) === 1,
+            dueDate: row[9] as string | null,
+        }));
     }
 
     /**
@@ -1409,6 +1496,9 @@ export class IndexService {
             text: row[3] as string,
             done: row[4] as number,
             line_text: row[5] as string,
+            priority: row[6] as number | null,
+            waiting: row[7] as number,
+            due_date: row[8] as string | null,
         }));
     }
 

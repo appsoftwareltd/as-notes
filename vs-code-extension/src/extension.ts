@@ -660,13 +660,14 @@ async function enterFullMode(
         vscode.commands.registerCommand('as-notes.toggleTodo', () => toggleTodoCommand()),
     );
 
-    // Task panel — TreeView in explorer sidebar
-    taskPanelProvider = new TaskPanelProvider(indexService);
-    const taskTreeView = vscode.window.createTreeView('as-notes-tasks', {
-        treeDataProvider: taskPanelProvider,
-        showCollapseAll: true,
-    });
-    fullModeDisposables.push(taskTreeView);
+    // Task panel — WebviewView in AS Notes sidebar
+    taskPanelProvider = new TaskPanelProvider(context.extensionUri, indexService);
+    const taskViewDisposable = vscode.window.registerWebviewViewProvider(
+        TaskPanelProvider.VIEW_ID,
+        taskPanelProvider,
+        { webviewOptions: { retainContextWhenHidden: true } },
+    );
+    fullModeDisposables.push(taskViewDisposable);
 
     // Set context key so the view/keybinding `when` clauses activate
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', true);
@@ -679,7 +680,8 @@ async function enterFullMode(
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.toggleShowTodoOnly', () => {
-            taskPanelProvider?.toggleShowTodoOnly();
+            // Filter state now lives in the webview; this command is kept for
+            // backward compatibility but has no effect in the webview UI.
         }),
     );
 
@@ -1053,23 +1055,30 @@ async function enterFullMode(
 
     // Toggle a task's done/todo state directly from the panel (no focus steal)
     fullModeDisposables.push(
-        vscode.commands.registerCommand('as-notes.toggleTaskFromPanel', async (item: { kind: string; task: { line: number }; pagePath: string }) => {
-            if (!item || item.kind !== 'task') { return; }
+        vscode.commands.registerCommand('as-notes.toggleTaskAtLine', async (pagePath: string, line: number) => {
             const workspaceRoot = getWorkspaceRoot();
             if (!workspaceRoot) { return; }
-            const fileUri = vscode.Uri.joinPath(workspaceRoot, item.pagePath);
+            const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
             try {
                 const doc = await vscode.workspace.openTextDocument(fileUri);
-                const lineText = doc.lineAt(item.task.line).text;
+                const lineText = doc.lineAt(line).text;
                 const toggled = toggleTodoLine(lineText);
                 const edit = new vscode.WorkspaceEdit();
-                edit.replace(doc.uri, doc.lineAt(item.task.line).range, toggled);
+                edit.replace(doc.uri, doc.lineAt(line).range, toggled);
                 await vscode.workspace.applyEdit(edit);
                 await doc.save();
                 // onDidSaveTextDocument trigger handles re-index + panel refresh
             } catch (err) {
                 console.warn('as-notes: failed to toggle task from panel:', err);
             }
+        }),
+    );
+
+    // Kept for backward compatibility (old tree-item toggle)
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleTaskFromPanel', async (item: { kind: string; task: { line: number }; pagePath: string }) => {
+            if (!item || item.kind !== 'task') { return; }
+            await vscode.commands.executeCommand('as-notes.toggleTaskAtLine', item.pagePath, item.task.line);
         }),
     );
 

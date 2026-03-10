@@ -76,6 +76,10 @@
                 "icon": "$(check)"
             },
             {
+                "command": "as-notes.toggleTaskAtLine",
+                "title": "AS Notes: Toggle Task at Line"
+            },
+            {
                 "command": "as-notes.showBacklinks",
                 "title": "AS Notes: Show Backlinks",
                 "icon": "$(references)"
@@ -206,11 +210,21 @@
         "markdown.previewStyles": [
             "./media/wikilink-preview.css"
         ],
-        "views": {
-            "explorer": [
+        "viewsContainers": {
+            "activitybar": [
                 {
+                    "id": "as-notes-sidebar",
+                    "title": "AS Notes",
+                    "icon": "images/icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "as-notes-sidebar": [
+                {
+                    "type": "webview",
                     "id": "as-notes-tasks",
-                    "name": "AS Notes Tasks",
+                    "name": "Tasks",
                     "when": "as-notes.fullMode"
                 }
             ]
@@ -235,20 +249,8 @@
                     "group": "navigation"
                 }
             ],
-            "view/title": [
-                {
-                    "command": "as-notes.toggleShowTodoOnly",
-                    "when": "view == as-notes-tasks",
-                    "group": "navigation"
-                }
-            ],
-            "view/item/context": [
-                {
-                    "command": "as-notes.toggleTaskFromPanel",
-                    "when": "view == as-notes-tasks && viewItem == taskItem",
-                    "group": "inline"
-                }
-            ]
+            "view/title": [],
+            "view/item/context": []
         }
     },
     "scripts": {
@@ -260,11 +262,14 @@
         "lint": "tsc --noEmit"
     },
     "devDependencies": {
+        "@tailwindcss/postcss": "^4.2.1",
         "@types/node": "^20.11.0",
         "@types/sql.js": "^1.4.9",
         "@types/vscode": "^1.85.0",
         "esbuild": "^0.24.0",
         "markdown-it": "^14.1.1",
+        "postcss": "^8.5.8",
+        "tailwindcss": "^4.2.1",
         "typescript": "^5.7.0",
         "vitest": "^3.0.0"
     },

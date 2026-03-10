@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { IndexService, extractTitle, SCHEMA_VERSION } from '../IndexService.js';
 import { WikilinkService } from 'as-notes-common';
-import type { LinkInsert, OutlinerEntry } from '../IndexService.js';
+import type { LinkInsert } from '../IndexService.js';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1440,6 +1440,129 @@ describe('IndexService — getBacklinkChainsByName', () => {
 
         expect(groups).toHaveLength(1);
         expect(groups[0].displayPattern).toEqual(['Server', 'NGINX']);
+    });
+});
+
+// ── parseTaskMeta ──────────────────────────────────────────────────────────────
+
+describe('IndexService.parseTaskMeta', () => {
+    it('should return plain text unchanged with null metadata', () => {
+        const r = IndexService.parseTaskMeta('Buy milk');
+        expect(r).toEqual({ cleanText: 'Buy milk', priority: null, waiting: 0, dueDate: null });
+    });
+
+    it('should parse #P1 priority', () => {
+        const r = IndexService.parseTaskMeta('#P1 Fix critical bug');
+        expect(r.priority).toBe(1);
+        expect(r.cleanText).toBe('Fix critical bug');
+    });
+
+    it('should parse #P2 priority', () => {
+        const r = IndexService.parseTaskMeta('#P2 Write docs');
+        expect(r.priority).toBe(2);
+        expect(r.cleanText).toBe('Write docs');
+    });
+
+    it('should parse #P3 priority', () => {
+        const r = IndexService.parseTaskMeta('#P3 Nice to have');
+        expect(r.priority).toBe(3);
+        expect(r.cleanText).toBe('Nice to have');
+    });
+
+    it('should parse #W waiting tag', () => {
+        const r = IndexService.parseTaskMeta('#W Blocked by design');
+        expect(r.waiting).toBe(1);
+        expect(r.cleanText).toBe('Blocked by design');
+    });
+
+    it('should parse #D-YYYY-MM-DD due date', () => {
+        const r = IndexService.parseTaskMeta('#D-2026-03-15 Ship feature');
+        expect(r.dueDate).toBe('2026-03-15');
+        expect(r.cleanText).toBe('Ship feature');
+    });
+
+    it('should parse multiple tags together', () => {
+        const r = IndexService.parseTaskMeta('#P1 #W #D-2026-04-01 Deploy to prod');
+        expect(r.priority).toBe(1);
+        expect(r.waiting).toBe(1);
+        expect(r.dueDate).toBe('2026-04-01');
+        expect(r.cleanText).toBe('Deploy to prod');
+    });
+
+    it('should use first priority tag when multiple present', () => {
+        const r = IndexService.parseTaskMeta('#P2 #P1 Mixed priority');
+        expect(r.priority).toBe(2);
+    });
+
+    it('should ignore tags embedded in text (not at start)', () => {
+        const r = IndexService.parseTaskMeta('Fix #P1 later');
+        expect(r.priority).toBeNull();
+        expect(r.cleanText).toBe('Fix #P1 later');
+    });
+
+    it('should return empty cleanText when task is only tags', () => {
+        const r = IndexService.parseTaskMeta('#P1 #W');
+        expect(r.priority).toBe(1);
+        expect(r.waiting).toBe(1);
+        expect(r.cleanText).toBe('');
+    });
+});
+
+describe('IndexService — task metadata indexing', () => {
+    let service: IndexService;
+
+    beforeEach(async () => {
+        service = new IndexService(':memory:');
+        await service.initInMemory();
+    });
+
+    afterEach(() => {
+        service.close();
+    });
+
+    it('should store priority from #P1 tag', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# T\n\n- [ ] #P1 Critical task', 1000);
+        const page = service.getPageByPath('tasks.md')!;
+        const tasks = service.getTasksForPage(page.id);
+        expect(tasks[0].priority).toBe(1);
+        expect(tasks[0].text).toBe('Critical task');
+    });
+
+    it('should store waiting from #W tag', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# T\n\n- [ ] #W Waiting for review', 1000);
+        const page = service.getPageByPath('tasks.md')!;
+        const tasks = service.getTasksForPage(page.id);
+        expect(tasks[0].waiting).toBe(1);
+        expect(tasks[0].text).toBe('Waiting for review');
+    });
+
+    it('should store due_date from #D-YYYY-MM-DD tag', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# T\n\n- [ ] #D-2026-06-01 Launch event', 1000);
+        const page = service.getPageByPath('tasks.md')!;
+        const tasks = service.getTasksForPage(page.id);
+        expect(tasks[0].due_date).toBe('2026-06-01');
+        expect(tasks[0].text).toBe('Launch event');
+    });
+
+    it('should store null priority/waiting/due_date for plain tasks', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# T\n\n- [ ] Plain task', 1000);
+        const page = service.getPageByPath('tasks.md')!;
+        const tasks = service.getTasksForPage(page.id);
+        expect(tasks[0].priority).toBeNull();
+        expect(tasks[0].waiting).toBe(0);
+        expect(tasks[0].due_date).toBeNull();
+    });
+
+    it('getAllTasksForWebview should return tasks with page info', () => {
+        service.indexFileContent('a.md', 'a.md', '# Alpha\n\n- [ ] #P1 Task one', 1000);
+        service.indexFileContent('b.md', 'b.md', '# Beta\n\n- [x] Done task', 1000);
+        const items = service.getAllTasksForWebview();
+        expect(items.length).toBe(2);
+        const alpha = items.find(i => i.pageTitle === 'Alpha')!;
+        expect(alpha.priority).toBe(1);
+        expect(alpha.done).toBe(false);
+        const beta = items.find(i => i.pageTitle === 'Beta')!;
+        expect(beta.done).toBe(true);
     });
 });
 

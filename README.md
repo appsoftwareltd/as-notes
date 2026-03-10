@@ -59,6 +59,46 @@ Marker for todo removed
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/todopanel.png" alt="AS Notes todo panel" style="max-height:130px; margin-top: 10px; margin-bottom: 10px;">
 
+#### Task Metadata Tags
+
+Add structured hashtag metadata anywhere in a task line to categorise and organise tasks. Tags are stripped from the displayed task text — only the clean description is shown.
+
+| Tag | Description |
+|---|---|
+| `#P1` | Priority 1 — Critical |
+| `#P2` | Priority 2 — High |
+| `#P3` | Priority 3 — Normal |
+| `#W` | Waiting — task is blocked or waiting on someone/something |
+| `#D-YYYY-MM-DD` | Due date — e.g. `#D-2026-03-15` |
+
+Tags can be placed anywhere on the task line:
+
+```markdown
+- [ ] #P1 Fix the critical production bug
+- [ ] #P2 #W Waiting on design sign-off for the new dashboard #D-2026-03-20
+- [ ] #D-2026-03-10 Submit the quarterly report
+```
+
+Multiple tags can be combined. Only one priority tag is used — if more than one is present, the first wins.
+
+#### Tasks Sidebar
+
+The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all tasks across your entire workspace.
+
+**Group By** — choose how tasks are grouped:
+
+| View | Description |
+|---|---|
+| **Page** | Tasks grouped alphabetically by source page |
+| **Priority** | Tasks grouped by priority level (P1 → P2 → P3 → No Priority), sorted by due date within each group |
+| **Due Date** | Tasks grouped into buckets: Overdue / Today / This Week / Later / No Due Date |
+
+**Filters:**
+
+- **TODO ONLY** — show only incomplete tasks (default on)
+- **WAITING ONLY** — show only tasks tagged `#W`
+- **Filter by page** — type to narrow tasks to pages whose name contains the search text (case-insensitive)
+
 ### Backlinks Panel
 
 `Ctrl+Alt+B` (Windows/Linux) / `Cmd+Alt+B` (macOS)

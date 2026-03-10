@@ -1,0 +1,345 @@
+@import "tailwindcss";
+
+@layer base {
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    html,
+    body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    body {
+        font-family: var(--vscode-font-family, system-ui, sans-serif);
+        font-size: var(--vscode-font-size, 13px);
+        color: var(--vscode-foreground);
+        background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+}
+
+@layer components {
+
+    /* ── App shell ───────────────────────────────── */
+    #app {
+        @apply flex flex-col overflow-hidden;
+        height: 100vh;
+    }
+
+    /* ── Toolbar ─────────────────────────────────── */
+    #toolbar {
+        @apply flex-shrink-0 px-3 pt-2.5 pb-2;
+        border-bottom: 1px solid var(--vscode-widget-border);
+        background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+
+    .toolbar-row {
+        @apply flex items-center gap-1.5;
+    }
+
+    .toolbar-row+.toolbar-row {
+        margin-top: 0.375rem;
+    }
+
+    .toolbar-filters {
+        @apply flex-wrap;
+        border-top: 1px solid var(--vscode-widget-border);
+        padding-top: 0.5rem;
+    }
+
+    /* ── Group-by pills ──────────────────────────── */
+    .toolbar-section {
+        @apply flex flex-col gap-1;
+        margin-bottom: 0.875rem;
+    }
+
+    .sort-by-label {
+        @apply text-xs font-semibold tracking-widest uppercase;
+        color: var(--vscode-descriptionForeground);
+        opacity: 0.7;
+    }
+
+    .group-by-pills {
+        @apply flex gap-1 flex-wrap;
+    }
+
+    .pill {
+        @apply px-2.5 py-0.5 rounded text-xs border-0 cursor-pointer;
+        background-color: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+        transition: background-color 0.12s, color 0.12s;
+    }
+
+    .pill:hover {
+        background-color: var(--vscode-button-secondaryHoverBackground);
+    }
+
+    .pill-active {
+        background-color: var(--vscode-button-background) !important;
+        color: var(--vscode-button-foreground) !important;
+    }
+
+    /* ── Filter toggles ──────────────────────────── */
+    .toggle-switch {
+        @apply flex items-center gap-1.5 cursor-pointer select-none;
+    }
+
+    .toggle-switch input[type="checkbox"] {
+        @apply sr-only;
+    }
+
+    .toggle-slider {
+        position: relative;
+        display: inline-block;
+        width: 28px;
+        height: 16px;
+        border-radius: 3px;
+        flex-shrink: 0;
+        background-color: rgba(128, 128, 128, .3);
+        transition: background-color 0.15s;
+    }
+
+    .toggle-slider::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        background-color: var(--vscode-foreground);
+        opacity: 0.6;
+        transition: transform 0.15s, opacity 0.15s;
+    }
+
+    .toggle-switch input:checked+.toggle-slider {
+        background-color: var(--vscode-button-background);
+    }
+
+    .toggle-switch input:checked+.toggle-slider::after {
+        transform: translateX(12px);
+        opacity: 1;
+    }
+
+    .toggle-label {
+        @apply text-xs font-semibold tracking-widest uppercase;
+        color: var(--vscode-descriptionForeground);
+    }
+
+    .toggle-switch input:checked~.toggle-label {
+        color: var(--vscode-foreground);
+    }
+
+    /* ── Page filter ─────────────────────────────── */
+    .toolbar-page-filter {
+        @apply flex-wrap;
+        border-top: 1px solid var(--vscode-widget-border);
+        padding-top: 0.5rem;
+    }
+
+    .page-filter-wrap {
+        @apply flex items-center gap-1 w-full;
+    }
+
+    .page-filter-input {
+        @apply flex-1 text-xs px-2 rounded min-w-0;
+        padding-top: 0.1875rem;
+        padding-bottom: 0.1875rem;
+        background-color: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+        border: 1px solid var(--vscode-input-border, transparent);
+        outline: none;
+    }
+
+    .page-filter-input:focus {
+        border-color: var(--vscode-focusBorder, var(--vscode-button-background));
+    }
+
+    .page-filter-input::placeholder {
+        color: var(--vscode-input-placeholderForeground);
+    }
+
+    .page-filter-clear {
+        @apply flex-shrink-0 border-0 cursor-pointer px-1 rounded;
+        font-size: 0.65rem;
+        line-height: 1.5;
+        background: transparent;
+        color: var(--vscode-descriptionForeground);
+    }
+
+    .page-filter-clear:hover {
+        background-color: var(--vscode-list-hoverBackground);
+        color: var(--vscode-foreground);
+    }
+
+    /* ── Summary bar ─────────────────────────────── */
+    .task-summary {
+        @apply flex-shrink-0 px-3 py-1.5 text-xs;
+        color: var(--vscode-descriptionForeground);
+    }
+
+    /* ── Task list ───────────────────────────────── */
+    #task-list {
+        @apply flex-1 overflow-y-auto;
+    }
+
+    /* ── Group ───────────────────────────────────── */
+    .group {
+        @apply mb-0.5;
+    }
+
+    .group-header {
+        @apply flex items-center gap-2 px-3 py-1 sticky top-0 z-10;
+        font-size: 0.69rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--vscode-descriptionForeground);
+        background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+        border-bottom: 1px solid var(--vscode-widget-border);
+    }
+
+    .group-header-muted {
+        opacity: 0.7;
+    }
+
+    .group-header-danger {
+        color: var(--vscode-testing-iconFailed, #f14c4c);
+    }
+
+    .group-header-warning {
+        color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    .group-label {
+        @apply flex-1 truncate;
+    }
+
+    .group-count {
+        @apply rounded-full px-1.5 text-xs font-semibold leading-5 flex-shrink-0;
+        background-color: var(--vscode-badge-background);
+        color: var(--vscode-badge-foreground);
+    }
+
+    /* ── Task row ────────────────────────────────── */
+    .group-tasks {
+        @apply py-0.5;
+    }
+
+    .task-row {
+        @apply flex items-start gap-2 px-3 py-1.5 cursor-pointer select-none;
+        transition: background-color 0.1s;
+    }
+
+    .task-row:hover {
+        background-color: var(--vscode-list-hoverBackground);
+    }
+
+    .task-row:active {
+        background-color: var(--vscode-list-activeSelectionBackground);
+    }
+
+    .task-done .task-text {
+        color: var(--vscode-descriptionForeground);
+        text-decoration: line-through;
+        opacity: 0.6;
+    }
+
+    /* ── Task toggle button ──────────────────────── */
+    .task-toggle {
+        @apply flex-shrink-0 bg-transparent border-0 cursor-pointer p-0 flex items-center justify-center;
+        width: 15px;
+        height: 15px;
+        margin-top: 1px;
+    }
+
+    .task-check {
+        width: 15px;
+        height: 15px;
+        display: block;
+        transition: color 0.1s;
+    }
+
+    .task-check.done {
+        color: var(--vscode-testing-iconPassed, #73c991);
+    }
+
+    .task-check.undone {
+        color: var(--vscode-descriptionForeground);
+        opacity: 0.6;
+    }
+
+    .task-toggle:hover .task-check.undone {
+        color: var(--vscode-foreground);
+        opacity: 1;
+    }
+
+    /* ── Task content ────────────────────────────── */
+    .task-content {
+        @apply flex flex-col gap-0.5 min-w-0;
+        flex: 1;
+    }
+
+    .task-page {
+        @apply text-xs truncate;
+        color: var(--vscode-descriptionForeground);
+    }
+
+    .task-text {
+        @apply text-sm leading-snug break-words;
+        color: var(--vscode-foreground);
+    }
+
+    .task-badges {
+        @apply flex flex-wrap gap-1;
+    }
+
+    /* ── Badges ──────────────────────────────────── */
+    .badge {
+        @apply inline-flex items-center px-1.5 rounded text-xs font-semibold leading-4;
+    }
+
+    .badge-p1 {
+        background-color: color-mix(in srgb, var(--vscode-testing-iconFailed, #f14c4c) 18%, transparent);
+        color: var(--vscode-testing-iconFailed, #f14c4c);
+    }
+
+    .badge-p2 {
+        background-color: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 18%, transparent);
+        color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    .badge-p3 {
+        background-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 18%, transparent);
+        color: var(--vscode-textLink-foreground, #3794ff);
+    }
+
+    .badge-waiting {
+        background-color: color-mix(in srgb, var(--vscode-symbolIcon-colorForeground, #c586c0) 18%, transparent);
+        color: var(--vscode-symbolIcon-colorForeground, #c586c0);
+    }
+
+    .badge-overdue {
+        background-color: color-mix(in srgb, var(--vscode-testing-iconFailed, #f14c4c) 18%, transparent);
+        color: var(--vscode-testing-iconFailed, #f14c4c);
+    }
+
+    .badge-today {
+        background-color: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 18%, transparent);
+        color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    .badge-date {
+        background-color: color-mix(in srgb, var(--vscode-descriptionForeground) 10%, transparent);
+        color: var(--vscode-descriptionForeground);
+    }
+
+    /* ── Empty state ─────────────────────────────── */
+    .empty-state {
+        @apply px-3 py-8 text-center text-xs;
+        color: var(--vscode-descriptionForeground);
+    }
+}
