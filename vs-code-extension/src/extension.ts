@@ -663,13 +663,14 @@ async function enterFullMode(
         vscode.commands.registerCommand('as-notes.toggleTodo', () => toggleTodoCommand()),
     );
 
-    // Task panel — TreeView in explorer sidebar
-    taskPanelProvider = new TaskPanelProvider(indexService);
-    const taskTreeView = vscode.window.createTreeView('as-notes-tasks', {
-        treeDataProvider: taskPanelProvider,
-        showCollapseAll: true,
-    });
-    fullModeDisposables.push(taskTreeView);
+    // Task panel — WebviewView in AS Notes sidebar
+    taskPanelProvider = new TaskPanelProvider(context.extensionUri, indexService);
+    const taskViewDisposable = vscode.window.registerWebviewViewProvider(
+        TaskPanelProvider.VIEW_ID,
+        taskPanelProvider,
+        { webviewOptions: { retainContextWhenHidden: true } },
+    );
+    fullModeDisposables.push(taskViewDisposable);
 
     // Set context key so the view/keybinding `when` clauses activate
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', true);
@@ -682,7 +683,8 @@ async function enterFullMode(
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.toggleShowTodoOnly', () => {
-            taskPanelProvider?.toggleShowTodoOnly();
+            // Filter state now lives in the webview; this command is kept for
+            // backward compatibility but has no effect in the webview UI.
         }),
     );
 
@@ -696,7 +698,9 @@ async function enterFullMode(
         }),
     );
 
-    // Navigate to the wikilink page under cursor (context menu)
+    // Navigate to the wikilink page under cursor (context menu).
+    // Falls back silently when the cursor is not on a wikilink so the item
+    // can always appear in the context menu without a stale when-clause.
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.navigateToPage', async () => {
             const editor = vscode.window.activeTextEditor;
@@ -709,21 +713,26 @@ async function enterFullMode(
                 editor.selection.active.character,
             );
 
-            if (!wikilink) {
-                vscode.window.showInformationMessage('No wikilink found at cursor position.');
-                return;
-            }
+            if (!wikilink) { return; } // Not on a wikilink — do nothing
 
             const targetUri = fileService.resolveTargetUri(editor.document.uri, wikilink.pageFileName);
             await fileService.navigateToFile(targetUri, wikilink.pageFileName, editor.document.uri);
         }),
     );
 
-    // View backlinks for the wikilink under cursor (context menu)
+    // View backlinks for the wikilink under cursor (context menu).
+    // Falls back to showing backlinks for the active file when the cursor
+    // is not on a wikilink — matching the tab right-click behaviour.
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.viewBacklinks', () => {
+            if (!backlinkPanelProvider || !indexService) { return; }
+
             const editor = vscode.window.activeTextEditor;
-            if (!editor || !backlinkPanelProvider || !indexService) { return; }
+            if (!editor) {
+                // No active editor — just reveal the panel for whatever it last showed
+                backlinkPanelProvider.show();
+                return;
+            }
 
             const line = editor.document.lineAt(editor.selection.active.line);
             const wikilinks = wikilinkService.extractWikilinks(line.text);
@@ -733,7 +742,8 @@ async function enterFullMode(
             );
 
             if (!wikilink) {
-                vscode.window.showInformationMessage('No wikilink found at cursor position.');
+                // Not on a wikilink — show backlinks for the active file
+                backlinkPanelProvider.show();
                 return;
             }
 
@@ -744,6 +754,21 @@ async function enterFullMode(
             } else {
                 // Forward reference — use page name directly
                 backlinkPanelProvider.showForName(wikilink.pageName);
+            }
+        }),
+    );
+
+    // View backlinks for a specific wikilink passed as args — used by the hover command link.
+    // Args: [{ pageFileName: string, pageName: string }]
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.viewBacklinksForPage', (args: { pageFileName: string; pageName: string }) => {
+            if (!backlinkPanelProvider || !indexService || !args?.pageFileName) { return; }
+
+            const page = indexService.findPagesByFilename(args.pageFileName + '.md')?.[0];
+            if (page) {
+                backlinkPanelProvider.showForPage(page.id, page.title);
+            } else {
+                backlinkPanelProvider.showForName(args.pageName);
             }
         }),
     );
@@ -1051,28 +1076,6 @@ async function enterFullMode(
             const position = new vscode.Position(line, 0);
             editor.selection = new vscode.Selection(position, position);
             editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
-        }),
-    );
-
-    // Toggle a task's done/todo state directly from the panel (no focus steal)
-    fullModeDisposables.push(
-        vscode.commands.registerCommand('as-notes.toggleTaskFromPanel', async (item: { kind: string; task: { line: number }; pagePath: string }) => {
-            if (!item || item.kind !== 'task') { return; }
-            const workspaceRoot = getWorkspaceRoot();
-            if (!workspaceRoot) { return; }
-            const fileUri = vscode.Uri.joinPath(workspaceRoot, item.pagePath);
-            try {
-                const doc = await vscode.workspace.openTextDocument(fileUri);
-                const lineText = doc.lineAt(item.task.line).text;
-                const toggled = toggleTodoLine(lineText);
-                const edit = new vscode.WorkspaceEdit();
-                edit.replace(doc.uri, doc.lineAt(item.task.line).range, toggled);
-                await vscode.workspace.applyEdit(edit);
-                await doc.save();
-                // onDidSaveTextDocument trigger handles re-index + panel refresh
-            } catch (err) {
-                console.warn('as-notes: failed to toggle task from panel:', err);
-            }
         }),
     );
 

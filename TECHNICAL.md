@@ -74,8 +74,13 @@ This document explains the internal architecture, algorithms, and design decisio
   - [TodoToggleService](#todotoggleservice)
   - [Command registration](#command-registration)
 - [Tasks panel](#tasks-panel)
+  - [AS Notes sidebar](#as-notes-sidebar)
   - [Tasks table](#tasks-table)
+  - [Task metadata parsing](#task-metadata-parsing)
   - [TaskPanelProvider](#taskpanelprovider)
+  - [Webview (tasks.ts / tasks.css)](#webview-tasksts--taskscss)
+  - [Build pipeline](#build-pipeline)
+  - [Inline task toggle](#inline-task-toggle)
   - [Sync strategy](#sync-strategy)
 - [Backlinks panel](#backlinks-panel)
   - [BacklinkPanelProvider](#backlinkpanelprovider)
@@ -276,9 +281,12 @@ CREATE TABLE tasks (
     id INTEGER PRIMARY KEY,
     source_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
     line INTEGER NOT NULL,          -- 0-based line number
-    text TEXT NOT NULL,             -- task text without bullet/checkbox
+    text TEXT NOT NULL,             -- clean task text (metadata tags stripped)
     done INTEGER NOT NULL DEFAULT 0,-- 0 = unchecked, 1 = done
-    line_text TEXT NOT NULL          -- full original line text
+    line_text TEXT NOT NULL,        -- full original line text
+    priority INTEGER,               -- 1/2/3 from #P1/#P2/#P3; NULL = unset
+    waiting INTEGER NOT NULL DEFAULT 0,  -- 1 if #W tag present
+    due_date TEXT                   -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
 );
 ```
 
@@ -472,7 +480,7 @@ Every time `IndexService.initDatabase()` opens an existing `.asnotes/index.db` f
 
 ```typescript
 // src/IndexService.ts
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 ```
 
 This integer is incremented whenever the schema changes (new column, new table, dropped index, etc.). Every future change only requires two edits: update `SCHEMA_SQL` and increment `SCHEMA_VERSION`.
@@ -484,7 +492,7 @@ This integer is incremented whenever the schema changes (new column, new table, 
 3. If `storedVersion >= SCHEMA_VERSION`, proceed normally (enable FK enforcement, run `SCHEMA_SQL` with `CREATE TABLE IF NOT EXISTS`). Return `{ schemaReset: false }`.
 4. If the DB file does not exist, create a new in-memory database and stamp `user_version`. Return `{ schemaReset: false }`.
 
-**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 1`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
+**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 2`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
 
 **Caller contract:** `initDatabase()` returns `{ schemaReset: boolean }`. In `enterFullMode()` in `extension.ts`:
 
@@ -1241,7 +1249,23 @@ The keybinding defaults to `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter
 
 ## Tasks panel
 
-The Tasks panel is a TreeView in the Explorer sidebar that displays all todo items across the workspace, grouped by page. It requires full mode (`.asnotes/` directory) and is gated behind the `as-notes.fullMode` context key.
+The Tasks panel is a dedicated **sidebar webview** in the AS Notes activity bar container. It displays all todo items across the entire workspace with grouping, filtering, and rich badge metadata. It requires full mode (`.asnotes/` directory) and is gated behind the `as-notes.fullMode` context key.
+
+### AS Notes sidebar
+
+A dedicated activity bar container is registered in `package.json`:
+
+```json
+"viewsContainers": {
+  "activitybar": [{
+    "id": "as-notes-sidebar",
+    "title": "AS Notes",
+    "icon": "images/icon.svg"
+  }]
+}
+```
+
+The `as-notes-tasks` view is declared with `"type": "webview"` inside `"views": { "as-notes-sidebar": [...] }`, and is gated by `"when": "as-notes.fullMode"`. This replaces the previous Explorer-embedded TreeView approach.
 
 ### Tasks table
 
@@ -1250,6 +1274,22 @@ The Tasks panel is a TreeView in the Explorer sidebar that displays all todo ite
 - **Unchecked:** `/^\s*[-*]\s+\[ \]\s+(.*)/` — matches `- [ ] task text` and `* [ ] task text`
 - **Done:** `/^\s*[-*]\s+\[(?:x|X)\]\s+(.*)/` — matches `- [x] task text` and `* [X] task text`
 
+The `tasks` table (schema version 2) stores:
+
+```sql
+CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY,
+    source_page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    line INTEGER NOT NULL,
+    text TEXT NOT NULL,          -- clean task text with metadata tags stripped
+    done INTEGER NOT NULL,
+    line_text TEXT NOT NULL,     -- full original line text
+    priority INTEGER,            -- 1, 2, 3 from #P1/#P2/#P3; NULL = unset
+    waiting INTEGER NOT NULL DEFAULT 0,  -- 1 if #W tag present
+    due_date TEXT                -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+);
+```
+
 Task rows are replaced atomically on each re-index (all tasks for the page are deleted, then new ones inserted). The `ON DELETE CASCADE` on `source_page_id` ensures tasks are cleaned up when a page is removed.
 
 Query methods:
@@ -1257,41 +1297,154 @@ Query methods:
 - `getTasksForPage(pageId, todoOnly?)` — returns tasks for a specific page, optionally filtered to unchecked only
 - `getPagesWithTasks(todoOnly?)` — returns pages that have tasks, with task counts
 - `getTaskCounts()` — returns total, done, and undone counts
+- `getAllTasksForWebview(opts?)` — returns all `TaskViewItem[]` joined with page data (pagePath, pageTitle), used to populate the sidebar webview
+
+### Task metadata parsing
+
+`IndexService.parseTaskMeta(text)` is a static helper that extracts structured hashtag metadata from a raw task line and returns a cleaned description plus parsed values:
+
+```typescript
+static parseTaskMeta(text: string): {
+    cleanText: string;
+    priority: number | null;   // 1, 2, or 3
+    waiting: boolean;
+    dueDate: string | null;    // YYYY-MM-DD
+}
+```
+
+**Tag formats** (all must appear before any non-tag text to be stripped; tags anywhere in the line are detected but only leading tags are removed from `cleanText`):
+
+| Tag | Effect |
+|---|---|
+| `#P1` | `priority = 1` (Critical) |
+| `#P2` | `priority = 2` (High) |
+| `#P3` | `priority = 3` (Normal) |
+| `#W` | `waiting = true` |
+| `#D-YYYY-MM-DD` | `dueDate = 'YYYY-MM-DD'` |
+
+Only the first priority tag wins. Tags are stripped from the displayed `cleanText` so the task description remains readable. `parseTaskMeta` is called inside `indexTasksFromContent()` for every detected task line.
+
+The `TaskViewItem` interface (exported from `IndexService`) carries all parsed fields to the webview:
+
+```typescript
+interface TaskViewItem {
+    id: number;
+    source_page_id: number;
+    pagePath: string;
+    pageTitle: string;
+    line: number;
+    text: string;          // clean text (tags stripped)
+    done: boolean;
+    priority: number | null;
+    waiting: boolean;
+    dueDate: string | null;
+}
+```
 
 ### TaskPanelProvider
 
-`TaskPanelProvider` (`src/TaskPanelProvider.ts`) implements `vscode.TreeDataProvider<TaskTreeItem>` with a discriminated union of two item types:
+`TaskPanelProvider` (`src/TaskPanelProvider.ts`) implements `vscode.WebviewViewProvider` — not the old `TreeDataProvider`. It is registered via:
 
-- **PageGroupItem** — collapsible parent node representing a page, showing the page title and task count in the description. Uses `vscode.ThemeIcon.File` icon.
-- **TaskItem** — leaf node representing a single task. Uses `$(circle)` for unchecked and `$(pass)` for done tasks. Includes a `command` property that opens the file and scrolls to the task's line.
+```typescript
+vscode.window.registerWebviewViewProvider(
+    TaskPanelProvider.VIEW_ID,   // 'as-notes-tasks'
+    taskPanelProvider,
+    { webviewOptions: { retainContextWhenHidden: true } }
+);
+```
 
-Key behaviour:
+`retainContextWhenHidden: true` preserves the webview's JS state (groupBy selection, filter inputs, scroll position) when the sidebar is hidden and re-shown.
 
-- `showTodoOnly` (default: `true`) — when enabled, only unchecked tasks and pages containing them are shown
-- `toggleShowTodoOnly()` — flips the filter and fires `onDidChangeTreeData`
-- `refresh()` — fires `onDidChangeTreeData` to trigger a UI rebuild from the index
+**`resolveWebviewView(webviewView)`** is called once by VS Code when the panel is first shown. It:
 
-The tree view is created via `vscode.window.createTreeView('as-notes-tasks', ...)` in `enterFullMode()` and is visible only when `as-notes.fullMode` is set.
+1. Sets `webview.options = { enableScripts: true, localResourceRoots: [dist/webview] }`
+2. Sets `webview.html` to a shell HTML page loading `dist/webview/tasks.js` and `dist/webview/tasks.css` via `webview.asWebviewUri()`
+3. Installs a `webview.onDidReceiveMessage` handler for two message types:
+   - `navigateTo` → executes `as-notes.navigateToTask` command (opens file and scrolls to line)
+   - `toggleTask` → executes `as-notes.toggleTaskAtLine` command (toggles the markdown checkbox)
+4. Calls `_sendState()` to populate the webview with initial data
+
+**`_sendState()`** calls `indexService.getAllTasksForWebview()` and posts `{ type: 'update', tasks }` to the webview.
+
+**`refresh()`** calls `_sendState()` when the view is currently active (i.e. the VS Code view is visible). Called by every index update trigger.
+
+### Webview (tasks.ts / tasks.css)
+
+The browser-side panel lives in `src/webview/tasks.ts` and `src/webview/tasks.css`. It is bundled separately from the extension host (see [Build pipeline](#build-pipeline)).
+
+**State variables** (module-level, persisted between `update` messages thanks to `retainContextWhenHidden`):
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `allTasks` | `TaskViewItem[]` | `[]` | All tasks from last `update` message |
+| `groupBy` | `'page' \| 'priority' \| 'dueDate'` | `'page'` | Active grouping mode |
+| `showTodoOnly` | `boolean` | `true` | Whether to hide done tasks |
+| `waitingOnly` | `boolean` | `false` | Whether to show only `#W` tasks |
+| `pageFilter` | `string` | `''` | Case-insensitive page name substring filter |
+| `pendingToggle` | `Set<string>` | `new Set()` | Keys `pagePath:line` of tasks toggled but not yet re-indexed |
+| `pendingToggleTimers` | `Map<string, Timer>` | `new Map()` | Grace-period timers for pending toggles |
+
+**Rendering split** — two functions to avoid destroying the toolbar DOM on every task update (which would lose input focus):
+
+- **`render()`** — full rebuild of `app.innerHTML`. Called on group-by change, initial load, and whenever a filter toggle changes. Builds the complete toolbar (GROUP BY section, TODO ONLY / WAITING ONLY toggles, page filter input) then calls `refreshTaskList()`. Attaches toolbar-level event handlers.
+- **`refreshTaskList()`** — updates only `#task-list` inner HTML and `.task-summary` text content in place. Called by `render()`, by the `update` message handler, by page-filter `input` events, and by the pending-toggle 1-second timer. Preserves input focus.
+
+**Grouping renderers:**
+
+| Mode | Renderer | Behaviour |
+|---|---|---|
+| `page` | `renderByPageImpl()` | Groups by page title, sorted alphabetically |
+| `priority` | `renderByPriority()` | Groups P1 → P2 → P3 → No Priority; within each group sorted by due date then page title |
+| `dueDate` | `renderByDueDate()` | Groups Overdue → Today → This Week → Later → No Due Date; within each group sorted by date then page title |
+
+**Deferred task hide (1-second grace period):** When TODO ONLY is active and the user clicks the toggle button on an undone task:
+
+1. The task's `pagePath:line` key is added to `pendingToggle`.
+2. `refreshTaskList()` is called immediately — the task renders as done (green tick) but remains visible because `getFilteredTasks()` lets pending-toggle keys pass through.
+3. A 1-second `setTimeout` removes the key from `pendingToggle` and calls `refreshTaskList()` again — the task disappears from the list.
+4. When the extension's `update` message arrives (within that second), the new `allTasks` is stored but `refreshTaskList()` still retains the task until the timer fires.
+
+This ensures the user briefly sees the green tick before the task vanishes, giving clear visual feedback.
+
+**Page filter:** A text input in the toolbar filters `getFilteredTasks()` to tasks whose `pageTitle` contains the search string (case-insensitive, substring match). The `input` event updates `pageFilter` and calls `refreshTaskList()` directly — the toolbar DOM is not rebuilt so the input retains focus on every keystroke.
+
+**Message protocol:**
+
+| Direction | Type | Payload | Description |
+|---|---|---|---|
+| Extension → Webview | `update` | `{ tasks: TaskViewItem[] }` | Full task list refresh |
+| Webview → Extension | `navigateTo` | `{ pagePath, line }` | Open file at line |
+| Webview → Extension | `toggleTask` | `{ pagePath, line }` | Toggle markdown checkbox |
+
+### Build pipeline
+
+The webview bundle is built separately from the extension host bundle in `build.mjs`:
+
+- **CSS** — `buildCss()` runs PostCSS with `@tailwindcss/postcss` on `src/webview/tasks.css` → `dist/webview/tasks.css`. Tailwind v4 scans `src/webview/tasks.ts` for class usage.
+- **JS** — a second esbuild context (`webviewBuildOptions`) bundles `src/webview/tasks.ts` → `dist/webview/tasks.js` with `format: 'iife'`, `platform: 'browser'`. The webview has no `vscode` import — it uses `acquireVsCodeApi()` via a global declaration.
+- **TypeScript** — `tsconfig.webview.json` is a separate tsconfig targeted at browser (`"lib": ["ES2022", "DOM"]`, `"moduleResolution": "bundler"`). The main `tsconfig.json` excludes `src/webview/**/*` to prevent DOM type conflicts in the extension host build.
+- **Watch mode** — `./src/webview` is watched for CSS changes alongside the main source watcher. JS changes are picked up via esbuild's own watch context.
+
+Styling uses **Tailwind v4** with VS Code CSS variable theming throughout — colours reference `--vscode-*` custom properties so the panel adapts to any VS Code theme automatically.
 
 ### Inline task toggle
 
-Each task item in the panel has an inline action button (`$(check)` icon) that toggles the task's done/todo state without stealing focus from the active editor. This is implemented via a `view/item/context` menu entry with `"group": "inline"`, scoped to `viewItem == taskItem`.
+The `as-notes.toggleTaskAtLine(pagePath, line)` command (registered in `enterFullMode()`) handles toggles initiated from the sidebar webview:
 
-The `as-notes.toggleTaskFromPanel` command handler:
+1. Resolves the workspace-relative `pagePath` to an absolute URI
+2. Opens the document silently via `vscode.workspace.openTextDocument()`
+3. Reads the line at the stored `line` number and applies `toggleTodoLine()`
+4. Applies the edit and saves the document
 
-1. Receives the `TaskItem` as an argument (VS Code passes the tree item to inline action commands)
-2. Opens the document silently via `vscode.workspace.openTextDocument()` — no editor is shown
-3. Reads the line text at the stored line number and applies `toggleTodoLine()`
-4. Applies the edit via `WorkspaceEdit` + `vscode.workspace.applyEdit()`
-5. Saves the document via `doc.save()`
+The `onDidSaveTextDocument` trigger handles re-indexing and `taskPanelProvider.refresh()` automatically. The user's active editor is not affected.
 
-The existing `onDidSaveTextDocument` trigger handles re-indexing and panel refresh automatically. The user's active editor remains untouched — clicking the toggle button does not navigate to or reveal the file.
+A `as-notes.toggleTaskFromPanel` command is retained as a compatibility shim (it delegates to `as-notes.toggleTaskAtLine`) in case any persisted UI state references the old command name.
 
 ### Sync strategy
 
 The task panel refreshes whenever the index changes. Rather than maintaining separate task-specific listeners, every existing index trigger (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) calls `taskPanelProvider?.refresh()` alongside `completionProvider?.refresh()`.
 
-The `toggleTodoCommand` additionally re-indexes the current buffer after the edit completes (via `.then()` on `editor.edit()`), then refreshes the task panel. This ensures the panel reflects the toggle immediately without waiting for the next save or debounced update.
+`refresh()` calls `_sendState()` which posts a fresh `{ type: 'update', tasks }` message to the webview. The webview's `message` event handler stores the new task array and calls `refreshTaskList()` — the task list is updated in place without rebuilding the toolbar or losing input focus.
 
 ---
 
@@ -1832,8 +1985,8 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
    - Runs a stale scan (or full rebuild on schema reset) to catch external changes
    - Calls `decorationManager.setReady()` — wikilinks shift from grey to blue
    - Creates shared `WikilinkFileService`, `IndexService`, `IndexScanner`
-   - Registers all providers: `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider`, `BacklinkPanelProvider`
-   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskPanel`, `as-notes.toggleShowTodoOnly`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, and all eight encryption commands
+   - Registers all providers: `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider` (via `registerWebviewViewProvider`), `BacklinkPanelProvider`
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
 5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared

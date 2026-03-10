@@ -1,13 +1,19 @@
 import * as esbuild from 'esbuild';
-import { copyFileSync, mkdirSync, readFileSync } from 'fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, watch } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const postcss = require('postcss');
+const tailwindcss = require('@tailwindcss/postcss');
+
 const isWatch = process.argv.includes('--watch');
 
-// Ensure dist/ exists
+// Ensure dist/ and dist/webview/ exist
 mkdirSync(resolve(__dirname, 'dist'), { recursive: true });
+mkdirSync(resolve(__dirname, 'dist', 'webview'), { recursive: true });
 
 // Copy sql-wasm.wasm to dist/
 copyFileSync(
@@ -68,11 +74,53 @@ const buildOptions = {
     plugins: [sqlJsCacheResetPlugin],
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const webviewBuildOptions = {
+    entryPoints: ['./src/webview/tasks.ts'],
+    bundle: true,
+    outfile: 'dist/webview/tasks.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
+async function buildCss() {
+    const input = readFileSync('./src/webview/tasks.css', 'utf8');
+    const result = await postcss([tailwindcss]).process(input, {
+        from: './src/webview/tasks.css',
+        to: './dist/webview/tasks.css',
+    });
+    writeFileSync('./dist/webview/tasks.css', result.css);
+    if (result.map) {
+        writeFileSync('./dist/webview/tasks.css.map', result.map.toString());
+    }
+}
+
 if (isWatch) {
-    const ctx = await esbuild.context(buildOptions);
-    await ctx.watch();
+    await buildCss();
+    console.log('CSS built.');
+
+    // Re-build CSS when webview source files change
+    watch('./src/webview', { recursive: true }, async (_event, filename) => {
+        if (filename?.endsWith('.css')) {
+            try {
+                await buildCss();
+                console.log('CSS rebuilt.');
+            } catch (err) {
+                console.error('CSS build error:', err.message);
+            }
+        }
+    });
+
+    const extCtx = await esbuild.context(buildOptions);
+    const webCtx = await esbuild.context(webviewBuildOptions);
+    await extCtx.watch();
+    await webCtx.watch();
     console.log('Watching for changes...');
 } else {
+    await buildCss();
     await esbuild.build(buildOptions);
+    await esbuild.build(webviewBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }

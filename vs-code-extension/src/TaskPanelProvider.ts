@@ -1,131 +1,126 @@
 import * as vscode from 'vscode';
-import { IndexService, type PageRow, type TaskRow } from './IndexService.js';
-
-// ── Tree item types ────────────────────────────────────────────────────────
-
-/**
- * Discriminated union for tree items. Pages are collapsible group headers;
- * tasks are leaf items underneath.
- */
-export type TaskTreeItem = PageGroupItem | TaskItem;
-
-export interface PageGroupItem {
-    kind: 'page';
-    page: PageRow;
-    taskCount: number;
-}
-
-export interface TaskItem {
-    kind: 'task';
-    task: TaskRow;
-    pagePath: string;
-}
+import { IndexService, type TaskViewItem } from './IndexService.js';
+import { toggleTodoLine } from './TodoToggleService.js';
 
 // ── Provider ───────────────────────────────────────────────────────────────
 
 /**
- * VS Code TreeDataProvider that displays tasks grouped by page.
+ * VS Code WebviewViewProvider that displays tasks in the AS Notes sidebar.
  *
  * Features:
- * - "Show TODO only" toggle (default: true) — filters out done tasks
- * - Click-to-navigate — opening the source file at the task's line
+ * - Group by: Page | Priority | Due Date | Waiting (all managed in the webview)
+ * - Show TODO only toggle (filter state lives in the webview)
+ * - Click-to-navigate — opens the source file at the task's line
+ * - Toggle task done/todo state without stealing focus
  * - Refresh on demand via `refresh()`
  */
-export class TaskPanelProvider implements vscode.TreeDataProvider<TaskTreeItem> {
+export class TaskPanelProvider implements vscode.WebviewViewProvider {
+    static readonly VIEW_ID = 'as-notes-tasks';
 
-    private _onDidChangeTreeData = new vscode.EventEmitter<TaskTreeItem | undefined | null | void>();
-    readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+    private _view?: vscode.WebviewView;
 
-    private _showTodoOnly = true;
+    constructor(
+        private readonly _extensionUri: vscode.Uri,
+        private readonly _indexService: IndexService,
+    ) { }
 
-    constructor(private indexService: IndexService) { }
+    // ── WebviewViewProvider ────────────────────────────────────────────────
+
+    resolveWebviewView(
+        webviewView: vscode.WebviewView,
+        _context: vscode.WebviewViewResolveContext,
+        _token: vscode.CancellationToken,
+    ): void {
+        this._view = webviewView;
+
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [this._extensionUri],
+        };
+
+        webviewView.webview.onDidReceiveMessage(msg => this._handleMessage(msg));
+
+        webviewView.webview.html = this._buildHtml(webviewView.webview);
+        this._sendState();
+    }
 
     // ── Public API ─────────────────────────────────────────────────────────
 
-    /** Signal the tree view to re-render all items. */
+    /** Resend updated task data to the webview. Call after index changes. */
     refresh(): void {
-        this._onDidChangeTreeData.fire();
+        this._sendState();
     }
 
-    /** Whether only undone tasks are shown. */
-    get showTodoOnly(): boolean {
-        return this._showTodoOnly;
+    // ── Private ────────────────────────────────────────────────────────────
+
+    private _sendState(): void {
+        if (!this._view) { return; }
+        const tasks: TaskViewItem[] = this._indexService.isOpen
+            ? this._indexService.getAllTasksForWebview()
+            : [];
+        this._view.webview.postMessage({ type: 'update', tasks });
     }
 
-    /** Toggle the "Show TODO only" filter and refresh. */
-    toggleShowTodoOnly(): void {
-        this._showTodoOnly = !this._showTodoOnly;
-        this.refresh();
-    }
-
-    // ── TreeDataProvider ───────────────────────────────────────────────────
-
-    getTreeItem(element: TaskTreeItem): vscode.TreeItem {
-        if (element.kind === 'page') {
-            return this.buildPageTreeItem(element);
+    private _handleMessage(msg: Record<string, unknown>): void {
+        switch (msg.type) {
+            case 'navigateTo':
+                vscode.commands.executeCommand(
+                    'as-notes.navigateToTask',
+                    msg.pagePath as string,
+                    msg.line as number,
+                );
+                break;
+            case 'toggleTask': {
+                const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+                if (!workspaceRoot) { break; }
+                const pagePath = msg.pagePath as string;
+                const line = msg.line as number;
+                const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
+                vscode.workspace.openTextDocument(fileUri).then(doc => {
+                    const lineText = doc.lineAt(line).text;
+                    const toggled = toggleTodoLine(lineText);
+                    const edit = new vscode.WorkspaceEdit();
+                    edit.replace(doc.uri, doc.lineAt(line).range, toggled);
+                    return vscode.workspace.applyEdit(edit).then(() => doc.save());
+                }).then(undefined, err => {
+                    console.warn('as-notes: failed to toggle task from panel:', err);
+                });
+                break;
+            }
         }
-        return this.buildTaskTreeItem(element);
     }
 
-    getChildren(element?: TaskTreeItem): TaskTreeItem[] {
-        if (!this.indexService.isOpen) { return []; }
+    private _buildHtml(webview: vscode.Webview): string {
+        const jsUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'tasks.js'),
+        );
+        const cssUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'tasks.css'),
+        );
+        const nonce = getNonce();
 
-        // Root level — return page groups
-        if (!element) {
-            return this.indexService
-                .getPagesWithTasks(this._showTodoOnly)
-                .map(({ page, taskCount }) => ({
-                    kind: 'page' as const,
-                    page,
-                    taskCount,
-                }));
-        }
-
-        // Child level — return tasks for the page
-        if (element.kind === 'page') {
-            return this.indexService
-                .getTasksForPage(element.page.id, this._showTodoOnly)
-                .map(task => ({
-                    kind: 'task' as const,
-                    task,
-                    pagePath: element.page.path,
-                }));
-        }
-
-        return [];
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+    <link rel="stylesheet" href="${cssUri}">
+</head>
+<body>
+    <div id="app"></div>
+    <script nonce="${nonce}" src="${jsUri}"></script>
+</body>
+</html>`;
     }
+}
 
-    // ── Private helpers ────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
-    private buildPageTreeItem(item: PageGroupItem): vscode.TreeItem {
-        const label = item.page.title || item.page.filename.replace(/\.md$/, '');
-        const treeItem = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
-        treeItem.description = `${item.taskCount}`;
-        treeItem.iconPath = new vscode.ThemeIcon('file-text');
-        treeItem.contextValue = 'taskPage';
-        return treeItem;
+function getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
-
-    private buildTaskTreeItem(item: TaskItem): vscode.TreeItem {
-        const label = item.task.text || '(empty task)';
-        const treeItem = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-
-        if (item.task.done) {
-            treeItem.iconPath = new vscode.ThemeIcon('pass', new vscode.ThemeColor('terminal.ansiGreen'));
-            treeItem.description = 'done';
-        } else {
-            treeItem.iconPath = new vscode.ThemeIcon('circle-large-outline');
-        }
-
-        treeItem.contextValue = 'taskItem';
-
-        // Click-to-navigate: open the file at the task's line
-        treeItem.command = {
-            command: 'as-notes.navigateToTask',
-            title: 'Go to Task',
-            arguments: [item.pagePath, item.task.line],
-        };
-
-        return treeItem;
-    }
+    return text;
 }

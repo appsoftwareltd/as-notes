@@ -58,22 +58,8 @@
                 "title": "AS Notes: Rebuild Index"
             },
             {
-                "command": "as-notes.toggleTodo",
-                "title": "AS Notes: Toggle Todo"
-            },
-            {
                 "command": "as-notes.toggleTaskPanel",
                 "title": "AS Notes: Toggle Task Panel"
-            },
-            {
-                "command": "as-notes.toggleShowTodoOnly",
-                "title": "AS Notes: Toggle Show TODO Only",
-                "icon": "$(filter)"
-            },
-            {
-                "command": "as-notes.toggleTaskFromPanel",
-                "title": "AS Notes: Toggle Task",
-                "icon": "$(check)"
             },
             {
                 "command": "as-notes.showBacklinks",
@@ -83,6 +69,10 @@
             {
                 "command": "as-notes.viewBacklinks",
                 "title": "AS Notes: View Backlinks"
+            },
+            {
+                "command": "as-notes.viewBacklinksForPage",
+                "title": "AS Notes: View Backlinks for Page"
             },
             {
                 "command": "as-notes.navigateToPage",
@@ -206,11 +196,21 @@
         "markdown.previewStyles": [
             "./media/wikilink-preview.css"
         ],
-        "views": {
-            "explorer": [
+        "viewsContainers": {
+            "activitybar": [
                 {
+                    "id": "as-notes-sidebar",
+                    "title": "AS Notes",
+                    "icon": "images/icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "as-notes-sidebar": [
+                {
+                    "type": "webview",
                     "id": "as-notes-tasks",
-                    "name": "AS Notes Tasks",
+                    "name": "Tasks",
                     "when": "as-notes.fullMode"
                 }
             ]
@@ -220,6 +220,13 @@
                 {
                     "command": "as-notes.showBacklinks",
                     "when": "as-notes.fullMode && editorLangId == markdown",
+                    "group": "navigation"
+                }
+            ],
+            "editor/title/context": [
+                {
+                    "command": "as-notes.showBacklinks",
+                    "when": "as-notes.fullMode && resourceLangId == markdown",
                     "group": "navigation"
                 }
             ],
@@ -235,19 +242,13 @@
                     "group": "navigation"
                 }
             ],
-            "view/title": [
-                {
-                    "command": "as-notes.toggleShowTodoOnly",
-                    "when": "view == as-notes-tasks",
-                    "group": "navigation"
-                }
-            ],
-            "view/item/context": [
-                {
-                    "command": "as-notes.toggleTaskFromPanel",
-                    "when": "view == as-notes-tasks && viewItem == taskItem",
-                    "group": "inline"
-                }
+            "view/title": [],
+            "view/item/context": [],
+            "commandPalette": [
+                { "command": "as-notes.showBacklinks", "when": "false" },
+                { "command": "as-notes.viewBacklinks", "when": "false" },
+                { "command": "as-notes.viewBacklinksForPage", "when": "false" },
+                { "command": "as-notes.navigateToPage", "when": "false" }
             ]
         }
     },
@@ -260,11 +261,14 @@
         "lint": "tsc --noEmit"
     },
     "devDependencies": {
+        "@tailwindcss/postcss": "^4.2.1",
         "@types/node": "^20.11.0",
         "@types/sql.js": "^1.4.9",
         "@types/vscode": "^1.85.0",
         "esbuild": "^0.24.0",
         "markdown-it": "^14.1.1",
+        "postcss": "^8.5.8",
+        "tailwindcss": "^4.2.1",
         "typescript": "^5.7.0",
         "vitest": "^3.0.0"
     },

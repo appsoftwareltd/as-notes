@@ -84,10 +84,14 @@ export class WikilinkHoverProvider implements vscode.HoverProvider {
             }
         }
 
+        const commandArgs = encodeURIComponent(JSON.stringify([{ pageFileName: wikilink.pageFileName, pageName: wikilink.pageName }]));
+        const viewBacklinksLink = `\n\n[$(references) View Backlinks](command:as-notes.viewBacklinksForPage?${commandArgs})`;
+
         const markdown = new vscode.MarkdownString(
-            `**${displayFilename}**\n\n${status}${aliasInfo}${backlinkInfo}`,
+            `**${displayFilename}**\n\n${status}${aliasInfo}${backlinkInfo}${viewBacklinksLink}`,
         );
         markdown.supportThemeIcons = true;
+        markdown.isTrusted = { enabledCommands: ['as-notes.viewBacklinksForPage'] };
 
         return new vscode.Hover(markdown, range);
     }
