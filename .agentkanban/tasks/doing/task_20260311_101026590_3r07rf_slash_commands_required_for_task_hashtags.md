@@ -756,3 +756,88 @@ Confirm or raise objections before I implement.
 Please restart the Extension Host and try `Ctrl+Shift+Enter` on the uninitialised workspace to verify the notification appears.
 
 [user]
+
+That works. I notice that all of the task command slash command handling logic is in DatePickerService.ts.
+
+These functions are not related to DatePicker.ts so these functions are not placed in the right class. Refactor and check for other classes / functions that are not well named or not in the right place
+
+[agent]
+
+## Plan — Refactor misplaced functions
+
+### Audit findings
+
+**`DatePickerService.ts`** currently contains 4 exports:
+
+| Function | Belongs in DatePickerService? |
+|---|---|
+| `openDatePicker()` | ✅ Yes — opens a date picker and inserts a wikilink |
+| `insertTagAtTaskStart()` | ❌ No — generic task hashtag insertion/toggle logic |
+| `insertTaskDueDate()` | ❌ No — task hashtag insertion (uses `insertTagAtTaskStart`) |
+| `insertTaskCompletionDate()` | ❌ No — task hashtag insertion (uses `insertTagAtTaskStart`) |
+
+It also contains ~15 private constants/functions that support `insertTagAtTaskStart` (regex patterns, `normalizeTaskLine`).
+
+**`SlashCommandProvider.ts`** contains:
+
+| Export | Belongs in SlashCommandProvider? |
+|---|---|
+| `SlashCommandProvider` class | ✅ Yes |
+| `formatWikilinkDate()` | ❌ No — utility function for formatting dates as wikilinks |
+
+### Refactoring plan
+
+#### 1. Create `TaskHashtagService.ts`
+
+Move from `DatePickerService.ts`:
+- All task-related regex constants (`TASK_PREFIX_RE`, `PRIORITY_TAG_RE`, `EXISTING_PRIORITY_RE`, `EXISTING_WAITING_RE`, `DUE_DATE_TAG_PREFIX_RE`, `EXISTING_DUE_DATE_RE`, `COMPLETION_DATE_TAG_PREFIX_RE`, `EXISTING_COMPLETION_DATE_RE`, `HASHTAG_BLOCK_END_RE`)
+- `normalizeTaskLine()`
+- `insertTagAtTaskStart()`
+- `insertTaskDueDate()`
+- `insertTaskCompletionDate()`
+- `formatInputDate()` and `parseInputDate()` (shared by date picker and task dates)
+
+`DatePickerService.ts` retains only `openDatePicker()` and imports shared date utilities from the new file.
+
+#### 2. Move `formatWikilinkDate()` to `DatePickerService.ts`
+
+This utility formats a Date as `[[YYYY_MM_DD]]` — logically belongs with the date picker. Move it from `SlashCommandProvider.ts` to `DatePickerService.ts`. Update imports in `SlashCommandProvider.ts`.
+
+### Import updates
+
+- `extension.ts`: import `insertTaskDueDate`, `insertTaskCompletionDate`, `insertTagAtTaskStart` from `TaskHashtagService.js` instead of `DatePickerService.js`
+- `SlashCommandProvider.ts`: import `formatWikilinkDate` from `DatePickerService.js` instead of local
+- `DatePickerService.ts`: import `formatInputDate`, `parseInputDate` from `TaskHashtagService.js`
+
+### Files changed
+
+- **New:** `vs-code-extension/src/TaskHashtagService.ts`
+- **Edit:** `vs-code-extension/src/DatePickerService.ts` — slim down to date picker only
+- **Edit:** `vs-code-extension/src/SlashCommandProvider.ts` — remove `formatWikilinkDate`, update import
+- **Edit:** `vs-code-extension/src/extension.ts` — update import paths
+
+Confirm or raise objections before I implement.
+
+[user]
+
+todo implement
+
+[agent]
+
+## Refactoring — Implemented
+
+### Changes
+
+| File | Action |
+|---|---|
+| **`TaskHashtagService.ts`** (new) | All task hashtag logic moved here: regex constants, `normalizeTaskLine()`, `insertTagAtTaskStart()`, `insertTaskDueDate()`, `insertTaskCompletionDate()`, `formatInputDate()`, `parseInputDate()`, `DATE_PATTERN` |
+| **`DatePickerService.ts`** | Slimmed to: `openDatePicker()` + `formatWikilinkDate()` (moved from SlashCommandProvider). Imports `DATE_PATTERN`, `formatInputDate`, `parseInputDate` from TaskHashtagService |
+| **`SlashCommandProvider.ts`** | Removed `formatWikilinkDate()` definition; imports it from DatePickerService |
+| **`extension.ts`** | Imports `openDatePicker` from DatePickerService; imports `insertTaskDueDate`, `insertTaskCompletionDate`, `insertTagAtTaskStart` from TaskHashtagService |
+
+### Build & tests
+
+- Build clean
+- 503/503 tests pass
+
+[user]

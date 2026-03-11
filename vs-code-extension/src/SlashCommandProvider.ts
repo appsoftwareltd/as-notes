@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { isLineInsideFrontMatter, isPositionInsideCode } from './CompletionUtils.js';
+import { formatWikilinkDate } from './DatePickerService.js';
 
 /**
  * Provides slash command completions in markdown files.
@@ -302,14 +303,4 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
 
         return new vscode.CompletionList(items, false);
     }
-}
-
-/**
- * Format a Date as a `[[YYYY_MM_DD]]` wikilink string.
- */
-export function formatWikilinkDate(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `[[${y}_${m}_${d}]]`;
 }

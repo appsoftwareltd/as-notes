@@ -29,7 +29,8 @@ import { LogService, NO_OP_LOGGER } from './LogService.js';
 import { findInnermostOpenBracket } from './CompletionUtils.js';
 import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
-import { openDatePicker, insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './DatePickerService.js';
+import { openDatePicker } from './DatePickerService.js';
+import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
 
