@@ -841,3 +841,145 @@ todo implement
 - 503/503 tests pass
 
 [user]
+
+The new task tags need rendering in HTML conversion (see project at html-conversion\package.json). They will be made more human readable than their tag form so:
+
+#P1 -> "Priority 1" (class: "priority-1")
+#P2 -> "Priority 2" (class: "priority-2")
+... etc
+#W -> "Waiting" (class: "waiting")  
+#D-YYYY-MM-DD -> "Due YYYY-MM-DD" (class: "due-date") 
+#C-YYYY-MM-DD -> "Due YYYY-MM-DD" (class: "completed-date") 
+
+[agent]
+
+## Plan — Task hashtag rendering in HTML conversion
+
+### Context investigated
+
+- `html-conversion/src/convert.ts` — CLI tool that converts markdown files to HTML using markdown-it + wikilink plugin. Applies shared CSS via `--stylesheet` and `--asset` flags.
+- `html-conversion/src/FileResolver.ts` — wikilink resolver for link hrefs, not relevant.
+- `html-conversion/test/FileResolver.test.ts` — existing tests are all for FileResolver.
+- `docs-src/pages/Task Management.md` — user-facing docs, uses tags in code blocks/tables only (not live tasks).
+- `docs/docs.css` — shared CSS used by all generated pages. No task badge styles yet.
+- markdown-it v14 renders `- [ ]` as plain text (no special checkbox rendering without a plugin).
+
+### Clarification
+
+The user specified `#C-YYYY-MM-DD -> "Due YYYY-MM-DD"` — I'm assuming this is a copy-paste typo and it should be **"Completed YYYY-MM-DD"** to distinguish from the due date. Will implement as "Completed" unless corrected.
+
+### Approach: markdown-it plugin
+
+A custom **markdown-it core rule** will post-process the token stream. After markdown-it parses the document, the plugin walks all `inline` tokens looking for text content that matches leading task hashtags on task lines (`- [ ] ` / `- [x] `). It replaces the raw `#TAG` text with `<span class="task-tag {class}">{label}</span>` HTML.
+
+This is the same extension pattern used by the existing wikilink plugin — a markdown-it plugin that transforms the token stream. The plugin is self-contained and has no dependency on the VS Code extension.
+
+### What will be built
+
+#### 1. `html-conversion/src/TaskTagPlugin.ts` — new markdown-it plugin
+
+A `PluginSimple` that registers a `core` rule. For each `inline` token whose content starts with task hashtags (matching the `parseTaskMeta` regex pattern), it:
+
+| Raw tag | Replacement HTML | CSS class |
+|---|---|---|
+| `#P1` | `<span class="task-tag priority-1">Priority 1</span>` | `priority-1` |
+| `#P2` | `<span class="task-tag priority-2">Priority 2</span>` | `priority-2` |
+| `#P3` | `<span class="task-tag priority-3">Priority 3</span>` | `priority-3` |
+| `#W` | `<span class="task-tag waiting">Waiting</span>` | `waiting` |
+| `#D-2026-03-15` | `<span class="task-tag due-date">Due 2026-03-15</span>` | `due-date` |
+| `#C-2026-03-15` | `<span class="task-tag completed-date">Completed 2026-03-15</span>` | `completed-date` |
+
+The plugin only transforms tags that appear at the **start** of text content (matching the same leading-tag semantics as `parseTaskMeta` — tags embedded mid-sentence are left alone). It handles multiple consecutive tags (e.g. `#P1 #W #D-2026-03-15 Do the thing` → three badges + "Do the thing").
+
+#### 2. `html-conversion/src/convert.ts` — register the plugin
+
+```typescript
+import { taskTagPlugin } from './TaskTagPlugin.js';
+md.use(taskTagPlugin);
+```
+
+One line added after the wikilink plugin registration.
+
+#### 3. `docs-src/docs.css` — badge styling
+
+Add CSS for `.task-tag` base class and each variant:
+
+- `.task-tag` — inline pill shape, small font, border-radius, padding
+- `.priority-1` — red/coral background
+- `.priority-2` — orange background
+- `.priority-3` — blue/default background
+- `.waiting` — purple/mauve background
+- `.due-date` — amber/yellow background
+- `.completed-date` — pastel green background
+
+Includes `@media (prefers-color-scheme: dark)` variants to match the existing dark mode support in `docs.css`.
+
+#### 4. Tests — `html-conversion/test/TaskTagPlugin.test.ts`
+
+Red/green TDD. Test cases:
+
+1. Single `#P1` tag → badge HTML
+2. Single `#P2`, `#P3` → correct labels
+3. `#W` → "Waiting" badge
+4. `#D-2026-03-15` → "Due 2026-03-15" badge  
+5. `#C-2026-03-15` → "Completed 2026-03-15" badge
+6. Multiple tags `#P1 #W #D-2026-03-15 Task text` → three badges + text
+7. Tag embedded mid-text `Do #P1 thing` → no transformation (left as literal)
+8. Non-task line (no checkbox prefix) — tags should still transform if at start of inline content (the plugin operates on inline tokens, not line structure)
+9. Code blocks — tags inside backticks are NOT transformed (markdown-it already separates code_inline tokens)
+10. Empty text after tags — badges only, no trailing text
+
+### Files changed
+
+- **New:** `html-conversion/src/TaskTagPlugin.ts`
+- **New:** `html-conversion/test/TaskTagPlugin.test.ts`
+- **Edit:** `html-conversion/src/convert.ts` — add plugin registration
+- **Edit:** `docs-src/docs.css` — add badge styles
+
+### Open question
+
+Re-confirm: `#C-YYYY-MM-DD` → **"Completed YYYY-MM-DD"** (not "Due")? [comment] Yes that was a typo, you are correct
+
+Confirm or raise any objections before I implement.
+
+[agent]
+
+## Implementation complete — Task hashtag rendering in HTML conversion
+
+### Changes made
+
+**`html-conversion/src/TaskTagPlugin.ts`** (new)
+
+markdown-it core rule plugin. Walks all `inline` tokens, finds `text` tokens whose content starts with a checkbox pattern (`[ ] ` / `[x] `), then replaces leading `#TAG` sequences with styled `<span class="task-tag {class}">Label</span>` HTML:
+
+| Raw tag | Output | Class |
+|---|---|---|
+| `#P1` | Priority 1 | `priority-1` |
+| `#P2` | Priority 2 | `priority-2` |
+| `#P3` | Priority 3 | `priority-3` |
+| `#W` | Waiting | `waiting` |
+| `#D-YYYY-MM-DD` | Due YYYY-MM-DD | `due-date` |
+| `#C-YYYY-MM-DD` | Completed YYYY-MM-DD | `completed-date` |
+
+Tags embedded mid-text, in code blocks, or on non-task lines are left untouched.
+
+**`html-conversion/src/convert.ts`**
+- Added `import { taskTagPlugin }` and `md.use(taskTagPlugin)` after the wikilink plugin registration.
+
+**`docs-src/docs.css`**
+- Added `.task-tag` base style (inline pill, 0.75em, border-radius, white text)
+- Light mode: priority-1 red (#d1242f), priority-2 orange (#bf5815), priority-3 blue (#0969da), waiting purple (#8250df), due-date amber (#9a6700), completed-date green (#1a7f37)
+- Dark mode overrides: brighter variants matching GitHub dark theme palette
+
+**`html-conversion/test/TaskTagPlugin.test.ts`** (new) — 14 tests:
+- Each tag type individually (#P1, #P2, #P3, #W, #D-, #C-)
+- Multiple tags together, all four types combined
+- Mid-text tags NOT transformed
+- Tags-only (no trailing text)
+- Code inline and fenced code blocks NOT transformed
+- Plain text lines and regular list items NOT transformed
+
+### Build & tests
+
+- html-conversion: 30/30 tests pass, build clean
+- vs-code-extension: 503/503 tests pass

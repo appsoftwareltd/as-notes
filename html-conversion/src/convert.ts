@@ -3,6 +3,7 @@ import * as path from 'path';
 import MarkdownIt from 'markdown-it';
 import { WikilinkService, wikilinkPlugin } from 'as-notes-common';
 import { FileResolver } from './FileResolver.js';
+import { taskTagPlugin } from './TaskTagPlugin.js';
 
 function parseArgs(argv: string[]): { input: string; output: string; stylesheets: string[]; assets: string[] } {
     let input = '';
@@ -111,6 +112,7 @@ function main(): void {
         wikilinkService,
         resolver: resolver.createResolverFn(),
     });
+    md.use(taskTagPlugin);
 
     // Convert each file
     for (const filename of mdFiles) {

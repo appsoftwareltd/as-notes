@@ -234,6 +234,12 @@
             "as-notes-sidebar": [
                 {
                     "type": "webview",
+                    "id": "as-notes-search",
+                    "name": "Search",
+                    "initialSize": 1
+                },
+                {
+                    "type": "webview",
                     "id": "as-notes-tasks",
                     "name": "Tasks"
                 }

@@ -32,6 +32,12 @@ Using VS Code as your notes app gives you a huge amount for free before you even
 | [[Encrypted Notes]] | Store sensitive notes in AES-256-GCM encrypted `.enc.md` files *(Pro)* |
 | [[Publishing a Static Site]] | Convert your notes to a static website and deploy to GitHub Pages |
 
+### Task Features
+
+Task tags help you to organise and prioritise tags:
+
+- [ ] #P1 #W #D-2026-03-11 A very important thing I'm waiting on
+
 ## Getting Started
 
 New here? Start with [[Getting Started]] to install and initialise your first workspace.

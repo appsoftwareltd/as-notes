@@ -82,6 +82,12 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Build pipeline](#build-pipeline)
   - [Inline task toggle](#inline-task-toggle)
   - [Sync strategy](#sync-strategy)
+- [Search panel](#search-panel)
+  - [SearchPanelProvider](#searchpanelprovider)
+  - [Search entries](#search-entries)
+  - [Webview (search.ts / search.css)](#webview-searchts--searchcss)
+  - [Build pipeline](#build-pipeline-1)
+  - [Sync strategy](#sync-strategy-1)
 - [Backlinks panel](#backlinks-panel)
   - [BacklinkPanelProvider](#backlinkpanelprovider)
   - [Chain-first grouping](#chain-first-grouping)
@@ -1459,6 +1465,55 @@ A `as-notes.toggleTaskFromPanel` command is retained as a compatibility shim (it
 The task panel refreshes whenever the index changes. Rather than maintaining separate task-specific listeners, every existing index trigger (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) calls `taskPanelProvider?.refresh()` alongside `completionProvider?.refresh()`.
 
 `refresh()` calls `_sendState()` which posts a fresh `{ type: 'update', tasks }` message to the webview. The webview's `message` event handler stores the new task array and calls `refreshTaskList()` — the task list is updated in place without rebuilding the toolbar or losing input focus.
+
+---
+
+## Search panel
+
+The search panel provides a wikilink/alias search bar in the AS Notes sidebar, positioned above the Tasks view. It allows users to quickly find and navigate to any indexed page, alias, or forward-referenced (uncreated) page.
+
+### SearchPanelProvider
+
+`SearchPanelProvider` is a `WebviewViewProvider` registered as `as-notes-search`. It follows the same pattern as `TaskPanelProvider`:
+
+- Builds search entries from `IndexService.getAllPages()`, `getAllAliases()`, and `getForwardReferencedPages()`
+- Posts `{ type: 'update', entries: SearchEntry[] }` to the webview on init and every index refresh
+- Handles `{ type: 'navigateTo', pageFileName, pagePath, kind }` messages from the webview
+- For existing pages/aliases: opens the file directly via `vscode.workspace.openTextDocument()`
+- For forward references: delegates to `WikilinkFileService.navigateToFile()` which creates the file
+
+### Search entries
+
+Each entry has a `kind` field:
+
+| Kind | Label | Detail | Behaviour |
+|---|---|---|---|
+| `page` | Filename stem | Directory path | Opens existing file |
+| `alias` | Alias name | `→ canonical stem` | Opens canonical file |
+| `forward` | Page name | *(empty)* | Creates new file, then opens it |
+
+### Webview (search.ts / search.css)
+
+The webview is a separate IIFE bundle (`dist/webview/search.js`) with Tailwind CSS (`dist/webview/search.css`), built through the same PostCSS + Tailwind pipeline as the tasks view.
+
+**UI components:**
+- Search input with magnifying glass icon and "Go To" button
+- Dropdown list with up to 20 filtered results, absolutely positioned to overflow the panel bounds
+- Each dropdown item shows an icon (page/alias/forward), label, detail, and a "New" badge for forward references
+
+**Filtering:** Case-insensitive substring match on the entry label, capped at 20 results. All entries are sent to the webview on refresh — filtering happens entirely client-side with no round-trips.
+
+**Keyboard navigation:** Arrow keys move the active selection, Enter selects and navigates, Escape closes the dropdown.
+
+**Selection model:** Only completed selections (picked from the dropdown) are valid. The "Go To" button is disabled until an entry is selected. Free-text that doesn't match an entry cannot be navigated to.
+
+### Build pipeline
+
+`build.mjs` includes entry points for both `search.ts` → `dist/webview/search.js` (esbuild, IIFE) and `search.css` → `dist/webview/search.css` (PostCSS + Tailwind). Watch mode covers both.
+
+### Sync strategy
+
+The search panel refreshes alongside the task panel — every index trigger calls `searchPanelProvider?.refresh()`. The `setFileService()` method is called after the `WikilinkFileService` is created so that forward-reference navigation works correctly.
 
 ---
 

@@ -13,6 +13,7 @@ import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
 import { getPathDistance, sanitiseFileName } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 import { TaskPanelProvider } from './TaskPanelProvider.js';
+import { SearchPanelProvider } from './SearchPanelProvider.js';
 import { BacklinkPanelProvider } from './BacklinkPanelProvider.js';
 import {
     computeJournalPaths,
@@ -125,6 +126,9 @@ let completionProvider: WikilinkCompletionProvider | undefined;
 
 /** Task panel provider instance — alive while in full mode. */
 let taskPanelProvider: TaskPanelProvider | undefined;
+
+/** Search panel provider instance — alive while in full mode. */
+let searchPanelProvider: SearchPanelProvider | undefined;
 
 /** Backlink panel provider instance — alive while in full mode. */
 let backlinkPanelProvider: BacklinkPanelProvider | undefined;
@@ -377,6 +381,7 @@ function toggleTodoCommand(): void {
         const filename = path.basename(doc.uri.fsPath);
         indexService.indexFileContent(relativePath, filename, doc.getText(), Date.now());
         taskPanelProvider?.refresh();
+        searchPanelProvider?.refresh();
         backlinkPanelProvider?.refresh();
     });
 }
@@ -449,6 +454,16 @@ async function enterFullMode(
         }),
     );
 
+    // Search panel — wikilink/alias search bar above the tasks view.
+    searchPanelProvider = new SearchPanelProvider(context, indexService);
+    fullModeDisposables.push(
+        vscode.window.registerWebviewViewProvider(
+            SearchPanelProvider.VIEW_ID,
+            searchPanelProvider,
+            { webviewOptions: { retainContextWhenHidden: true } },
+        ),
+    );
+
     // Status bar: show indexing spinner
     statusBarItem.text = '$(sync~spin) AS Notes: Indexing...';
     statusBarItem.tooltip = 'Building the wikilink index';
@@ -488,8 +503,10 @@ async function enterFullMode(
 
     // Refresh task panel now that the index is populated
     taskPanelProvider?.refresh();
+    searchPanelProvider?.refresh();
 
     const fileService = new WikilinkFileService(indexService);
+    searchPanelProvider?.setFileService(fileService);
 
     // Document link provider — Ctrl/Cmd+Click navigation (alias-aware tooltips)
     const linkProvider = new WikilinkDocumentLinkProvider(wikilinkService, fileService, indexService);
@@ -1271,6 +1288,7 @@ async function enterFullMode(
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
             } catch (err) {
                 console.warn('as-notes: failed to index on save:', err);
@@ -1303,6 +1321,7 @@ async function enterFullMode(
                 const filename = path.basename(doc.uri.fsPath);
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 end();
             }, 500);
@@ -1355,6 +1374,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
         }),
     );
@@ -1384,6 +1404,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
         }),
     );
@@ -1420,6 +1441,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
         }),
     );
@@ -1460,6 +1482,7 @@ async function enterFullMode(
                         }
                         if (!safeSaveToFile()) { return; }
                         taskPanelProvider?.refresh();
+                        searchPanelProvider?.refresh();
                         backlinkPanelProvider?.refresh();
                     } catch {
                         // File may have been closed/deleted
@@ -1485,6 +1508,7 @@ async function enterFullMode(
                 indexService?.saveToFile();
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 updateFullModeStatusBar();
             }
@@ -1545,6 +1569,7 @@ function disposeFullMode(): void {
     fullModeDisposables = [];
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', false);
     taskPanelProvider = undefined;
+    searchPanelProvider = undefined;
     backlinkPanelProvider = undefined;
 }
 
@@ -1707,6 +1732,7 @@ async function rebuildIndex(): Promise<void> {
 
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
 
                 // Update status bar
@@ -1823,6 +1849,7 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
         safeSaveToFile();
         completionProvider?.refresh();
         taskPanelProvider?.refresh();
+        searchPanelProvider?.refresh();
         backlinkPanelProvider?.refresh();
 
         // Update status bar with new page count
@@ -1863,6 +1890,7 @@ function startPeriodicScan(): void {
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 updateFullModeStatusBar();
                 logService.info('extension', `periodicScan: changes detected — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted`);
