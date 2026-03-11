@@ -138,6 +138,18 @@ Type `/` in any markdown file to open a quick command menu. The following comman
 
 Table commands are labelled **(Pro)** for free users. Pro users see clean names.
 
+#### Task Commands *(task lines only)*
+
+The following commands only appear in the slash menu when the cursor is on a task line (`- [ ]` or `- [x]`). Tags are inserted after the checkbox and after any existing hashtags already on the line.
+
+| Command | Action |
+|---|---|
+| **Task: Priority 1** | Inserts `#P1` at the start of the task text. Replaces any existing priority tag (`#P1`–`#P9`) on the line |
+| **Task: Priority 2** | Inserts `#P2`, replacing any existing priority tag |
+| **Task: Priority 3** | Inserts `#P3`, replacing any existing priority tag |
+| **Task: Waiting** | Inserts `#W` at the start of the task text |
+| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text |
+
 The menu appears inline as you type and supports filtering — just keep typing to narrow the list. Press Escape or any non-matching key to dismiss and keep the `/` as-is.
 
 Slash commands are suppressed inside fenced code blocks, inline code spans, and YAML front matter.

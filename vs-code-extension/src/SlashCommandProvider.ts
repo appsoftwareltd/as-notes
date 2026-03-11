@@ -54,6 +54,9 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
             position,
         );
 
+        // True when the cursor is on a task checkbox line — used to gate Task commands
+        const isTaskLine = /^\s*-\s+\[[ xX]\]/.test(lineText);
+
         const items: vscode.CompletionItem[] = [];
 
         // ── Today ─────────────────────────────────────────────────────────
@@ -229,6 +232,61 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
             title: 'Remove Columns Left',
         };
         items.push(removeColsLeftItem);
+
+        if (isTaskLine) {
+            // ── Task: Priority 1 ──────────────────────────────────────────
+            const taskP1Item = new vscode.CompletionItem('Task: Priority 1', vscode.CompletionItemKind.Event);
+            taskP1Item.detail = 'Insert #P1 priority tag (Critical) at task start';
+            taskP1Item.sortText = 'e-task-p1';
+            taskP1Item.filterText = '/Task Priority 1';
+            taskP1Item.insertText = '';
+            taskP1Item.range = range;
+            taskP1Item.command = { command: 'as-notes.insertTaskHashtag', title: 'Insert Task Hashtag', arguments: ['#P1'] };
+            items.push(taskP1Item);
+
+            // ── Task: Priority 2 ──────────────────────────────────────────
+            const taskP2Item = new vscode.CompletionItem('Task: Priority 2', vscode.CompletionItemKind.Event);
+            taskP2Item.detail = 'Insert #P2 priority tag (High) at task start';
+            taskP2Item.sortText = 'f-task-p2';
+            taskP2Item.filterText = '/Task Priority 2';
+            taskP2Item.insertText = '';
+            taskP2Item.range = range;
+            taskP2Item.command = { command: 'as-notes.insertTaskHashtag', title: 'Insert Task Hashtag', arguments: ['#P2'] };
+            items.push(taskP2Item);
+
+            // ── Task: Priority 3 ──────────────────────────────────────────
+            const taskP3Item = new vscode.CompletionItem('Task: Priority 3', vscode.CompletionItemKind.Event);
+            taskP3Item.detail = 'Insert #P3 priority tag (Normal) at task start';
+            taskP3Item.sortText = 'g-task-p3';
+            taskP3Item.filterText = '/Task Priority 3';
+            taskP3Item.insertText = '';
+            taskP3Item.range = range;
+            taskP3Item.command = { command: 'as-notes.insertTaskHashtag', title: 'Insert Task Hashtag', arguments: ['#P3'] };
+            items.push(taskP3Item);
+
+            // ── Task: Waiting ─────────────────────────────────────────────
+            const taskWaitingItem = new vscode.CompletionItem('Task: Waiting', vscode.CompletionItemKind.Event);
+            taskWaitingItem.detail = 'Insert #W waiting tag (blocked/waiting) at task start';
+            taskWaitingItem.sortText = 'h-task-waiting';
+            taskWaitingItem.filterText = '/Task Waiting';
+            taskWaitingItem.insertText = '';
+            taskWaitingItem.range = range;
+            taskWaitingItem.command = { command: 'as-notes.insertTaskHashtag', title: 'Insert Task Hashtag', arguments: ['#W'] };
+            items.push(taskWaitingItem);
+
+            // ── Task: Due Date ────────────────────────────────────────────
+            const taskDueDateItem = new vscode.CompletionItem('Task: Due Date', vscode.CompletionItemKind.Event);
+            taskDueDateItem.detail = 'Insert #D-YYYY-MM-DD due date tag after existing hashtags';
+            taskDueDateItem.sortText = 'i-task-due-date';
+            taskDueDateItem.filterText = '/Task Due Date';
+            taskDueDateItem.insertText = '';
+            taskDueDateItem.range = range;
+            taskDueDateItem.command = {
+                command: 'as-notes.insertTaskDueDate',
+                title: 'Insert Task Due Date',
+            };
+            items.push(taskDueDateItem);
+        }
 
         return new vscode.CompletionList(items, false);
     }

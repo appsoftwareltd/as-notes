@@ -7,8 +7,6 @@ docs/
 *.sync
 *.sync-conflict*
 
-# VS Code Agent Kanban
-
 # Legacy agents files
 
 agents/

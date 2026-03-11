@@ -4,6 +4,8 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+- Slash commands `/` for task #hashtags
+
 ### Added
 
 ## [2.1.0] - 2026-03-010

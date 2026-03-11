@@ -29,7 +29,7 @@ import { LogService, NO_OP_LOGGER } from './LogService.js';
 import { findInnermostOpenBracket } from './CompletionUtils.js';
 import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
-import { openDatePicker } from './DatePickerService.js';
+import { openDatePicker, insertTaskDueDate, insertTagAtTaskStart } from './DatePickerService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
 
@@ -461,6 +461,16 @@ async function enterFullMode(
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.openDatePicker', () => openDatePicker()),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.insertTaskDueDate', () => insertTaskDueDate()),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.insertTaskHashtag', (tag: string) => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            insertTagAtTaskStart(editor, tag);
+        }),
     );
 
     // ── Table commands (Pro) ───────────────────────────────────────────
