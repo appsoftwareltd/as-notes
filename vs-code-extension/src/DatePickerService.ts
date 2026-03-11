@@ -35,6 +35,12 @@ const COMPLETION_DATE_TAG_PREFIX_RE = /^#C-/;
 const EXISTING_COMPLETION_DATE_RE = /#C-\d{4}-\d{2}-\d{2}/;
 
 /**
+ * Matches the checkbox prefix plus all leading hashtag tokens, with or without
+ * a trailing space. Used to find where the hashtag block ends in a normalized line.
+ */
+const HASHTAG_BLOCK_END_RE = /^(\s*-\s+\[[ xX]\](?:\s+#\S+)*)/
+
+/**
  * Normalize spacing within a task line so there is exactly one space between
  * the checkbox marker, each hashtag token, and the remaining task text.
  * Non-task lines (no `TASK_PREFIX_RE` match) are returned unchanged.
@@ -200,47 +206,62 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
 
     // Restore cursors to their original text positions, adjusted for the edit.
     editor.selections = ops.map((op, i) => {
-        const { rawPostEdit, normalizedLine } = postEdits[i];
+        const { normalizedLine, isTaskLine } = postEdits[i];
 
-        // Compute restoredCol in terms of raw post-edit character positions
-        let restoredCol: number;
-        if (op.mode === 'replace') {
-            const delta = op.newText.length - (op.replaceEnd - op.replaceStart);
-            if (op.origCol <= op.replaceStart) {
-                restoredCol = op.origCol;
-            } else if (op.origCol <= op.replaceEnd) {
-                restoredCol = op.replaceStart;
+        if (!isTaskLine) {
+            // Non-task line: delta-based cursor restoration
+            let restoredCol: number;
+            if (op.mode === 'replace') {
+                const delta = op.newText.length - (op.replaceEnd - op.replaceStart);
+                if (op.origCol <= op.replaceStart) {
+                    restoredCol = op.origCol;
+                } else if (op.origCol <= op.replaceEnd) {
+                    restoredCol = op.replaceStart;
+                } else {
+                    restoredCol = op.origCol + delta;
+                }
+            } else if (op.mode === 'remove') {
+                if (op.origCol <= op.removeStart) {
+                    restoredCol = op.origCol;
+                } else if (op.origCol < op.removeStart + op.removeLen) {
+                    restoredCol = op.removeStart;
+                } else {
+                    restoredCol = op.origCol - op.removeLen;
+                }
             } else {
-                restoredCol = op.origCol + delta;
+                const insertLen = op.insertText.length;
+                restoredCol = op.insertCol <= op.origCol
+                    ? op.origCol + insertLen
+                    : op.origCol;
             }
-        } else if (op.mode === 'remove') {
-            if (op.origCol <= op.removeStart) {
-                restoredCol = op.origCol;
-            } else if (op.origCol < op.removeStart + op.removeLen) {
-                restoredCol = op.removeStart;
-            } else {
-                restoredCol = op.origCol - op.removeLen;
-            }
-        } else {
-            const insertLen = op.insertText.length;
-            restoredCol = op.insertCol <= op.origCol
-                ? op.origCol + insertLen
-                : op.origCol;
+            const pos = new vscode.Position(op.line, restoredCol);
+            return new vscode.Selection(pos, pos);
         }
 
-        // Find the end of the leading hashtag block in both raw and normalized lines.
-        // - If cursor lands inside the block → move to end of the normalized line.
-        // - If cursor is after the block → shift by the normalization whitespace delta.
-        const rawPostMatch = TASK_PREFIX_RE.exec(rawPostEdit);
-        const rawEndOfBlock = rawPostMatch ? rawPostMatch[1].length + rawPostMatch[2].length : 0;
-        const normPostMatch = TASK_PREFIX_RE.exec(normalizedLine);
-        const normEndOfBlock = normPostMatch ? normPostMatch[1].length + normPostMatch[2].length : 0;
+        // Task line: compute cursor directly on the normalized (final) line.
+        // Find where the hashtag block ends in both the original and normalized lines.
+        const origBlockMatch = HASHTAG_BLOCK_END_RE.exec(op.lineText);
+        const origBlockEnd = origBlockMatch ? origBlockMatch[1].length : 0;
+        const normBlockMatch = HASHTAG_BLOCK_END_RE.exec(normalizedLine);
+        const normBlockEnd = normBlockMatch ? normBlockMatch[1].length : 0;
 
-        if (rawEndOfBlock > 0 && restoredCol < rawEndOfBlock) {
-            restoredCol = normalizedLine.length;
-        } else {
-            restoredCol += normEndOfBlock - rawEndOfBlock;
+        // Minimum cursor position: after all hashtags + one space (start of text region)
+        const minCursorCol = normBlockEnd < normalizedLine.length
+            ? normBlockEnd + 1  // skip the space after last hashtag
+            : normalizedLine.length;
+
+        // If cursor was in the hashtag/prefix region, move to end of line
+        if (op.origCol <= origBlockEnd) {
+            const pos = new vscode.Position(op.line, normalizedLine.length);
+            return new vscode.Selection(pos, pos);
         }
+
+        // Cursor was in the text region — preserve offset from the start of text
+        const origTextStart = origBlockEnd < op.lineText.length
+            ? origBlockEnd + 1  // skip the space after last hashtag in original
+            : origBlockEnd;
+        const textOffset = op.origCol - origTextStart;
+        const restoredCol = Math.min(minCursorCol + textOffset, normalizedLine.length);
 
         const pos = new vscode.Position(op.line, restoredCol);
         return new vscode.Selection(pos, pos);

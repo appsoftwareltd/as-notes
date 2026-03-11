@@ -59,6 +59,48 @@ const DEFAULT_IGNORE_CONTENT = [
 /** Disposables registered in full mode — cleared on deactivation or mode transition. */
 let fullModeDisposables: vscode.Disposable[] = [];
 
+/**
+ * Command IDs registered inside `enterFullMode()`. Passive-mode stubs are
+ * registered for each of these in `activate()` so that VS Code never shows
+ * a cryptic "command not found" error when the workspace is not initialised.
+ * The stubs are stored in `fullModeDisposables` and automatically disposed
+ * when `enterFullMode()` calls `disposeFullMode()`.
+ */
+const FULL_MODE_COMMAND_IDS: string[] = [
+    'as-notes.toggleTaskPanel',
+    'as-notes.toggleShowTodoOnly',
+    'as-notes.openDatePicker',
+    'as-notes.insertTaskDueDate',
+    'as-notes.insertTaskCompletionDate',
+    'as-notes.insertTaskHashtag',
+    'as-notes.insertTable',
+    'as-notes.tableAddColumn',
+    'as-notes.tableAddRow',
+    'as-notes.tableFormat',
+    'as-notes.tableRemoveRow',
+    'as-notes.tableRemoveColumn',
+    'as-notes.tableRemoveRowsAbove',
+    'as-notes.tableRemoveRowsBelow',
+    'as-notes.tableRemoveColumnsRight',
+    'as-notes.tableRemoveColumnsLeft',
+    'as-notes.toggleTodo',
+    'as-notes.showBacklinks',
+    'as-notes.navigateToPage',
+    'as-notes.viewBacklinks',
+    'as-notes.viewBacklinksForPage',
+    'as-notes.openDailyJournal',
+    'as-notes.setEncryptionKey',
+    'as-notes.clearEncryptionKey',
+    'as-notes.encryptNotes',
+    'as-notes.decryptNotes',
+    'as-notes.createEncryptedFile',
+    'as-notes.createEncryptedJournalNote',
+    'as-notes.encryptCurrentNote',
+    'as-notes.decryptCurrentNote',
+    'as-notes.navigateToTask',
+    'as-notes.navigateWikilink',
+];
+
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
 let ignoreService: IgnoreService | undefined;
 
@@ -254,6 +296,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     // CRITICAL: This must always be returned, even if enterFullMode() fails,
     // so that VS Code's markdown preview can pick up the wikilink plugin.
     const apiReturn = { extendMarkdownIt: createExtendMarkdownIt() };
+
+    // Register passive-mode stubs for all full-mode commands so that VS Code
+    // never shows "command not found" when the workspace is not initialised.
+    // These are stored in fullModeDisposables and disposed when enterFullMode()
+    // replaces them with real implementations.
+    for (const id of FULL_MODE_COMMAND_IDS) {
+        fullModeDisposables.push(
+            vscode.commands.registerCommand(id, async () => {
+                const action = await vscode.window.showWarningMessage(
+                    'AS Notes: Workspace not initialised. Run "AS Notes: Initialise Workspace" to get started.',
+                    'Initialise',
+                );
+                if (action === 'Initialise') {
+                    vscode.commands.executeCommand('as-notes.initWorkspace');
+                }
+            }),
+        );
+    }
 
     // Check for .asnotes/ in workspace root
     const workspaceRoot = getWorkspaceRoot();

@@ -494,5 +494,265 @@ Test issue - if I create a Priority 1 right after the checkbox, the cursor moves
 ```
 - [ ] /p1
 - [ ] #P1
+    ^-------Cursor ends up here
 ```
 
+[agent]
+
+## Plan — Fix cursor positioning after hashtag insert/edit
+
+### Root cause analysis
+
+The cursor restoration block in `insertTagAtTaskStart` computes a `restoredCol` on the **raw** post-edit line, then tries to map it to the **normalized** line using `TASK_PREFIX_RE`. The mapping fails because `TASK_PREFIX_RE` requires `\s+` after each hashtag token in group 2 — when the normalized line ends with a hashtag (no trailing space), group 2 is empty and the computed `normEndOfBlock` is wrong.
+
+Traced for the failing case (`- [ ] /p1` → after completion → `- [ ] ` with cursor at col 6):
+
+1. Insert `#P1 ` at col 6 → raw = `- [ ] #P1 `, normalized = `- [ ] #P1`
+2. `restoredCol = origCol(6) + insertLen(4) = 10`
+3. `rawEndOfBlock = 10` (TASK_PREFIX_RE matches `#P1 ` with trailing space)
+4. `normEndOfBlock = 6` (TASK_PREFIX_RE fails to match `#P1` without trailing space → group2 empty)
+5. `restoredCol < rawEndOfBlock` → `10 < 10` → false → falls to else branch
+6. `restoredCol += 6 - 10 = -4` → cursor ends up at col 6 (before `#P1`) ✗
+
+### Fix approach
+
+**Replace** the entire cursor restoration block with a simpler, correct approach that works directly on the normalized line (which IS the final document content for task lines):
+
+1. Add a new regex `HASHTAG_BLOCK_END_RE = /^(\s*-\s+\[[ xX]\](?:\s+#\S+)*)/` — matches the checkbox prefix plus all hashtag tokens (with or without trailing space), giving us the end-of-hashtag-block position in the normalized line.
+
+2. **Non-task lines:** keep existing delta-based cursor restoration (unchanged).
+
+3. **Task lines (3 branches):**
+   - **(a) No text after hashtags** (`minCursorCol >= normalizedLine.length`): cursor → end of line
+   - **(b) Original cursor was before text region** (`origCol < origTextStart`): cursor → end of line
+   - **(c) Original cursor was in text region**: preserve `textOffset = origCol - origTextStart`, place at `normTextStart + textOffset`
+
+This avoids the raw-to-normalized mapping entirely for task lines, computing the final cursor position directly from the normalized line.
+
+### Verification of key scenarios
+
+| Scenario | Before | After | Cursor |
+|---|---|---|---|
+| Insert `#P1` on empty `- [ ] ` (cursor@6) | `- [ ] ` | `- [ ] #P1` | 9 (end of line) ✓ |
+| Insert `#P1` on `- [ ] Some text` (cursor@10=space) | `- [ ] Some text` | `- [ ] #P1 Some text` | 14 (same space) ✓ |
+| Replace `#P1→#P2` on `- [ ] #P1 Some text` (cursor@14) | `- [ ] #P1 Some text` | `- [ ] #P2 Some text` | 14 (same position) ✓ |
+| Remove `#P1` from `- [ ] #P1 Some text` (cursor@14) | `- [ ] #P1 Some text` | `- [ ] Some text` | 10 (same space) ✓ |
+| Insert `#D-2026-03-11` on `- [ ] #P1 Task` (cursor@9=T) | `- [ ] #P1 Task` | `- [ ] #P1 #D-2026-03-11 Task` | 29 (T of Task) ✓ |
+
+### Files changed
+
+- `vs-code-extension/src/DatePickerService.ts` — add `HASHTAG_BLOCK_END_RE`, rewrite cursor restoration block
+
+No other files need changes.
+
+Confirm or raise any objections before I implement.
+
+[user]
+
+[agent]
+
+## Implementation complete
+
+### Changes made
+
+**`vs-code-extension/src/DatePickerService.ts`**
+
+1. Added `HASHTAG_BLOCK_END_RE = /^(\s*-\s+\[[ xX]\](?:\s+#\S+)*)/` — matches checkbox prefix + all hashtag tokens regardless of trailing space. This is the key fix: `TASK_PREFIX_RE`'s group 2 requires trailing `\s+` after each `#\S+`, so it fails to capture `#P1` at end-of-line (no space). The new regex uses `(?:\s+#\S+)*` which matches the *space before* each hashtag, so the last token doesn't need a trailing space.
+
+2. Rewrote the cursor restoration block:
+   - **Non-task lines:** unchanged delta-based logic
+   - **Task lines:** computes cursor directly on the *normalized* (final) line using `HASHTAG_BLOCK_END_RE`:
+     - If original cursor was in the prefix/hashtag block → end of line
+     - If cursor was in text region → preserve offset from text start
+
+### Build & tests
+
+- Build clean
+- 503/503 tests pass
+
+[user]
+
+There seems to be a bug - the toggle task command seems to be missing
+
+[agent]
+
+## Investigation — `as-notes.toggleTodo` command not found
+
+### Findings
+
+The command is properly registered in all the right places:
+
+1. **`package.json`** line 128: `"command": "as-notes.toggleTodo"` — declared in `contributes.commands`
+2. **`extension.ts`** line 791: `vscode.commands.registerCommand('as-notes.toggleTodo', ...)` — registered at runtime
+3. **Build output** (`dist/extension.js`): contains `registerCommand("as-notes.toggleTodo", ...)` — verified present
+4. **Build is fresh**: `dist/extension.js` last written at 19:25 today
+
+### Diagnosis
+
+The error "command 'as-notes.toggleTodo' not found" means the **extension failed to activate** (or hasn't activated yet). The extension only activates on `"onLanguage:markdown"`. Possible causes:
+
+- **No markdown file was open** when the keybinding was pressed — the extension wasn't activated yet
+- **The extension host crashed** during activation (e.g. an error in `enterFullMode()` or an import resolution failure) — check the Output panel → "Extension Host" for errors
+- **Stale extension host** — after rebuilding, you may need to run `Developer: Restart Extension Host` (Ctrl+Shift+P) to pick up the new build
+
+### Recommendation
+
+1. Open any `.md` file (to trigger activation)
+2. Run `Developer: Restart Extension Host` from the command palette
+3. If still failing, check **Output → Extension Host** for activation errors
+
+This is **not a code bug** — the command registration is correct. It's a runtime activation issue. Can you check the Extension Host output and let me know if there are errors?
+
+[user]
+
+I have pasted the console in chat
+
+[agent]
+
+## Root cause found — `toggleTodo` only registered in full mode
+
+### Analysis
+
+The Extension Host logs show the extension **did activate successfully** — `createExtendMarkdownIt()` and `extendMarkdownIt()` both ran. No activation errors from as-notes.
+
+However, **this workspace has no `.asnotes/` directory**. The `activate()` function checks:
+
+```typescript
+if (fs.existsSync(asnotesDir)) {
+    enterFullMode(context, workspaceRoot).catch(...);
+} else {
+    setPassiveMode();
+}
+```
+
+Since `.asnotes/` doesn't exist → `enterFullMode()` is never called → `toggleTodo` is never registered (it's inside `fullModeDisposables`).
+
+### Fix
+
+`toggleTodo` is a pure text transformation — it doesn't need the index or any full-mode services. Move its registration from `enterFullMode()` to `activate()` so it's always available when a markdown file is open.
+
+Similarly, `insertTaskHashtag`, `insertTaskDueDate`, and `insertTaskCompletionDate` are pure editor operations that should also be available without full mode. These should be moved to `activate()` as well.
+
+### Files changed
+
+- `vs-code-extension/src/extension.ts` — move 4 command registrations from `enterFullMode()` to `activate()`
+
+Shall I implement?
+
+[user]
+
+The target notes directory is `C:\Users\Gareth\src\as-notes-demo-notes\` — no `.asnotes/` directory exists there either. Confirms the extension is in passive mode, so `toggleTodo` is never registered.
+
+[agent]
+
+Confirmed — `C:\Users\Gareth\src\as-notes-demo-notes\` has no `.asnotes/` directory, so the extension enters passive mode and `toggleTodo` (plus all task hashtag commands) are never registered.
+
+The fix remains the same: move these pure-editor commands from `enterFullMode()` to `activate()`. Implementing now.
+
+[user]
+
+[agent]
+
+## Implementation complete — commands moved to `activate()`
+
+### Changes made
+
+**`vs-code-extension/src/extension.ts`**
+
+Moved 7 command/provider registrations from `enterFullMode()` (fullModeDisposables) to `activate()` (context.subscriptions):
+
+1. `SlashCommandProvider` — `/` completion item provider
+2. `as-notes.openDatePicker`
+3. `as-notes.insertTaskDueDate`
+4. `as-notes.insertTaskCompletionDate`
+5. `as-notes.insertTaskHashtag`
+6. `as-notes.toggleTodo`
+
+These are all pure editor operations that don't need the index or any full-mode services. They now register during activation (triggered by `onLanguage:markdown`) regardless of whether `.asnotes/` exists.
+
+Placeholder comments left in `enterFullMode()` to explain where the registrations moved.
+
+### Build & tests
+
+- Build clean
+- 503/503 tests pass
+
+Please restart the Extension Host and test `Ctrl+Shift+Enter` on a markdown line.
+
+[user]
+
+Nothing should work without `.asnotes/` — full mode is required for everything. The demo notes workspace needs to be initialised.
+
+[agent]
+
+Agreed — reverted all command registrations back to `enterFullMode()` where they belong. Everything requires full mode (`.asnotes/` directory).
+
+The "command not found" error was because the demo notes workspace at `C:\Users\Gareth\src\as-notes-demo-notes\` hasn't been initialised — run `AS Notes: Initialise Workspace` from the command palette in that workspace to create `.asnotes/`.
+
+Build clean, 503/503 tests pass.
+
+[user]
+
+All commands should show a friendly notification when the workspace isn't initialised, instead of "command not found".
+
+[agent]
+
+## Plan — Stub commands in passive mode
+
+### Problem
+
+32 commands are registered only inside `enterFullMode()`. When the workspace has no `.asnotes/`, these commands don't exist and VS Code shows a cryptic "command 'as-notes.X' not found" error.
+
+### Approach: Passive-mode stubs
+
+Register **stub implementations** for all 32 full-mode command IDs in `activate()`. Each stub shows a notification: *"AS Notes: Workspace not initialised. Run 'AS Notes: Initialise Workspace' to get started."* with an "Initialise" action button.
+
+When `enterFullMode()` runs, the first thing `disposeFullMode()` does is dispose ALL disposables (including the stubs). Then `enterFullMode()` registers the real implementations. This already works because `disposeFullMode()` is called at the top of `enterFullMode()`.
+
+The key insight: store the stubs in `fullModeDisposables` so they get auto-disposed when transitioning to full mode. This requires zero changes to `enterFullMode()` or `disposeFullMode()`.
+
+### Implementation
+
+1. Extract all 32 command IDs into a `FULL_MODE_COMMANDS` array constant
+2. In `activate()`, after the "always available" registrations but before `enterFullMode()`, register stubs for each ID via a loop — pushing into `fullModeDisposables`
+3. When `enterFullMode()` is called, its existing `disposeFullMode()` call disposes the stubs, then registers the real implementations
+
+### Files changed
+
+- `vs-code-extension/src/extension.ts` — add `FULL_MODE_COMMANDS` array, add stub registration loop in `activate()`
+
+Confirm or raise objections before I implement.
+
+[user]
+
+[agent]
+
+## Implementation complete — Passive-mode command stubs
+
+### Changes made
+
+**`vs-code-extension/src/extension.ts`**
+
+1. Added `FULL_MODE_COMMAND_IDS` — a 32-element string array listing every command ID registered inside `enterFullMode()`.
+
+2. In `activate()`, before the workspace root check, a loop registers a **stub** for each ID. Each stub shows:
+   > *"AS Notes: Workspace not initialised. Run 'AS Notes: Initialise Workspace' to get started."*
+   
+   with an **"Initialise"** action button that runs `as-notes.initWorkspace`.
+
+3. Stubs are pushed into `fullModeDisposables`, so when `enterFullMode()` calls `disposeFullMode()` they're automatically disposed and replaced with real implementations.
+
+### How it works
+
+- **No `.asnotes/`:** stubs show the warning notification
+- **`.asnotes/` exists:** `enterFullMode()` disposes stubs, registers real commands
+- **No workspace folder:** stubs still registered (user gets helpful message)
+
+### Build & tests
+
+- Build clean
+- 503/503 tests pass
+
+Please restart the Extension Host and try `Ctrl+Shift+Enter` on the uninitialised workspace to verify the notification appears.
+
+[user]
