@@ -46,7 +46,7 @@ task: task_20260311_101026590_3r07rf_slash_commands_required_for_task_hashtags
 - [x] Register `as-notes.insertTaskHashtag` command in `extension.ts`
 - [x] Verify build compiles without errors
 
-## Iteration 6 — Completion date filter toggle
+## Iteration 6 — Completion date filter toggle → group by
 
 - [x] Add `completionDateOnly` to `__INITIAL_FILTER_STATE__` declaration in `tasks.ts`
 - [x] Add `completionDateOnly` state variable initialised from saved state
@@ -56,4 +56,34 @@ task: task_20260311_101026590_3r07rf_slash_commands_required_for_task_hashtags
 - [x] Wire up `chk-completion-date-only` change event
 - [x] `TaskPanelProvider.ts` — persist `completionDateOnly` to workspaceState
 - [x] `TaskPanelProvider.ts` — read `completionDateOnly` from workspaceState and embed in initial state
+- [x] Convert from toggle filter to GROUP BY pill (completionDate)
 - [x] Build clean
+
+## Iteration 7 — Cursor positioning fix
+
+- [x] Add `HASHTAG_BLOCK_END_RE` regex for checkpoint prefix + all hashtag tokens
+- [x] Rewrite cursor restoration block in `insertTagAtTaskStart` to compute directly on normalized line
+- [x] Build clean, 503 tests pass
+
+## Iteration 8 — Passive-mode command stubs
+
+- [x] Add `FULL_MODE_COMMAND_IDS` array with all 32 full-mode command IDs
+- [x] Register stub implementations in `activate()` showing initialise notification
+- [x] Stubs pushed to `fullModeDisposables` — auto-disposed when entering full mode
+- [x] Build clean, 503 tests pass
+
+## Iteration 9 — Refactor DatePickerService → TaskHashtagService
+
+- [x] Create `TaskHashtagService.ts` with all task hashtag logic
+- [x] Slim `DatePickerService.ts` to `openDatePicker` + `formatWikilinkDate` only
+- [x] Move `formatWikilinkDate` from `SlashCommandProvider.ts` to `DatePickerService.ts`
+- [x] Update imports in `extension.ts`, `SlashCommandProvider.ts`, `DatePickerService.ts`
+- [x] Build clean, 503 tests pass
+
+## Iteration 10 — HTML conversion task tag rendering
+
+- [x] Create `html-conversion/src/TaskTagPlugin.ts` — markdown-it core rule plugin
+- [x] Register plugin in `html-conversion/src/convert.ts`
+- [x] Add `.task-tag` badge styles to `docs-src/docs.css` (light + dark mode)
+- [x] Create `html-conversion/test/TaskTagPlugin.test.ts` — 14 tests (TDD red/green)
+- [x] Build clean, 30/30 html-conversion tests pass, 503/503 extension tests pass

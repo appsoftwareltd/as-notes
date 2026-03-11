@@ -140,3 +140,82 @@ Implementation complete. All TODO items checked off. Here's what was done:
 - Tests: all 503 pass
 
 [user]
+
+Test feed back:
+
+If the search area in the side bar is too small, then the completion menu is hidden behind the task section below. Could the completion menu have a higher z-index so that it always sits above?
+
+Could the font size of everything in the search area be bigger so that it matches the text size of the editor generally
+
+[agent]
+
+Working in task file: `task_20260311_113751643_dvk9wk_we_need_a_wikilink_alias_search_with_completion.md`.
+
+Two issues from testing — both are CSS fixes in `search.css`:
+
+### 1. Dropdown z-index
+
+The dropdown has `z-index: 100` but it's **inside** the search webview's iframe, so z-index can't escape the webview boundary. The dropdown can only overlay content within **its own** webview — it can't overlay the Tasks webview below it because VS Code renders each sidebar view in its own isolated iframe.
+
+**Realistic fix**: The dropdown already uses `position: absolute` and `z-index: 100`. The issue is that the webview's `<html>` and `<body>` have constrained height/overflow. We need `overflow: visible` on the body so the dropdown can visually extend beyond the webview's visible area. The current CSS already has `overflow: visible` on `html, body` — but VS Code might clip the webview container. Unfortunately, we can't control the VS Code iframe clipping.
+
+**Alternative approach**: Since we can't escape the iframe, the best we can do is ensure the dropdown doesn't get clipped *within* the webview. The webview likely has a small fixed height from VS Code. Two options:
+  - **A)** Use a fixed/viewport-positioned dropdown that renders at the bottom of the viewport (like VS Code's own command palette), so it uses all available space within the iframe
+  - **B)** Accept that the panel needs some minimum height and document it — VS Code sidebar views don't support cross-view overflow
+
+I'll go with **A** — position the dropdown as `position: fixed` relative to the viewport, so it uses all available iframe space regardless of the panel's scroll position.
+
+[comment] Option B I'll accept the restriction - can we just prevent the search area from scrolling, I'd rather just expand the panel down
+
+### 2. Font size
+
+Currently using `text-xs` (0.75rem / 12px) for the input and entries. I'll bump everything to use `text-sm` (0.875rem / 14px) for the input and entry labels, and `text-xs` for the detail text. This should match the editor's default font size.
+
+Both fixes are straightforward CSS changes. Ready to implement.
+
+[user] See inline comments
+
+[agent]
+
+Working in task file: `task_20260311_113751643_dvk9wk_we_need_a_wikilink_alias_search_with_completion.md`.
+
+Implemented both fixes per your feedback (Option B for dropdown):
+
+### Changes to `search.css`
+
+1. **Dropdown positioning** — Changed from `position: absolute` to `position: relative`. The dropdown now flows naturally within the webview content, pushing the panel down. User expands the Search panel to see results. Removed `max-height` and `overflow-y: auto` constraints so all results are visible. Set `html, body` to `overflow: hidden` to prevent internal scrolling.
+
+2. **Font sizes bumped** — Input: `text-xs` → `text-sm`. Entry labels: `text-xs` → `text-sm`. Entry detail: kept `text-xs` but removed the extra-small `0.65rem` override. Badge: removed `0.6rem` override, kept `text-xs`. Icons: 14px → 16px. Go button: 24×24 → 26×26.
+
+### Verification
+- Build: succeeds
+- Tests: all 503 pass
+
+[user]
+
+Test feed back:
+
+Looks good but it still internally scrolls when I navigate down the completion options it just doesn't show a a scroll bar - can we stop the scrolling all together? The user can expand if needed
+
+[agent]
+
+Working in task file: `task_20260311_113751643_dvk9wk_we_need_a_wikilink_alias_search_with_completion.md`.
+
+## Fix — Remove programmatic scrolling
+
+### Root cause
+
+`scrollActiveIntoView()` in `search.ts` calls `element.scrollIntoView({ block: 'nearest' })` on the active dropdown item when the user presses arrow keys. Browsers allow programmatic scrolling even on elements with `overflow: hidden`, so the body scrolls internally despite the CSS constraint.
+
+### Changes to `search.ts`
+
+- Removed `scrollActiveIntoView()` function entirely
+- Removed both call sites (ArrowDown and ArrowUp handlers)
+
+The dropdown renders all items — the user expands the panel to see them. No scrolling needed.
+
+### Verification
+- Build: clean
+- Tests: 503/503 pass
+
+[user]

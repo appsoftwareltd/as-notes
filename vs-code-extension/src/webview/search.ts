@@ -183,13 +183,11 @@ function attachHandlers(): void {
             if (filteredEntries.length === 0) { return; }
             activeIndex = Math.min(activeIndex + 1, filteredEntries.length - 1);
             renderDropdown();
-            scrollActiveIntoView();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (filteredEntries.length === 0) { return; }
             activeIndex = Math.max(activeIndex - 1, 0);
             renderDropdown();
-            scrollActiveIntoView();
         } else if (e.key === 'Enter') {
             e.preventDefault();
             if (activeIndex >= 0 && activeIndex < filteredEntries.length) {
@@ -227,14 +225,7 @@ function attachHandlers(): void {
     });
 }
 
-function scrollActiveIntoView(): void {
-    const dropdown = document.getElementById('dropdown');
-    if (!dropdown) { return; }
-    const activeEl = dropdown.querySelector('.dropdown-item-active');
-    if (activeEl) {
-        activeEl.scrollIntoView({ block: 'nearest' });
-    }
-}
+
 
 // ── Message handler ───────────────────────────────────────────────────────────
 
