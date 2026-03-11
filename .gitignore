@@ -9,12 +9,8 @@ docs/
 
 # VS Code Agent Kanban
 
-.agentkanban/
-
 # Legacy agents files
 
 agents/
 
 # Agents files
-
-AGENTS.md
