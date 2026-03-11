@@ -112,6 +112,12 @@ This document explains the internal architecture, algorithms, and design decisio
 - [File drop & paste](#file-drop--paste)
   - [Workspace configuration](#workspace-configuration)
   - [Legacy cleanup](#legacy-cleanup)
+- [Slash command menu](#slash-command-menu)
+  - [SlashCommandProvider](#slashcommandprovider)
+  - [Date Picker — DatePickerService](#date-picker--datepickerservice)
+  - [Task hashtag insertion — TaskHashtagService](#task-hashtag-insertion--taskhashtagservice)
+  - [Registration](#registration)
+  - [Markdown table commands (Pro)](#markdown-table-commands-pro)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
 - [Known limitations and future considerations](#known-limitations-and-future-considerations)
@@ -156,7 +162,7 @@ The extension is built with:
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external). Includes a custom `sqlJsCacheResetPlugin` that patches sql.js at bundle time — see [Manual rebuild](#manual-rebuild)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (448 tests across 13 test files)
+- **vitest 3.x** for unit tests (503 tests across 14 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
@@ -286,11 +292,12 @@ CREATE TABLE tasks (
     line_text TEXT NOT NULL,        -- full original line text
     priority INTEGER,               -- 1/2/3 from #P1/#P2/#P3; NULL = unset
     waiting INTEGER NOT NULL DEFAULT 0,  -- 1 if #W tag present
-    due_date TEXT                   -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    due_date TEXT,                  -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    completion_date TEXT            -- ISO date YYYY-MM-DD from #C-YYYY-MM-DD; NULL = unset
 );
 ```
 
-Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`, `idx_links_outline_parent`.
+Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`, `idx_tasks_completion_date`, `idx_links_outline_parent`.
 
 ### Content indexing and nesting
 
@@ -401,6 +408,8 @@ When no `.asnotes/` directory is found:
 - Clicking it runs the **AS Notes: Initialise Workspace** command
 - No providers (decorations, links, hover, rename tracking) are registered
 - The only active commands are `initWorkspace` and `rebuildIndex`
+- **Passive-mode stubs** are registered for all full-mode commands (32 command IDs). Each stub shows a warning notification — *“AS Notes: Workspace not initialised. Run ‘AS Notes: Initialise Workspace’ to get started.”* — with an **Initialise** action button that runs `as-notes.initWorkspace`. This prevents VS Code from showing a cryptic “command not found” error when the user triggers a keybinding before the workspace is set up.
+- Stubs are tracked in `fullModeDisposables` and disposed when `enterFullMode()` replaces them with real implementations.
 
 ### Full mode
 
@@ -480,7 +489,7 @@ Every time `IndexService.initDatabase()` opens an existing `.asnotes/index.db` f
 
 ```typescript
 // src/IndexService.ts
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 ```
 
 This integer is incremented whenever the schema changes (new column, new table, dropped index, etc.). Every future change only requires two edits: update `SCHEMA_SQL` and increment `SCHEMA_VERSION`.
@@ -492,7 +501,7 @@ This integer is incremented whenever the schema changes (new column, new table, 
 3. If `storedVersion >= SCHEMA_VERSION`, proceed normally (enable FK enforcement, run `SCHEMA_SQL` with `CREATE TABLE IF NOT EXISTS`). Return `{ schemaReset: false }`.
 4. If the DB file does not exist, create a new in-memory database and stamp `user_version`. Return `{ schemaReset: false }`.
 
-**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 2`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
+**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 3`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
 
 **Caller contract:** `initDatabase()` returns `{ schemaReset: boolean }`. In `enterFullMode()` in `extension.ts`:
 
@@ -1274,7 +1283,7 @@ The `as-notes-tasks` view is declared with `"type": "webview"` inside `"views": 
 - **Unchecked:** `/^\s*[-*]\s+\[ \]\s+(.*)/` — matches `- [ ] task text` and `* [ ] task text`
 - **Done:** `/^\s*[-*]\s+\[(?:x|X)\]\s+(.*)/` — matches `- [x] task text` and `* [X] task text`
 
-The `tasks` table (schema version 2) stores:
+The `tasks` table (schema version 3) stores:
 
 ```sql
 CREATE TABLE tasks (
@@ -1286,7 +1295,8 @@ CREATE TABLE tasks (
     line_text TEXT NOT NULL,     -- full original line text
     priority INTEGER,            -- 1, 2, 3 from #P1/#P2/#P3; NULL = unset
     waiting INTEGER NOT NULL DEFAULT 0,  -- 1 if #W tag present
-    due_date TEXT                -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    due_date TEXT,               -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    completion_date TEXT          -- ISO date YYYY-MM-DD from #C-YYYY-MM-DD; NULL = unset
 );
 ```
 
@@ -1309,6 +1319,7 @@ static parseTaskMeta(text: string): {
     priority: number | null;   // 1, 2, or 3
     waiting: boolean;
     dueDate: string | null;    // YYYY-MM-DD
+    completionDate: string | null; // YYYY-MM-DD
 }
 ```
 
@@ -1321,6 +1332,7 @@ static parseTaskMeta(text: string): {
 | `#P3` | `priority = 3` (Normal) |
 | `#W` | `waiting = true` |
 | `#D-YYYY-MM-DD` | `dueDate = 'YYYY-MM-DD'` |
+| `#C-YYYY-MM-DD` | `completionDate = 'YYYY-MM-DD'` |
 
 Only the first priority tag wins. Tags are stripped from the displayed `cleanText` so the task description remains readable. `parseTaskMeta` is called inside `indexTasksFromContent()` for every detected task line.
 
@@ -1338,6 +1350,7 @@ interface TaskViewItem {
     priority: number | null;
     waiting: boolean;
     dueDate: string | null;
+    completionDate: string | null;
 }
 ```
 
@@ -1377,7 +1390,7 @@ The browser-side panel lives in `src/webview/tasks.ts` and `src/webview/tasks.cs
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `allTasks` | `TaskViewItem[]` | `[]` | All tasks from last `update` message |
-| `groupBy` | `'page' \| 'priority' \| 'dueDate'` | `'page'` | Active grouping mode |
+| `groupBy` | `'page' \| 'priority' \| 'dueDate' \| 'completionDate'` | `'page'` | Active grouping mode |
 | `showTodoOnly` | `boolean` | `true` | Whether to hide done tasks |
 | `waitingOnly` | `boolean` | `false` | Whether to show only `#W` tasks |
 | `pageFilter` | `string` | `''` | Case-insensitive page name substring filter |
@@ -1396,6 +1409,7 @@ The browser-side panel lives in `src/webview/tasks.ts` and `src/webview/tasks.cs
 | `page` | `renderByPageImpl()` | Groups by page title, sorted alphabetically |
 | `priority` | `renderByPriority()` | Groups P1 → P2 → P3 → No Priority; within each group sorted by due date then page title |
 | `dueDate` | `renderByDueDate()` | Groups Overdue → Today → This Week → Later → No Due Date; within each group sorted by date then page title |
+| `completionDate` | `renderByCompletionDate()` | Groups Completed Today → This Week → Earlier → No Completion Date; within each group sorted by date descending (most recent first) then page title |
 
 **Deferred task hide (1-second grace period):** When TODO ONLY is active and the user clicks the toggle button on an undone task:
 
@@ -1684,24 +1698,55 @@ Detection for the latter two is handled by `isPositionInsideCode()` in `Completi
 | `Table: Remove Row(s) Below` | Replaces `/` with `""` and fires `as-notes.tableRemoveRowsBelow` |
 | `Table: Remove Column(s) Right` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumnsRight` |
 | `Table: Remove Column(s) Left` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumnsLeft` |
+| `Task: Priority 1` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#P1` |
+| `Task: Priority 2` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#P2` |
+| `Task: Priority 3` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#P3` |
+| `Task: Waiting` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#W` |
+| `Task: Due Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskDueDate` |
+| `Task: Completion Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskCompletionDate` |
 
-Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced.
+Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced. Task commands are only shown when the cursor is on a task line (`- [ ]` or `- [x]`).
 
 The completion range covers only the `/` character.
 
 ### Date Picker — DatePickerService
 
-`src/DatePickerService.ts` — a `showInputBox`-based date entry.
+`src/DatePickerService.ts` — contains `openDatePicker()` (a `showInputBox`-based date entry) and `formatWikilinkDate()` (canonical `[[YYYY_MM_DD]]` formatter).
 
-**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking — e.g. rejects Feb 30), then inserts `[[YYYY_MM_DD]]` at every active cursor position via `insertDateAtCursor()`.
+**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking — e.g. rejects Feb 30), then inserts `[[YYYY_MM_DD]]` at every active cursor position.
 
-**Validation:** `parseInputDate(input)` splits on `-`, validates each component as a number, checks month 1–12, day 1–maxDaysInMonth, and confirms no date overflow (via `Date` constructor round-trip). Returns `null` on any failure.
+**Validation:** `parseInputDate(input)` (in `TaskHashtagService.ts`) splits on `-`, validates each component as a number, checks month 1–12, day 1–maxDaysInMonth, and confirms no date overflow (via `Date` constructor round-trip). Returns `undefined` on any failure.
 
-`formatWikilinkDate(date)` (exported from `SlashCommandProvider.ts`) is the single canonical place that produces the `[[YYYY_MM_DD]]` string.
+`formatWikilinkDate(date)` (exported from `DatePickerService.ts`) is the single canonical place that produces the `[[YYYY_MM_DD]]` string.
+
+### Task hashtag insertion — TaskHashtagService
+
+`src/TaskHashtagService.ts` — contains all task hashtag insertion, toggle, and replacement logic. This module was extracted from `DatePickerService.ts` to separate date-picker concerns from task metadata concerns.
+
+**Exported functions:**
+
+| Function | Purpose |
+|---|---|
+| `insertTagAtTaskStart(editor, tag)` | Insert/toggle/replace a hashtag tag on each cursor's task line. Normalises spacing. |
+| `insertTaskDueDate()` | Opens a date input box, inserts `#D-YYYY-MM-DD` via `insertTagAtTaskStart` |
+| `insertTaskCompletionDate()` | Opens a date input box, inserts `#C-YYYY-MM-DD` via `insertTagAtTaskStart` |
+| `formatInputDate(date)` | Formats a `Date` as `YYYY-MM-DD` for input box pre-fill |
+| `parseInputDate(value)` | Parses `YYYY-MM-DD` string to `Date` with overflow validation |
+| `DATE_PATTERN` | `/^\d{4}-\d{2}-\d{2}$/` regex for date string validation |
+
+**`insertTagAtTaskStart` behaviour:**
+
+- **Priority tags** (`#P1`–`#P9`): same priority issued again → **removed** (toggle off); different priority → **replaced**.
+- **`#W`**: issued again when already present → **removed** (toggle off).
+- **`#D-YYYY-MM-DD`**: any existing `#D-*` tag → **replaced** with the new date.
+- **`#C-YYYY-MM-DD`**: any existing `#C-*` tag → **replaced** with the new date.
+- **Non-task lines**: tag is inserted at the cursor position (no special handling).
+- After the edit the line spacing is normalised (exactly one space between tokens).
+- The cursor is restored to its original text position; if the original position fell inside the leading hashtag block it is moved to the end of the line.
 
 ### Registration
 
-The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, and all ten table commands are registered in `enterFullMode()` in `extension.ts`. Table commands are Pro-gated via `isProLicenced()`.
+The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, all ten table commands, and all task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`) are registered in `enterFullMode()` in `extension.ts`. Table commands are Pro-gated via `isProLicenced()`.
 
 ### Table Service
 
@@ -1976,8 +2021,9 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 
 1. Creates a status bar item (always visible in both modes)
 2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`
-3. Checks for `.asnotes/` directory in workspace root
-4. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
+3. Registers passive-mode stubs for all 32 full-mode command IDs (see [Passive mode](#passive-mode))
+4. Checks for `.asnotes/` directory in workspace root
+5. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
    - Sets the `as-notes.fullMode` context key (controls view/keybinding `when` clauses)
    - Opens the SQLite database
    - Creates `WikilinkDecorationManager` **before** the scan (wikilinks appear muted grey immediately)
@@ -1986,10 +2032,10 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
    - Calls `decorationManager.setReady()` — wikilinks shift from grey to blue
    - Creates shared `WikilinkFileService`, `IndexService`, `IndexScanner`
    - Registers all providers: `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider` (via `registerWebviewViewProvider`), `BacklinkPanelProvider`
-   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, and all eight encryption commands
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`), and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
-5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared
+5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared. Passive-mode command stubs remain active.
 
 All full-mode registrations are tracked in `fullModeDisposables[]` and pushed to `context.subscriptions`. The `deactivate()` function persists the database and cleans up.
 
@@ -2001,7 +2047,7 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests use vitest and are split across eight test files:
+Tests use vitest and are split across fourteen test files (key files described below):
 
 ### `WikilinkService.test.ts` (23 tests)
 
@@ -2019,7 +2065,7 @@ Tests use vitest and are split across eight test files:
 
 3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
 
-### `IndexService.test.ts` (120 tests)
+### `IndexService.test.ts` (141 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
@@ -2053,7 +2099,11 @@ Tests use vitest and are split across eight test files:
 
 16. **Task indexing** (11 tests) — unchecked and done task indexing, re-index replacement, todoOnly filter, pages with tasks grouped by count, task counts, cascade delete on page removal, indented tasks, `*` bullet tasks, non-todo exclusion, empty tasks, `line_text` storage.
 
-17. **`getBacklinksIncludingAliases`** (7 tests) — direct backlinks, alias backlinks, self-link exclusion, empty result, line/column data, ordering by title then line.
+17. **`parseTaskMeta`** (14 tests) — plain text with null metadata, `#P1`/`#P2`/`#P3` priority, `#W` waiting, `#D-YYYY-MM-DD` due date, multiple tags together, first-priority-wins, embedded tags ignored, tags-only empty cleanText, `#C-YYYY-MM-DD` completion date, `#D` + `#C` together, all tags including `#C`, `completionDate` null when absent.
+
+18. **Task metadata indexing** (8 tests) — priority storage from `#P1`, waiting from `#W`, `due_date` from `#D-YYYY-MM-DD`, `completion_date` from `#C-YYYY-MM-DD`, `completionDate` in `getAllTasksForWebview`, null metadata for plain tasks, `getAllTasksForWebview` with page info.
+
+19. **`getBacklinksIncludingAliases`** (7 tests) — direct backlinks, alias backlinks, self-link exclusion, empty result, line/column data, ordering by title then line.
 
 ### `WikilinkFileService.test.ts` (10 tests)
 

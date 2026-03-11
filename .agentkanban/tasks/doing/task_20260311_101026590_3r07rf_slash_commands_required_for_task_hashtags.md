@@ -1,9 +1,9 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-11T15:34:15.976Z
+updated: 2026-03-11T20:25:56.768Z
 priority: high
-sortOrder: 2
+sortOrder: 3
 ---
 
 ## Conversation

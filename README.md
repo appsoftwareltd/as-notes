@@ -72,6 +72,7 @@ Add structured hashtag metadata anywhere in a task line to categorise and organi
 | `#P3` | Priority 3 — Normal |
 | `#W` | Waiting — task is blocked or waiting on someone/something |
 | `#D-YYYY-MM-DD` | Due date — e.g. `#D-2026-03-15` |
+| `#C-YYYY-MM-DD` | Completion date — e.g. `#C-2026-03-15` |
 
 Tags can be placed anywhere on the task line:
 
@@ -94,6 +95,7 @@ The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all task
 | **Page** | Tasks grouped alphabetically by source page |
 | **Priority** | Tasks grouped by priority level (P1 → P2 → P3 → No Priority), sorted by due date within each group |
 | **Due Date** | Tasks grouped into buckets: Overdue / Today / This Week / Later / No Due Date |
+| **Completion Date** | Tasks grouped into buckets: Completed Today / This Week / Earlier / No Completion Date |
 
 **Filters:**
 
@@ -147,8 +149,11 @@ The following commands only appear in the slash menu when the cursor is on a tas
 | **Task: Priority 1** | Inserts `#P1` at the start of the task text. Replaces any existing priority tag (`#P1`–`#P9`) on the line |
 | **Task: Priority 2** | Inserts `#P2`, replacing any existing priority tag |
 | **Task: Priority 3** | Inserts `#P3`, replacing any existing priority tag |
-| **Task: Waiting** | Inserts `#W` at the start of the task text |
-| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text |
+| **Task: Waiting** | Toggles `#W` at the start of the task text (inserts if absent, removes if present) |
+| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text. Replaces any existing due date tag |
+| **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#C-YYYY-MM-DD` at the start of the task text. Replaces any existing completion date tag |
+
+Priority and waiting tags toggle: issuing the same tag again removes it. Issuing a different priority replaces the existing one. Due date and completion date tags replace any existing tag of the same type.
 
 The menu appears inline as you type and supports filtering — just keep typing to narrow the list. Press Escape or any non-matching key to dismiss and keep the `/` as-is.
 
@@ -223,7 +228,7 @@ For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-de
 
 ### Initialise a workspace
 
-AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** - you'll see a status bar item inviting you to initialise.
+AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** — commands show a friendly notification prompting you to initialise, and the status bar invites you to set up.
 
 To initialise:
 
