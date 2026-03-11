@@ -297,7 +297,8 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
                 command: 'as-notes.insertTaskCompletionDate',
                 title: 'Insert Task Completion Date',
             };
-            items.push(taskCompletionDateItem);        }
+            items.push(taskCompletionDateItem);
+        }
 
         return new vscode.CompletionList(items, false);
     }

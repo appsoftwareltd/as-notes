@@ -1,9 +1,9 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-11T13:37:09.966Z
+updated: 2026-03-11T15:34:15.976Z
 priority: high
-sortOrder: 1.75
+sortOrder: 2
 ---
 
 ## Conversation
@@ -471,6 +471,28 @@ Actually - I wanted the completed date button in the task view it to be a group 
 - Removed `completionDateOnly` from `saveFilterState` message handler
 - Removed `completionDateOnly` read from workspaceState and embed in `initialState` JSON
 
-Build clean.
+Build clean. Completion date is now a GROUP BY pill (Page / Priority / Due Date / Completion Date). COMPLETED toggle removed.
 
 [user]
+
+I need to add an amendment to the instruction from line 163:
+
+> Add that the cursor should return to it's original position after the insert
+
+Becomes:
+
+> Add that the cursor should return to it's original position after the insert, unless that position leaves the cursor before the end of the last #hashtag after insert / change, and then it should be moved to the end of the line
+
+[user]
+
+After adding / editing any task hash tags, there should be a single space character between the task square brackets, each of the hash tags and the task text
+
+[user]
+
+Test issue - if I create a Priority 1 right after the checkbox, the cursor moves to before the #P1 - this breaks the requirement to ensure that cursor is always after all hashtags
+
+```
+- [ ] /p1
+- [ ] #P1
+```
+

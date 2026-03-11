@@ -287,6 +287,40 @@ becomes
     - Bye
 ```
 
+### If the user is on a task line
+
+```
+- Parent
+    - [ ] <- Original bullet
+```
+
+becomes
+
+```
+- Parent
+    - [ ] Hello,
+    - [ ] This is some email correspondence
+    - [ ] Bye
+```
+* Createed tasks will always be unchecked
+* If the line that was pasted onto was checked to being with, that remains checked while the newly created ones are unchecked
+
+```
+- Parent
+    - [x] <- Original bullet
+```
+
+becomes
+
+```
+- Parent
+    - [x] Hello,
+    - [ ] This is some email correspondence
+    - [ ] Bye
+```
+
+
+
 ### If the user opens multiline backticks and hits enter (with or without lang), no bullet is added for the next line and indentation is retained
 
 

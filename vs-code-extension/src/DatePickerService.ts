@@ -35,6 +35,23 @@ const COMPLETION_DATE_TAG_PREFIX_RE = /^#C-/;
 const EXISTING_COMPLETION_DATE_RE = /#C-\d{4}-\d{2}-\d{2}/;
 
 /**
+ * Normalize spacing within a task line so there is exactly one space between
+ * the checkbox marker, each hashtag token, and the remaining task text.
+ * Non-task lines (no `TASK_PREFIX_RE` match) are returned unchanged.
+ */
+function normalizeTaskLine(line: string): string {
+    const m = /^(\s*-\s+\[[ xX]\])\s+((?:#\S+\s*)*)(.*)$/.exec(line);
+    if (!m) { return line; }
+    const checkbox = m[1];
+    const tags = m[2].trim().split(/\s+/).filter(t => t.length > 0);
+    const text = m[3];
+    const parts: string[] = [checkbox];
+    if (tags.length > 0) { parts.push(tags.join(' ')); }
+    if (text) { parts.push(text); }
+    return parts.join(' ');
+}
+
+/**
  * Insert `tag + ' '` after any existing leading hashtags on each cursor's task line.
  * If the line is not a task line, inserts at the cursor position instead.
  *
@@ -44,8 +61,9 @@ const EXISTING_COMPLETION_DATE_RE = /#C-\d{4}-\d{2}-\d{2}/;
  * - `#D-YYYY-MM-DD`: any existing `#D-*` tag is **replaced** with the new date.
  * - `#C-YYYY-MM-DD`: any existing `#C-*` tag is **replaced** with the new date.
  *
- * After the edit, restores each cursor to its original text position
- * (adjusted for any inserted, replaced, or removed characters).
+ * After the edit the line spacing is normalised (exactly one space between tokens).
+ * The cursor is restored to its original position; if that position falls inside
+ * the leading hashtag block it is moved to the end of the line instead.
  */
 export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: string): Promise<void> {
     const isPriority = PRIORITY_TAG_RE.test(tag);
@@ -66,7 +84,7 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
                     return {
                         line: sel.active.line, mode: 'remove' as const,
                         removeStart, removeLen: existingMatch[0].length + trailingSpace,
-                        origCol: sel.active.character,
+                        origCol: sel.active.character, lineText,
                     };
                 } else {
                     // Different priority — REPLACE
@@ -74,7 +92,7 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
                         line: sel.active.line, mode: 'replace' as const,
                         replaceStart: existingMatch.index,
                         replaceEnd: existingMatch.index + existingMatch[0].length,
-                        newText: tag, origCol: sel.active.character,
+                        newText: tag, origCol: sel.active.character, lineText,
                     };
                 }
             }
@@ -90,7 +108,7 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
                 return {
                     line: sel.active.line, mode: 'remove' as const,
                     removeStart, removeLen: existingMatch[0].length + trailingSpace,
-                    origCol: sel.active.character,
+                    origCol: sel.active.character, lineText,
                 };
             }
         }
@@ -103,7 +121,7 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
                     line: sel.active.line, mode: 'replace' as const,
                     replaceStart: existingMatch.index,
                     replaceEnd: existingMatch.index + existingMatch[0].length,
-                    newText: tag, origCol: sel.active.character,
+                    newText: tag, origCol: sel.active.character, lineText,
                 };
             }
         }
@@ -116,7 +134,7 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
                     line: sel.active.line, mode: 'replace' as const,
                     replaceStart: existingMatch.index,
                     replaceEnd: existingMatch.index + existingMatch[0].length,
-                    newText: tag, origCol: sel.active.character,
+                    newText: tag, origCol: sel.active.character, lineText,
                 };
             }
         }
@@ -128,35 +146,63 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
             mode: 'insert' as const,
             insertCol,
             insertText: tag + ' ',
-            origCol: sel.active.character,
+            origCol: sel.active.character, lineText,
         };
     });
 
+    // Pre-compute raw post-edit and normalized line for each op.
+    // This is used both to drive a full-line replacement (ensuring clean spacing)
+    // and to compute correct cursor positions after the edit.
+    const postEdits = ops.map(op => {
+        let rawPostEdit: string;
+        if (op.mode === 'insert') {
+            rawPostEdit = op.lineText.slice(0, op.insertCol) + op.insertText + op.lineText.slice(op.insertCol);
+        } else if (op.mode === 'replace') {
+            rawPostEdit = op.lineText.slice(0, op.replaceStart) + op.newText + op.lineText.slice(op.replaceEnd);
+        } else {
+            rawPostEdit = op.lineText.slice(0, op.removeStart) + op.lineText.slice(op.removeStart + op.removeLen);
+        }
+        const isTaskLine = TASK_PREFIX_RE.test(op.lineText);
+        const normalizedLine = isTaskLine ? normalizeTaskLine(rawPostEdit) : rawPostEdit;
+        return { rawPostEdit, normalizedLine, isTaskLine };
+    });
+
     await editor.edit((editBuilder) => {
-        for (const op of ops) {
-            if (op.mode === 'replace') {
-                editBuilder.replace(
-                    new vscode.Range(
-                        new vscode.Position(op.line, op.replaceStart),
-                        new vscode.Position(op.line, op.replaceEnd),
-                    ),
-                    op.newText,
-                );
-            } else if (op.mode === 'remove') {
-                editBuilder.delete(
-                    new vscode.Range(
-                        new vscode.Position(op.line, op.removeStart),
-                        new vscode.Position(op.line, op.removeStart + op.removeLen),
-                    ),
-                );
+        for (let i = 0; i < ops.length; i++) {
+            const op = ops[i];
+            const { normalizedLine, isTaskLine } = postEdits[i];
+            if (isTaskLine) {
+                // Replace the entire line with normalized content (ensures single spacing)
+                editBuilder.replace(editor.document.lineAt(op.line).range, normalizedLine);
             } else {
-                editBuilder.insert(new vscode.Position(op.line, op.insertCol), op.insertText);
+                // Non-task line: use the targeted insert/replace/remove
+                if (op.mode === 'replace') {
+                    editBuilder.replace(
+                        new vscode.Range(
+                            new vscode.Position(op.line, op.replaceStart),
+                            new vscode.Position(op.line, op.replaceEnd),
+                        ),
+                        op.newText,
+                    );
+                } else if (op.mode === 'remove') {
+                    editBuilder.delete(
+                        new vscode.Range(
+                            new vscode.Position(op.line, op.removeStart),
+                            new vscode.Position(op.line, op.removeStart + op.removeLen),
+                        ),
+                    );
+                } else {
+                    editBuilder.insert(new vscode.Position(op.line, op.insertCol), op.insertText);
+                }
             }
         }
     });
 
-    // Restore cursors to their original text positions, adjusted for the edit
-    editor.selections = ops.map(op => {
+    // Restore cursors to their original text positions, adjusted for the edit.
+    editor.selections = ops.map((op, i) => {
+        const { rawPostEdit, normalizedLine } = postEdits[i];
+
+        // Compute restoredCol in terms of raw post-edit character positions
         let restoredCol: number;
         if (op.mode === 'replace') {
             const delta = op.newText.length - (op.replaceEnd - op.replaceStart);
@@ -181,6 +227,21 @@ export async function insertTagAtTaskStart(editor: vscode.TextEditor, tag: strin
                 ? op.origCol + insertLen
                 : op.origCol;
         }
+
+        // Find the end of the leading hashtag block in both raw and normalized lines.
+        // - If cursor lands inside the block → move to end of the normalized line.
+        // - If cursor is after the block → shift by the normalization whitespace delta.
+        const rawPostMatch = TASK_PREFIX_RE.exec(rawPostEdit);
+        const rawEndOfBlock = rawPostMatch ? rawPostMatch[1].length + rawPostMatch[2].length : 0;
+        const normPostMatch = TASK_PREFIX_RE.exec(normalizedLine);
+        const normEndOfBlock = normPostMatch ? normPostMatch[1].length + normPostMatch[2].length : 0;
+
+        if (rawEndOfBlock > 0 && restoredCol < rawEndOfBlock) {
+            restoredCol = normalizedLine.length;
+        } else {
+            restoredCol += normEndOfBlock - rawEndOfBlock;
+        }
+
         const pos = new vscode.Position(op.line, restoredCol);
         return new vscode.Selection(pos, pos);
     });
