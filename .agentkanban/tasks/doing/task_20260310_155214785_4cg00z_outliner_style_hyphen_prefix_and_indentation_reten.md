@@ -1,8 +1,8 @@
 ---
 title: Outliner style hyphen prefix and indentation retention
 created: 2026-03-10T15:52:14.785Z
-updated: 2026-03-10T20:18:50.809Z
-sortOrder: 4
+updated: 2026-03-11T10:32:01.819Z
+sortOrder: 1
 ---
 
 ## Conversation
@@ -248,3 +248,75 @@ Edge case fix implemented. 497 tests, all passing, build clean.
 - Otherwise falls back to the original `toggleTodoLine` — no change to non-outliner behaviour
 
 [user] Agreed
+
+[user]
+
+Further edge cases identified:
+
+### If the user pastes data, the data, when in outliner mode needs to added as separate bullet points with line breaks removed. e.g
+
+```
+Hello,
+
+This is some email correspondence
+
+Bye
+```
+
+becomes
+
+```
+- Hello,
+- This is some email correspondence
+- Bye
+```
+
+If the original bullet is indented:
+
+```
+- Parent
+    - <- Original bullet
+```
+
+becomes
+
+```
+- Parent
+    - Hello,
+    - This is some email correspondence
+    - Bye
+```
+
+### If the user opens multiline backticks and hits enter (with or without lang), no bullet is added for the next line and indentation is retained
+
+
+```
+- Parent
+    - ``` <- Enter key press
+```
+
+becomes
+
+```
+- Parent
+    - ```
+      <- Cursor placed inside
+      ```
+```
+
+Or with language
+
+
+```
+- Parent
+    - ```javascript <- Enter key press
+```
+
+becomes
+
+```
+- Parent
+    - ```javascript
+      <- Cursor placed inside
+      ```
+```
