@@ -1,7 +1,7 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-11T20:25:56.768Z
+updated: 2026-03-11T21:50:37.737Z
 priority: high
 sortOrder: 3
 ---
@@ -983,3 +983,8 @@ Tags embedded mid-text, in code blocks, or on non-task lines are left untouched.
 
 - html-conversion: 30/30 tests pass, build clean
 - vs-code-extension: 503/503 tests pass
+
+[user]
+
+Slash command menu should disappear as soon as there is a space char after
+Task slash command completions - would be nice if they left cursor after a space after last hash if ... only hashes, no trailing text in task - might need to think about this
