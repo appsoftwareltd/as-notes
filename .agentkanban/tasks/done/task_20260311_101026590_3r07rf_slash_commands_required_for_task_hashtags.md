@@ -1,9 +1,9 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-11T11:38:18.309Z
+updated: 2026-03-11T13:37:09.966Z
 priority: high
-sortOrder: 3
+sortOrder: 1.75
 ---
 
 ## Conversation
@@ -370,30 +370,107 @@ Build verified clean.
 
 Test feedback:
 
-If the user uses a priority slash command, it should replace any existing priority hashtag on the line. Only one priority can apply so this makes sense
+If a command is repeated for an existing tag (e.g. we have #P1, but the priority 1 command is used again) - remove that tag. A change of priority is still a replace. #W if command is issued again would be a remove. #D-YYYY-MM-DD would be a replace with the new date if issued again.
+
+While we're doing this, we will add a "completion" date tag. This will work the same as the due date tag, but will will prepend with a 'C' so #C-YYYY-MM-DD. We need this rendered in the task view and same rules applied regarding completion, input of date as the due date control. We will give completion a pastel green colour rather than the yellow used for due date in the task view
 
 [agent]
 
-## Plan — Replace existing priority tag
+## Implementation complete
 
-### Analysis
+### Changes made
 
-`insertTagAtTaskStart` currently always inserts. For priority tags (`#P\d+`) the correct behaviour is:
-- If the line already has a `#P\d+` token anywhere → **replace** it with the new tag
-- If not → insert at task start (after existing hashtags) as before
+**`vs-code-extension/src/IndexService.ts`**
+- Bumped `SCHEMA_VERSION` `2` → `3` (triggers drop-and-rebuild of the derived index)
+- Added `completion_date TEXT` column + index to the `tasks` table schema
+- Added `completion_date: string | null` to `TaskRow` interface
+- Added `completionDate: string | null` to `TaskViewItem` interface
+- Updated `parseTaskMeta` regex to capture `#C-YYYY-MM-DD` (group 4); return type now includes `completionDate`
+- Updated both `INSERT INTO tasks` calls with `completion_date` parameter
+- Updated `getTasksForPage` and `getAllTasksForWebview` SELECT queries to include `completion_date`
+- Updated `getAllTasksForWebview` row mapper and `mapTaskRows` for the new column
 
-Non-priority tags (`#W`, `#D-...`) are unaffected.
+**`vs-code-extension/src/DatePickerService.ts`**
+- Added constants: `EXISTING_WAITING_RE`, `DUE_DATE_TAG_PREFIX_RE`, `EXISTING_DUE_DATE_RE`, `COMPLETION_DATE_TAG_PREFIX_RE`, `EXISTING_COMPLETION_DATE_RE`
+- Rewrote `insertTagAtTaskStart` with full toggle/remove/replace/insert logic:
+  - Priority same → **remove** tag (plus trailing space)
+  - Priority different → **replace** (existing)
+  - `#W` present → **remove**; absent → insert
+  - `#D-*` exists → **replace** with new date; absent → insert
+  - `#C-*` exists → **replace** with new date; absent → insert
+  - Cursor restoration handles new `remove` mode
+- Added `insertTaskCompletionDate()` — identical to `insertTaskDueDate` but produces `#C-YYYY-MM-DD`
 
-### Changes — `DatePickerService.ts` only
+**`vs-code-extension/src/SlashCommandProvider.ts`**
+- Added `Task: Completion Date` item (sortText `j-task-completion-date`, fires `as-notes.insertTaskCompletionDate`)
 
-- Added `PRIORITY_TAG_RE = /^#P\d+$/` — detects whether the incoming tag is a priority
-- Added `EXISTING_PRIORITY_RE = /#P\d+/` — finds existing priority token on the line
-- `insertTagAtTaskStart` pre-computes per-cursor operations as either `'replace'` or `'insert'` mode:
-  - **replace**: `editBuilder.replace()` on the existing priority range; cursor restored accounting for `delta = newLen - oldLen`
-  - **insert**: unchanged from previous iteration
+**`vs-code-extension/src/extension.ts`**
+- Added `insertTaskCompletionDate` to import from `DatePickerService.js`
+- Registered `as-notes.insertTaskCompletionDate` command
+
+**`vs-code-extension/src/webview/tasks.ts`**
+- Added `completionDate: string | null` to `TaskViewItem` interface
+- Added `buildCompletionDateBadge()` returning a pastel green `.badge-completion` span
+- Included completion badge in `buildTask()` alongside the existing badges
+
+**`vs-code-extension/src/webview/tasks.css`**
+- Added `.badge-completion` — pastel green using `--vscode-testing-iconPassed` token (`#73c991` fallback)
+
+**Tests**
+- 7 new tests (TDD red then green): `parseTaskMeta` for `#C-*`, combined tags, integration tests for `completion_date` storage and `getAllTasksForWebview` mapping
+- Updated plain-text `toEqual` test to include `completionDate: null` in expected shape
+- 503 tests pass, build clean
+
+[user]
+
+Test feedback:
+
+Can we have a completion date filter button, like Due Date (setting saved like the others)
+
+[agent]
 
 ## Implementation complete
 
-Build verified clean.
+### Changes made
+
+**`vs-code-extension/src/webview/tasks.ts`**
+- Added `completionDateOnly: boolean` to the `__INITIAL_FILTER_STATE__` declaration
+- Added `let completionDateOnly = _savedState?.completionDateOnly ?? false;` state variable
+- Updated `saveFilterState()` to include `completionDateOnly` in the posted message
+- Added `if (completionDateOnly) { tasks = tasks.filter(t => !!t.completionDate); }` in `getFilteredTasks()`
+- Added **COMPLETED** toggle checkbox in toolbar HTML after WAITING ONLY
+- Wired up `chk-completion-date-only` change event handler
+
+**`vs-code-extension/src/TaskPanelProvider.ts`**
+- `saveFilterState` handler: destructures + persists `completionDateOnly` to `as-notes.taskFilter.completionDateOnly`
+- `_buildHtml`: reads `completionDateOnly` from `workspaceState` (default `false`), includes in `initialState` JSON
+
+Build clean.
+
+[user]
+
+Actually - I wanted the completed date button in the task view it to be a group by control (like due date), not a toggle switch
+
+[agent]
+
+## Implementation complete
+
+### Changes made
+
+**`vs-code-extension/src/webview/tasks.ts`**
+- `GroupBy` type: added `'completionDate'`
+- `GROUP_BY_LABELS`: added `completionDate: 'Completion Date'`
+- Added `COMPLETION_BUCKET_ORDER`, `CompletionBucket` type, `COMPLETION_BUCKET_LABELS` (Today / This Week / Earlier / No Completion Date)
+- Added `completionDateBucket()` helper (diff=0->today, diff>-7->this-week, else->earlier)
+- Removed `completionDateOnly` state variable, `__INITIAL_FILTER_STATE__` field, `saveFilterState` field, and `getFilteredTasks` filter line
+- Added `renderByCompletionDate()` grouping renderer - groups by recency, sorts most-recent first, shows page name
+- Added `case 'completionDate': return renderByCompletionDate(tasks);` in `buildTaskListHtml()`
+- Removed COMPLETED toggle switch HTML and its change event handler
+
+**`vs-code-extension/src/TaskPanelProvider.ts`**
+- Removed `completionDateOnly` from `saveFilterState` message handler
+- Removed `completionDateOnly` read from workspaceState and embed in `initialState` JSON
+
+Build clean.
 
 [user]

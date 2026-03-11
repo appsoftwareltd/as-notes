@@ -20,7 +20,7 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
 
     constructor(
-        private readonly _extensionUri: vscode.Uri,
+        private readonly _context: vscode.ExtensionContext,
         private readonly _indexService: IndexService,
     ) { }
 
@@ -35,7 +35,7 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri],
+            localResourceRoots: [this._context.extensionUri],
         };
 
         webviewView.webview.onDidReceiveMessage(msg => this._handleMessage(msg));
@@ -87,17 +87,33 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
                 });
                 break;
             }
+            case 'saveFilterState': {
+                const { groupBy, showTodoOnly, waitingOnly } = msg as {
+                    groupBy: string;
+                    showTodoOnly: boolean;
+                    waitingOnly: boolean;
+                };
+                this._context.workspaceState.update('as-notes.taskFilter.groupBy', groupBy);
+                this._context.workspaceState.update('as-notes.taskFilter.showTodoOnly', showTodoOnly);
+                this._context.workspaceState.update('as-notes.taskFilter.waitingOnly', waitingOnly);
+                break;
+            }
         }
     }
 
     private _buildHtml(webview: vscode.Webview): string {
         const jsUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'tasks.js'),
+            vscode.Uri.joinPath(this._context.extensionUri, 'dist', 'webview', 'tasks.js'),
         );
         const cssUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'tasks.css'),
+            vscode.Uri.joinPath(this._context.extensionUri, 'dist', 'webview', 'tasks.css'),
         );
         const nonce = getNonce();
+
+        const groupBy = this._context.workspaceState.get<string>('as-notes.taskFilter.groupBy', 'page');
+        const showTodoOnly = this._context.workspaceState.get<boolean>('as-notes.taskFilter.showTodoOnly', true);
+        const waitingOnly = this._context.workspaceState.get<boolean>('as-notes.taskFilter.waitingOnly', false);
+        const initialState = JSON.stringify({ groupBy, showTodoOnly, waitingOnly });
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -108,6 +124,7 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
     <div id="app"></div>
+    <script nonce="${nonce}">window.__INITIAL_FILTER_STATE__ = ${initialState};</script>
     <script nonce="${nonce}" src="${jsUri}"></script>
 </body>
 </html>`;

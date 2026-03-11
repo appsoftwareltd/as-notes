@@ -68,6 +68,7 @@ export interface TaskRow {
     priority: number | null;
     waiting: number;
     due_date: string | null;
+    completion_date: string | null;
 }
 
 /** A task row joined with its source page path and title, for webview display. */
@@ -82,6 +83,7 @@ export interface TaskViewItem {
     priority: number | null;
     waiting: boolean;
     dueDate: string | null;
+    completionDate: string | null;
 }
 
 export interface BacklinkEntry {
@@ -126,7 +128,7 @@ export interface BacklinkChainGroup {
  * is dropped and rebuilt from scratch. Because the DB is a pure derived index
  * (fully regeneratable from markdown files), drop-and-rebuild is always safe.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS pages (
@@ -177,13 +179,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     line_text TEXT NOT NULL,
     priority INTEGER,
     waiting INTEGER NOT NULL DEFAULT 0,
-    due_date TEXT
+    due_date TEXT,
+    completion_date TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source_page_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks(done);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_waiting ON tasks(waiting);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_completion_date ON tasks(completion_date);
 `;
 
 // ── Title extraction ───────────────────────────────────────────────────────
@@ -1342,13 +1346,14 @@ export class IndexService {
      * All tags must appear at the start of the text (before any other content),
      * separated by spaces. Returns cleaned text and parsed metadata.
      */
-    static parseTaskMeta(text: string): { cleanText: string; priority: number | null; waiting: number; dueDate: string | null } {
+    static parseTaskMeta(text: string): { cleanText: string; priority: number | null; waiting: number; dueDate: string | null; completionDate: string | null } {
         let remaining = text.trimStart();
         let priority: number | null = null;
         let waiting = 0;
         let dueDate: string | null = null;
+        let completionDate: string | null = null;
 
-        const tagRe = /^(#P([123])|#W|#D-(\d{4}-\d{2}-\d{2}))\s*/;
+        const tagRe = /^(#P([123])|#W|#D-(\d{4}-\d{2}-\d{2})|#C-(\d{4}-\d{2}-\d{2}))\s*/;
         let match: RegExpMatchArray | null;
         while ((match = remaining.match(tagRe)) !== null) {
             if (match[2]) {
@@ -1359,11 +1364,14 @@ export class IndexService {
             } else if (match[3]) {
                 // #D-YYYY-MM-DD
                 if (dueDate === null) { dueDate = match[3]; }
+            } else if (match[4]) {
+                // #C-YYYY-MM-DD
+                if (completionDate === null) { completionDate = match[4]; }
             }
             remaining = remaining.slice(match[0].length);
         }
 
-        return { cleanText: remaining.trimEnd(), priority, waiting, dueDate };
+        return { cleanText: remaining.trimEnd(), priority, waiting, dueDate, completionDate };
     }
 
     /**
@@ -1382,10 +1390,10 @@ export class IndexService {
             const doneMatch = lineText.match(IndexService.TASK_DONE);
             if (doneMatch) {
                 const rawText = doneMatch[3];
-                const { cleanText, priority, waiting, dueDate } = IndexService.parseTaskMeta(rawText);
+                const { cleanText, priority, waiting, dueDate, completionDate } = IndexService.parseTaskMeta(rawText);
                 this.db!.run(
-                    `INSERT INTO tasks (source_page_id, line, text, done, line_text, priority, waiting, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [pageId, lineNum, cleanText, 1, lineText, priority, waiting, dueDate],
+                    `INSERT INTO tasks (source_page_id, line, text, done, line_text, priority, waiting, due_date, completion_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [pageId, lineNum, cleanText, 1, lineText, priority, waiting, dueDate, completionDate],
                 );
                 continue;
             }
@@ -1393,10 +1401,10 @@ export class IndexService {
             const uncheckedMatch = lineText.match(IndexService.TASK_UNCHECKED);
             if (uncheckedMatch) {
                 const rawText = uncheckedMatch[3];
-                const { cleanText, priority, waiting, dueDate } = IndexService.parseTaskMeta(rawText);
+                const { cleanText, priority, waiting, dueDate, completionDate } = IndexService.parseTaskMeta(rawText);
                 this.db!.run(
-                    `INSERT INTO tasks (source_page_id, line, text, done, line_text, priority, waiting, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [pageId, lineNum, cleanText, 0, lineText, priority, waiting, dueDate],
+                    `INSERT INTO tasks (source_page_id, line, text, done, line_text, priority, waiting, due_date, completion_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [pageId, lineNum, cleanText, 0, lineText, priority, waiting, dueDate, completionDate],
                 );
             }
         }
@@ -1408,8 +1416,8 @@ export class IndexService {
     getTasksForPage(pageId: number, todoOnly?: boolean): TaskRow[] {
         this.ensureOpen();
         const sql = todoOnly
-            ? `SELECT id, source_page_id, line, text, done, line_text, priority, waiting, due_date FROM tasks WHERE source_page_id = ? AND done = 0 ORDER BY line`
-            : `SELECT id, source_page_id, line, text, done, line_text, priority, waiting, due_date FROM tasks WHERE source_page_id = ? ORDER BY line`;
+            ? `SELECT id, source_page_id, line, text, done, line_text, priority, waiting, due_date, completion_date FROM tasks WHERE source_page_id = ? AND done = 0 ORDER BY line`
+            : `SELECT id, source_page_id, line, text, done, line_text, priority, waiting, due_date, completion_date FROM tasks WHERE source_page_id = ? ORDER BY line`;
         const result = this.db!.exec(sql, [pageId]);
         if (result.length === 0) { return []; }
         return this.mapTaskRows(result[0].values);
@@ -1426,7 +1434,7 @@ export class IndexService {
         if (opts?.waitingOnly) { conditions.push('t.waiting = 1'); }
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
         const result = this.db!.exec(
-            `SELECT t.id, t.source_page_id, p.path, p.title, t.line, t.text, t.done, t.priority, t.waiting, t.due_date
+            `SELECT t.id, t.source_page_id, p.path, p.title, t.line, t.text, t.done, t.priority, t.waiting, t.due_date, t.completion_date
              FROM tasks t
              JOIN pages p ON t.source_page_id = p.id
              ${where}
@@ -1444,6 +1452,7 @@ export class IndexService {
             priority: row[7] as number | null,
             waiting: (row[8] as number) === 1,
             dueDate: row[9] as string | null,
+            completionDate: row[10] as string | null,
         }));
     }
 
@@ -1499,6 +1508,7 @@ export class IndexService {
             priority: row[6] as number | null,
             waiting: row[7] as number,
             due_date: row[8] as string | null,
+            completion_date: row[9] as string | null,
         }));
     }
 

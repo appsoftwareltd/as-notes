@@ -286,7 +286,18 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
                 title: 'Insert Task Due Date',
             };
             items.push(taskDueDateItem);
-        }
+            // ── Task: Completion Date ──────────────────────────────────
+            const taskCompletionDateItem = new vscode.CompletionItem('Task: Completion Date', vscode.CompletionItemKind.Event);
+            taskCompletionDateItem.detail = 'Insert #C-YYYY-MM-DD completion date tag after existing hashtags';
+            taskCompletionDateItem.sortText = 'j-task-completion-date';
+            taskCompletionDateItem.filterText = '/Task Completion Date';
+            taskCompletionDateItem.insertText = '';
+            taskCompletionDateItem.range = range;
+            taskCompletionDateItem.command = {
+                command: 'as-notes.insertTaskCompletionDate',
+                title: 'Insert Task Completion Date',
+            };
+            items.push(taskCompletionDateItem);        }
 
         return new vscode.CompletionList(items, false);
     }

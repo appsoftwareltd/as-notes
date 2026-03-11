@@ -1448,7 +1448,7 @@ describe('IndexService — getBacklinkChainsByName', () => {
 describe('IndexService.parseTaskMeta', () => {
     it('should return plain text unchanged with null metadata', () => {
         const r = IndexService.parseTaskMeta('Buy milk');
-        expect(r).toEqual({ cleanText: 'Buy milk', priority: null, waiting: 0, dueDate: null });
+        expect(r).toEqual({ cleanText: 'Buy milk', priority: null, waiting: 0, dueDate: null, completionDate: null });
     });
 
     it('should parse #P1 priority', () => {
@@ -1506,6 +1506,33 @@ describe('IndexService.parseTaskMeta', () => {
         expect(r.waiting).toBe(1);
         expect(r.cleanText).toBe('');
     });
+
+    it('should parse #C-YYYY-MM-DD completion date', () => {
+        const r = IndexService.parseTaskMeta('#C-2026-03-15 Ship feature');
+        expect(r.completionDate).toBe('2026-03-15');
+        expect(r.cleanText).toBe('Ship feature');
+    });
+
+    it('should parse #D and #C together', () => {
+        const r = IndexService.parseTaskMeta('#D-2026-03-15 #C-2026-03-16 Deploy');
+        expect(r.dueDate).toBe('2026-03-15');
+        expect(r.completionDate).toBe('2026-03-16');
+        expect(r.cleanText).toBe('Deploy');
+    });
+
+    it('should parse all tags including #C', () => {
+        const r = IndexService.parseTaskMeta('#P1 #W #D-2026-04-01 #C-2026-04-02 Done item');
+        expect(r.priority).toBe(1);
+        expect(r.waiting).toBe(1);
+        expect(r.dueDate).toBe('2026-04-01');
+        expect(r.completionDate).toBe('2026-04-02');
+        expect(r.cleanText).toBe('Done item');
+    });
+
+    it('should return completionDate null when no #C tag present', () => {
+        const r = IndexService.parseTaskMeta('#P1 Task text');
+        expect(r.completionDate).toBeNull();
+    });
 });
 
 describe('IndexService — task metadata indexing', () => {
@@ -1542,6 +1569,20 @@ describe('IndexService — task metadata indexing', () => {
         const tasks = service.getTasksForPage(page.id);
         expect(tasks[0].due_date).toBe('2026-06-01');
         expect(tasks[0].text).toBe('Launch event');
+    });
+
+    it('should store completion_date from #C-YYYY-MM-DD tag', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# T\n\n- [x] #C-2026-06-02 Completed item', 1000);
+        const page = service.getPageByPath('tasks.md')!;
+        const tasks = service.getTasksForPage(page.id);
+        expect(tasks[0].completion_date).toBe('2026-06-02');
+        expect(tasks[0].text).toBe('Completed item');
+    });
+
+    it('should return completionDate in getAllTasksForWebview', () => {
+        service.indexFileContent('tasks.md', 'tasks.md', '# T\n\n- [x] #C-2026-07-01 Done', 1000);
+        const items = service.getAllTasksForWebview();
+        expect(items[0].completionDate).toBe('2026-07-01');
     });
 
     it('should store null priority/waiting/due_date for plain tasks', () => {

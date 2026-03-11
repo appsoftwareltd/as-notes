@@ -337,6 +337,11 @@
         color: var(--vscode-descriptionForeground);
     }
 
+    .badge-completion {
+        background-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #73c991) 18%, transparent);
+        color: var(--vscode-testing-iconPassed, #73c991);
+    }
+
     /* ── Empty state ─────────────────────────────── */
     .empty-state {
         @apply px-3 py-8 text-center text-xs;

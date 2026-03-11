@@ -29,7 +29,7 @@ import { LogService, NO_OP_LOGGER } from './LogService.js';
 import { findInnermostOpenBracket } from './CompletionUtils.js';
 import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
-import { openDatePicker, insertTaskDueDate, insertTagAtTaskStart } from './DatePickerService.js';
+import { openDatePicker, insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './DatePickerService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
 
@@ -368,7 +368,7 @@ async function enterFullMode(
     // Task panel — registered early so the sidebar is visible immediately,
     // even during a long schema-reset rebuild. The provider handles an empty
     // index gracefully (returns []); refresh() is called after scan completes.
-    taskPanelProvider = new TaskPanelProvider(context.extensionUri, indexService);
+    taskPanelProvider = new TaskPanelProvider(context, indexService);
     fullModeDisposables.push(
         vscode.window.registerWebviewViewProvider(
             TaskPanelProvider.VIEW_ID,
@@ -464,6 +464,9 @@ async function enterFullMode(
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.insertTaskDueDate', () => insertTaskDueDate()),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.insertTaskCompletionDate', () => insertTaskCompletionDate()),
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.insertTaskHashtag', (tag: string) => {

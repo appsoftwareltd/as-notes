@@ -1,10 +1,10 @@
 ---
 title: Completed date tag on tasks
 created: 2026-03-11T10:13:53.435Z
-updated: 2026-03-11T11:38:00.572Z
+updated: 2026-03-11T13:37:14.651Z
 description: This would give us a "what I did when" filter capability
 priority: low
-sortOrder: 2
+sortOrder: 1.625
 ---
 
 ## Conversation

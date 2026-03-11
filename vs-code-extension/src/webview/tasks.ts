@@ -1,6 +1,6 @@
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type GroupBy = 'page' | 'priority' | 'dueDate';
+type GroupBy = 'page' | 'priority' | 'dueDate' | 'completionDate';
 
 interface TaskViewItem {
     id: number;
@@ -13,6 +13,7 @@ interface TaskViewItem {
     priority: number | null;
     waiting: boolean;
     dueDate: string | null;
+    completionDate: string | null;
 }
 
 declare function acquireVsCodeApi(): { postMessage(msg: unknown): void };
@@ -20,11 +21,25 @@ const vscode = acquireVsCodeApi();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
+// Restore persisted filter state embedded in the HTML by TaskPanelProvider.
+declare const __INITIAL_FILTER_STATE__: {
+    groupBy: GroupBy;
+    showTodoOnly: boolean;
+    waitingOnly: boolean;
+} | undefined;
+
+const _savedState = typeof __INITIAL_FILTER_STATE__ !== 'undefined' ? __INITIAL_FILTER_STATE__ : undefined;
+
 let allTasks: TaskViewItem[] = [];
-let groupBy: GroupBy = 'page';
-let showTodoOnly = true;
-let waitingOnly = false;
+let groupBy: GroupBy = _savedState?.groupBy ?? 'page';
+let showTodoOnly = _savedState?.showTodoOnly ?? true;
+let waitingOnly = _savedState?.waitingOnly ?? false;
 let pageFilter = '';
+
+/** Post the current filter state to the extension for persistence. */
+function saveFilterState(): void {
+    vscode.postMessage({ type: 'saveFilterState', groupBy, showTodoOnly, waitingOnly });
+}
 
 // Tasks that have just been toggled: keep them visible for 1 s while the
 // extension round-trip completes (so they don't vanish immediately).
@@ -58,6 +73,17 @@ const GROUP_BY_LABELS: Record<GroupBy, string> = {
     page: 'Page',
     priority: 'Priority',
     dueDate: 'Due Date',
+    completionDate: 'Completion Date',
+};
+
+const COMPLETION_BUCKET_ORDER = ['today', 'this-week', 'earlier', 'no-date'] as const;
+type CompletionBucket = typeof COMPLETION_BUCKET_ORDER[number];
+
+const COMPLETION_BUCKET_LABELS: Record<CompletionBucket, string> = {
+    today: 'Completed Today',
+    'this-week': 'Completed This Week',
+    earlier: 'Completed Earlier',
+    'no-date': 'No Completion Date',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -84,6 +110,14 @@ function dueDateBucket(isoDate: string | null): DueBucket {
     if (diff === 0) { return 'today'; }
     if (diff <= 7) { return 'this-week'; }
     return 'later';
+}
+
+function completionDateBucket(isoDate: string | null): CompletionBucket {
+    if (!isoDate) { return 'no-date'; }
+    const diff = daysDiff(isoDate);
+    if (diff === 0) { return 'today'; }
+    if (diff > -7) { return 'this-week'; }
+    return 'earlier';
 }
 
 function getFilteredTasks(): TaskViewItem[] {
@@ -129,6 +163,11 @@ function buildDueDateBadge(dueDate: string | null): string {
     return `<span class="badge ${cls}">${esc(dueDate)}</span>`;
 }
 
+function buildCompletionDateBadge(completionDate: string | null): string {
+    if (!completionDate) { return ''; }
+    return `<span class="badge badge-completion">${esc(completionDate)}</span>`;
+}
+
 function buildTask(task: TaskViewItem, showPage = false): string {
     const isPending = pendingToggle.has(`${task.pagePath}:${task.line}`);
     const isDone = task.done || isPending;
@@ -138,7 +177,8 @@ function buildTask(task: TaskViewItem, showPage = false): string {
         : '';
     const badges = buildPriorityBadge(task.priority)
         + buildWaitingBadge(task.waiting)
-        + buildDueDateBadge(task.dueDate);
+        + buildDueDateBadge(task.dueDate)
+        + buildCompletionDateBadge(task.completionDate);
 
     return `<div class="task-row${isDone ? ' task-done' : ''}"
          data-page-path="${esc(task.pagePath)}"
@@ -234,6 +274,26 @@ function renderByDueDate(tasks: TaskViewItem[]): string {
     }).join('');
 }
 
+function renderByCompletionDate(tasks: TaskViewItem[]): string {
+    const groups = new Map<CompletionBucket, TaskViewItem[]>(
+        COMPLETION_BUCKET_ORDER.map(b => [b, []]),
+    );
+    for (const t of tasks) {
+        groups.get(completionDateBucket(t.completionDate))!.push(t);
+    }
+    return COMPLETION_BUCKET_ORDER.map(bucket => {
+        const groupTasks = groups.get(bucket)!;
+        if (groupTasks.length === 0) { return ''; }
+        groupTasks.sort((a, b) => {
+            const da = a.completionDate ?? '0000-00-00';
+            const db = b.completionDate ?? '0000-00-00';
+            if (da !== db) { return db.localeCompare(da); } // most recent first
+            return a.pageTitle.localeCompare(b.pageTitle, undefined, { sensitivity: 'base' });
+        });
+        return buildGroup(COMPLETION_BUCKET_LABELS[bucket], groupTasks, true);
+    }).join('');
+}
+
 // ── Task list helpers ─────────────────────────────────────────────────────────
 
 function buildTaskListHtml(): string {
@@ -244,6 +304,7 @@ function buildTaskListHtml(): string {
     switch (groupBy) {
         case 'priority': return renderByPriority(tasks);
         case 'dueDate': return renderByDueDate(tasks);
+        case 'completionDate': return renderByCompletionDate(tasks);
         default: return renderByPageImpl(tasks);
     }
 }
@@ -364,6 +425,7 @@ function render(): void {
     app.querySelectorAll<HTMLButtonElement>('[data-groupby]').forEach(btn => {
         btn.addEventListener('click', () => {
             groupBy = btn.dataset.groupby as GroupBy;
+            saveFilterState();
             render();
         });
     });
@@ -371,13 +433,14 @@ function render(): void {
     // Filter toggles — full render needed (pill active state may change)
     document.getElementById('chk-todo-only')?.addEventListener('change', e => {
         showTodoOnly = (e.target as HTMLInputElement).checked;
+        saveFilterState();
         refreshTaskList();
     });
     document.getElementById('chk-waiting-only')?.addEventListener('change', e => {
         waitingOnly = (e.target as HTMLInputElement).checked;
+        saveFilterState();
         refreshTaskList();
     });
-
     // Page filter — only refresh task list so the input keeps focus
     document.getElementById('page-filter')?.addEventListener('input', e => {
         pageFilter = (e.target as HTMLInputElement).value;
