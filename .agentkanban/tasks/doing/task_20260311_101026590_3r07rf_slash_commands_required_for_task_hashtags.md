@@ -1,9 +1,9 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-11T10:10:32.336Z
+updated: 2026-03-11T11:38:18.309Z
 priority: high
-sortOrder: 4
+sortOrder: 3
 ---
 
 ## Conversation
@@ -366,4 +366,34 @@ Confirm or raise any objections before I implement.
 
 Build verified clean.
 
+[user]
 
+Test feedback:
+
+If the user uses a priority slash command, it should replace any existing priority hashtag on the line. Only one priority can apply so this makes sense
+
+[agent]
+
+## Plan — Replace existing priority tag
+
+### Analysis
+
+`insertTagAtTaskStart` currently always inserts. For priority tags (`#P\d+`) the correct behaviour is:
+- If the line already has a `#P\d+` token anywhere → **replace** it with the new tag
+- If not → insert at task start (after existing hashtags) as before
+
+Non-priority tags (`#W`, `#D-...`) are unaffected.
+
+### Changes — `DatePickerService.ts` only
+
+- Added `PRIORITY_TAG_RE = /^#P\d+$/` — detects whether the incoming tag is a priority
+- Added `EXISTING_PRIORITY_RE = /#P\d+/` — finds existing priority token on the line
+- `insertTagAtTaskStart` pre-computes per-cursor operations as either `'replace'` or `'insert'` mode:
+  - **replace**: `editBuilder.replace()` on the existing priority range; cursor restored accounting for `delta = newLen - oldLen`
+  - **insert**: unchanged from previous iteration
+
+## Implementation complete
+
+Build verified clean.
+
+[user]
