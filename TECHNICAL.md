@@ -103,6 +103,18 @@ This document explains the internal architecture, algorithms, and design decisio
   - [JournalService](#journalservice)
   - [Command flow](#command-flow)
   - [Template system](#template-system)
+- [Kanban board](#kanban-board)
+  - [File structure](#file-structure)
+  - [KanbanTypes.ts](#kanbantypests)
+  - [KanbanStore.ts](#kanbanStorets)
+  - [KanbanBoardConfigStore.ts](#kanbanboardconfigStorets)
+  - [KanbanEditorPanel.ts](#kanbaneditorpanelts)
+  - [KanbanSidebarProvider.ts](#kanbansidebarproviderts)
+  - [Webview — kanban.ts](#webview--kanbants)
+  - [Webview — kanban-sidebar.ts](#webview--kanban-sidebarts)
+  - [Build pipeline](#build-pipeline-2)
+  - [Extension commands](#extension-commands)
+  - [Activation and board selection](#activation-and-board-selection)
 - [Pro licence](#pro-licence)
   - [LicenceService](#licenceservice)
   - [LicenceActivationService](#licenceactivationservice)
@@ -636,6 +648,269 @@ This is implemented via `getPathDistance()` in `PathUtils.ts`.
 notes      ↔ notes      → 0 (same directory)
 notes      ↔ notes/sub  → 1 (one hop down)
 notes/a    ↔ notes/b    → 2 (one up, one down)
+
+## Kanban board
+
+The kanban board feature provides a visual task management UI within VS Code. It consists of a sidebar summary panel and a full-screen editor panel, with all data stored as plain YAML files inside a `kanban/` directory in the workspace root.
+
+### File structure
+
+```
+kanban/
+  <board-slug>/
+    board.yaml                              ← BoardConfig (name, lanes, users, labels)
+    <lane-slug>/
+      card_YYYYMMDD_HHmmssfff_<id>_<slug>.yaml
+    assets/
+      <card-id>/
+        <filename>                          ← attached files
+```
+
+Board slugs and lane slugs are lowercased, with non-alphanumeric characters replaced by hyphens. The `assets/` directory is excluded from lane scanning. The `archive/` lane slug is reserved and excluded from the board config lanes list.
+
+### KanbanTypes.ts
+
+Defines shared types, constants, and pure helper functions used across all kanban modules.
+
+**Types:**
+
+| Type | Description |
+|---|---|
+| `Card` | A kanban card: `id`, `title`, `lane`, `created`, `updated`, `description`, `priority`, `assignee`, `labels`, `dueDate`, `sortOrder`, `entries`, `assets` |
+| `BoardConfig` | Board metadata: `name`, `lanes` (slugs), `users`, `labels` |
+| `CardEntry` | A timestamped log entry: `author?`, `date`, `text` |
+| `AssetMeta` | File attachment metadata: `filename`, `added`, `addedBy?` |
+| `Priority` | `'critical' \| 'high' \| 'medium' \| 'low' \| 'none'` |
+
+**Constants:**
+
+| Constant | Value | Notes |
+|---|---|---|
+| `DEFAULT_LANES` | `['todo', 'doing', 'done']` | Applied when creating a new board |
+| `PROTECTED_LANES` | `['todo', 'done']` | Cannot be removed or renamed |
+| `RESERVED_LANES` | `['archive']` | Excluded from lane scanning and config |
+| `ASSETS_DIR` | `'assets'` | Board-level asset directory name |
+| `IMAGE_EXTENSIONS` | `.png .jpg .jpeg .gif .webp .svg` | Rendered as thumbnails in the webview |
+
+**Helpers:** `slugifyBoard`, `slugifyLane`, `displayBoard`, `displayLane`, `isProtectedLane`, `isReservedLane`, `isImageFile`.
+
+### KanbanStore.ts
+
+Manages the in-memory card cache and YAML persistence for a single active board. Instantiated once in full mode and kept alive until `disposeFullMode()`.
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `selectBoard(slug)` | Sets the active board and calls `reload()` to load cards from disk |
+| `reload()` | Reads all lane directories under the current board, parsing `card_*.yaml` files into `Card` objects |
+| `getAll()` | Returns all in-memory cards as an array |
+| `get(id)` | Returns a single card by ID |
+| `save(card)` | Serialises the card to YAML, writes to `<board>/<lane>/<id>.yaml`, and fires `onDidChange` |
+| `moveCardToLane(id, newLane)` | Writes the card file to the new lane directory, deletes the old file, fires `onDidChange` |
+| `delete(id)` | Deletes the card YAML and its assets directory (`assets/<card-id>/`) recursively |
+| `createCard(title, lane)` | Constructs a new `Card` with a timestamped ID (`card_YYYYMMDD_HHmmssfff_<uuid>_<slug>`) |
+| `addAsset(cardId, sourceUri, addedBy?)` | Copies a file into `assets/<card-id>/`, appends `AssetMeta` to the card, saves |
+| `removeAsset(cardId, filename)` | Deletes the asset file and removes its `AssetMeta` entry from the card |
+| `listBoards()` | Scans `kanban/` for subdirectories and returns their names as slugs |
+
+**Events:** `onDidChange` — fired after any mutation (save, move, delete, reload). Both `KanbanEditorPanel` and `KanbanSidebarProvider` subscribe to resend their respective state.
+
+**Serialisation:** Cards are serialised as YAML using the `yaml` library. The `id` and `lane` fields are not stored in the file — they are derived from the filename and directory path on load. The `slug` field is populated from the filename suffix if absent from the YAML.
+
+### KanbanBoardConfigStore.ts
+
+Manages `board.yaml` for the active board and provides board lifecycle operations (create, rename, delete).
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `selectBoard(slug)` | Sets the active board and loads `board.yaml` into the in-memory `BoardConfig` |
+| `get()` | Returns the current `BoardConfig` |
+| `update(partial)` | Merges partial fields into the config, saves to `board.yaml`, fires `onDidChange` |
+| `createBoard(name)` | Creates the board directory, default lane subdirectories, `assets/` directory, and `board.yaml`; returns the new slug |
+| `renameBoard(oldSlug, newName)` | Renames the board directory via `vscode.workspace.fs.rename`, updates `board.yaml` with the new display name; if only the display name changes (same slug), updates `board.yaml` in place |
+| `deleteBoard(slug)` | Deletes the board directory recursively; clears in-memory state if the deleted board was active |
+| `listBoards()` | Scans `kanban/` for subdirectories |
+| `listBoardsWithNames()` | Reads each board's `board.yaml` to obtain display names; falls back to slug if `board.yaml` is absent |
+| `reconcileWithDirectories(dirs)` | Adds any lane directories not in `board.yaml` (handles boards created externally) |
+| `reconcileMetadata(cards)` | Adds unknown assignees/labels found in card files to the config |
+
+**Events:** `onDidChange` — same subscriber pattern as `KanbanStore`.
+
+### KanbanEditorPanel.ts
+
+A singleton `WebviewPanel` that renders the full board UI. The static `currentPanel` property holds the single active instance.
+
+#### Singleton lifecycle
+
+`KanbanEditorPanel.createOrShow()` either reveals the existing panel or creates a new one in the active editor column. `revive()` is called by VS Code on window reload to restore a serialised panel. On dispose, `currentPanel` is cleared.
+
+A **pending message queue** (`_pendingMessages`) buffers `stateUpdate` and `openCreateModal` messages sent before the webview signals `ready`. On receiving `ready`, the queue is flushed in order.
+
+#### Webview HTML
+
+The panel HTML loads `dist/webview/kanban.js` and `dist/webview/kanban.css` via `webview.asWebviewUri`. The Content Security Policy restricts sources to `${webview.cspSource}` only. The `localResourceRoots` includes both `dist/webview/` and the `kanban/` directory (so asset images can be served via webview URIs).
+
+#### `_sendState()`
+
+Called after every store change event. Sends a `stateUpdate` message with:
+
+```ts
+{
+  type: 'stateUpdate',
+  state: {
+    cards: Card[],           // sorted by sortOrder, then created timestamp
+    config: BoardConfig,
+    boardSlug: string,
+    assetBaseUri: string,    // webview URI for kanban/<board>/assets/
+  }
+}
+```
+
+#### Editor panel message protocol
+
+Messages sent from the webview to the extension:
+
+| Message type | Payload fields | Handler action |
+|---|---|---|
+| `ready` | — | Flush pending-message queue, send current state |
+| `selectBoard` | — | Executes `as-notes.selectKanbanBoard` command |
+| `moveCard` | `cardId`, `lane`, `sortOrder?` | Moves card to new lane (or re-saves if same lane) with updated sort order |
+| `createCard` | `title`, `lane`, `priority?`, `assignee?`, `labels?`, `dueDate?`, `description?` | Creates and saves a new card at the end of the target lane |
+| `deleteCard` | `cardId` | Deletes card and assets |
+| `updateCardMeta` | `cardId`, `priority?`, `assignee?`, `labels?`, `dueDate?`, `description?`, `lane?`, `pendingEntry?`, `pendingEntryAuthor?` | Updates card metadata; auto-saves pending entry text if present; moves to new lane if `lane` changed |
+| `addEntry` | `cardId`, `text`, `author?` | Appends a timestamped entry to the card |
+| `addLane` | — | Prompts for lane name via `showInputBox`, validates against reserved/duplicate names, appends to config |
+| `removeLane` | `laneId` | Rejects protected lanes; confirms if cards present; deletes cards and removes lane from config |
+| `renameLane` | `laneId` | Prompts for new name; renames lane directory and updates config |
+| `moveLane` | `sourceLaneId`, `targetLaneId` | Reorders lanes in config by moving source to target index |
+| `archiveCard` | `cardId` | Moves card to the `archive` lane |
+| `addUser` | `name` | Adds user to config |
+| `addLabel` | `name` | Adds label to config |
+| `addAsset` | `cardId` | Opens a file picker, then calls `_checkSizeAndAddAsset` for each selected file |
+| `removeAsset` | `cardId`, `filename` | Removes asset file and metadata |
+| `openAsset` | `cardId`, `filename` | Opens the asset file in VS Code with `vscode.open` |
+| `openCardFile` | `cardId` | Opens the card's YAML file in the active editor column |
+
+Messages sent from the extension to the webview:
+
+| Message type | Description |
+|---|---|
+| `stateUpdate` | Full board state (see `_sendState()` above) |
+| `openCreateModal` | Instructs the webview to open the create-card modal (sent by `triggerCreateModal()`) |
+
+#### Asset size warning
+
+Before adding an asset, `_checkSizeAndAddAsset()` reads `as-notes.kanbanAssetSizeWarningMB` (default: 10) from workspace configuration. If the file exceeds the threshold, a modal warning is shown. A threshold of `0` disables the check.
+
+### KanbanSidebarProvider.ts
+
+Implements `vscode.WebviewViewProvider` for the `as-notes-kanban` sidebar view. The sidebar is a compact panel showing the current board name, a board-switcher autocomplete, and buttons to open the board, create a card, or manage boards.
+
+#### State shape
+
+`_sendState()` sends:
+
+```ts
+{
+  type: 'stateUpdate',
+  state: {
+    boardSlug: string,
+    boardName: string,
+    laneSummary: { slug: string; display: string; count: number }[],
+    boardCount: number,
+    boardList: { slug: string; name: string }[],  // from listBoardsWithNames()
+  }
+}
+```
+
+`boardList` is used to populate the board-switcher autocomplete with display names (not just slugs).
+
+#### Sidebar message protocol
+
+| Message type | Payload | Action |
+|---|---|---|
+| `ready` | — | Send current state |
+| `openBoard` | — | `as-notes.openKanbanBoard` |
+| `newCard` | — | `as-notes.newKanbanCard` |
+| `switchBoard` | `slug` | `as-notes.switchKanbanBoard` with the slug |
+| `selectBoard` | — | `as-notes.selectKanbanBoard` |
+| `createBoard` | `name` | `as-notes.createKanbanBoard` (name passed as arg) |
+| `deleteBoard` | — | `as-notes.deleteKanbanBoard` |
+| `renameBoard` | `newName` | `as-notes.renameKanbanBoard` (name passed as arg) |
+
+The sidebar uses **inline CSS** (injected directly into the webview HTML string) rather than an external stylesheet, because sidebar webviews do not load external CSS files via `localResourceRoots` as reliably as panel webviews.
+
+### Webview — kanban.ts
+
+The editor panel webview (`src/webview/kanban.ts`). Compiled to `dist/webview/kanban.js` by esbuild.
+
+**State management:** The webview is stateless between messages. On each `stateUpdate`, the handler calls `closeModal()` to dismiss any open card modal, then re-renders the entire board from the received state object. This prevents stale modal state after board switches or external file changes.
+
+**Card rendering:** Each lane column is rendered with its cards sorted by `sortOrder` (falling back to the `created` timestamp). Cards show priority badge, title, assignee, labels, and due date.
+
+**Drag and drop:**
+- Cards are draggable between lanes. On drop, a `moveCard` message is sent with the new lane and an interpolated `sortOrder` (midpoint between neighbours, or ±1 at boundaries).
+- Files can be dropped onto the asset drop zone in the card modal; a `addAsset` message is sent for each dropped file (assets handled via the extension's file picker dialog, not the webview directly — drag events trigger the extension-side file picker).
+
+**Card modal:** Opened by `openCreateModal` (for new cards) or by clicking a card (for editing). The modal contains all card fields with live autocomplete for assignee (from `config.users`) and labels (from `config.labels`). Adding a new assignee/label they didn't previously exist in config sends `addUser`/`addLabel` to persist it.
+
+**Entries:** Displayed in the card modal as a reverse-chronological list. Submitting the entry form sends `addEntry`.
+
+**Asset display:** Asset thumbnails are rendered using the `assetBaseUri` (a webview URI for `kanban/<board>/assets/`) provided in the state. Images are shown inline; other file types show as named links.
+
+### Webview — kanban-sidebar.ts
+
+The sidebar webview (`src/webview/kanban-sidebar.ts`). Compiled to `dist/webview/kanban-sidebar.js`.
+
+**Board header:** Shows the current board display name with **Rename** and **Delete** buttons.
+
+**Board switcher:** A text input with a custom autocomplete dropdown. The dropdown is populated from `state.boardList` (display name + slug). Filtering matches on both display name and slug (case-insensitive). Selecting an entry sends `switchBoard` with the slug.
+
+**New Board button:** A secondary-styled button that sends `createBoard` with the current input text if non-empty, or prompts the extension to open a name input.
+
+### Build pipeline
+
+The kanban webview bundle is built alongside the other webview bundles in `build.mjs`:
+
+```js
+// Kanban editor panel
+{ entryPoint: 'src/webview/kanban.ts', outfile: 'dist/webview/kanban.js' }
+// Kanban sidebar
+{ entryPoint: 'src/webview/kanban-sidebar.ts', outfile: 'dist/webview/kanban-sidebar.js' }
+```
+
+`kanban.css` is processed by Tailwind CSS v4 (the `@tailwindcss/vite`-compatible build pipeline) and output to `dist/webview/kanban.css`. It uses VS Code CSS variables (`--vscode-*`) for theme integration alongside Tailwind utility classes and custom component styles for lanes, cards, modals, and entries.
+
+### Extension commands
+
+| Command ID | Registered | Description |
+|---|---|---|
+| `as-notes.openKanbanBoard` | Full mode | `KanbanEditorPanel.createOrShow()` |
+| `as-notes.newKanbanCard` | Full mode | `createOrShow()` then `triggerCreateModal()` |
+| `as-notes.switchKanbanBoard` | Full mode | Selects board by slug, opens editor automatically |
+| `as-notes.selectKanbanBoard` | Full mode | Quick-pick from board slug list |
+| `as-notes.createKanbanBoard` | Full mode | `showInputBox` → `createBoard()` → select new board |
+| `as-notes.renameKanbanBoard` | Full mode | `showInputBox` → `renameBoard()` → re-select board |
+| `as-notes.deleteKanbanBoard` | Full mode | Confirmation modal → `deleteBoard()` → select next board |
+
+All commands are registered as passive-mode stubs in `FULL_MODE_COMMAND_IDS` and replaced with real implementations when `enterFullMode()` runs.
+
+### Activation and board selection
+
+On `enterFullMode()`, after the stores are constructed:
+
+1. `kanbanBoardConfigStore.listBoards()` is called to discover existing boards.
+2. If any boards exist, the first one is selected in both `kanbanStore` and `kanbanBoardConfigStore`.
+3. This fires `onDidChange` on both stores, which triggers `_sendState()` in the sidebar and (if the editor panel is open) in the editor panel.
+
+The kanban root URI is always `<workspaceRoot>/kanban`. The `kanban/` directory is added to `.gitignore` via the initialisation script, but the directory itself is not created until the first board is created.
+
+### `.gitignore` entry
+
+The kanban data directory is intentionally **not** excluded from git. The initialisation script (`initWorkspace`) adds a comment block to `.gitignore` for the index database and logs, but `kanban/` is left out so that boards and cards are version-controlled by default. Users can add `kanban/` to `.gitignore` manually if they prefer not to commit their boards.
 .          ↔ deep/nested → 2 (two hops down from root)
 ```
 
