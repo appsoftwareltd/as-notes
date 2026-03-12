@@ -207,7 +207,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
         );
         const onCodeFence = editor.selections.some(
-            sel => isStandaloneCodeFenceOpen(editor.document.lineAt(sel.active.line).text),
+            sel => {
+                const text = editor.document.lineAt(sel.active.line).text;
+                return isStandaloneCodeFenceOpen(text) || isClosingCodeFenceLine(text);
+            },
         );
         vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', onBullet);
         vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', onCodeFence);

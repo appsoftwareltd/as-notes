@@ -802,6 +802,51 @@ describe('isCodeFenceUnbalanced', () => {
         expect(isCodeFenceUnbalanced(lines, 5)).toBe(false);
         expect(isCodeFenceUnbalanced(lines, 8)).toBe(true);
     });
+
+    it('returns true for bare ``` immediately after a language+bare balanced pair', () => {
+        // User scenario: ```javascript / ``` (balanced pair), then bare ``` typed next
+        const lines = [
+            '```javascript',
+            '',
+            '```',
+            '```',   // line 3 — unbalanced, should get completion
+        ];
+        expect(isCodeFenceUnbalanced(lines, 3)).toBe(true);
+    });
+
+    it('returns true for bare ``` after a balanced pair with content', () => {
+        const lines = [
+            '```javascript',
+            'var i = 0',
+            '```',
+            '',
+            '```',   // line 4 — unbalanced
+        ];
+        expect(isCodeFenceUnbalanced(lines, 4)).toBe(true);
+    });
+
+    it('returns false for bare ``` that closes a standalone bare pair', () => {
+        // Two bare fences forming a complete pair — second is balanced
+        const lines = [
+            '```',
+            'content',
+            '```',   // line 2 — balanced (closes the pair)
+        ];
+        expect(isCodeFenceUnbalanced(lines, 2)).toBe(false);
+    });
+
+    it('returns true for bare ``` after two completed pairs', () => {
+        const lines = [
+            '```javascript',
+            'code',
+            '```',
+            '```javascript',
+            'code',
+            '```',
+            '```',   // line 6 — unbalanced, should get completion
+        ];
+        expect(isCodeFenceUnbalanced(lines, 6)).toBe(true);
+    });
 });
 
 // ── getMaxOutlinerIndent ───────────────────────────────────────────────────

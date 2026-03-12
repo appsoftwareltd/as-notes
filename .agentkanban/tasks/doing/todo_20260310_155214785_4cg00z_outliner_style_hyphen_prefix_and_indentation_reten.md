@@ -60,3 +60,9 @@ task: task_20260310_155214785_4cg00z_outliner_style_hyphen_prefix_and_indentatio
 - [x] Update outlinerIndent handler with indent guard
 - [x] Build and run all tests (597 passing, 14 files)
 - [x] Update TECHNICAL.md
+
+### Iteration 8 — Bare fence after balanced pair + context key fix
+
+- [x] Add 4 tests for bare ``` after balanced pair scenarios (all pass — algorithm correct)
+- [x] Fix syncOutlinerLineContext to also check isClosingCodeFenceLine
+- [x] Build and run all tests (601 passing, 14 files)

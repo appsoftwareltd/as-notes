@@ -984,4 +984,31 @@ Updated `outlinerIndent` handler: checks all selections — only indents if ALL 
 [user]
 
 
+I found a test issue:
+
+In non outliner bullet contexts - outliner mode on and off, subsequent code bock backtick sets produced the wrong behaviour: 
+
+```javascript
+
+```
+``` <- on enter nothing happened
+``` <- manual typing
+
+``` <- automatic completion (unbalanced)
+
+
+Create additional failing tests and pass them
+
+[agent]
+
+### Iteration 8 — Bare fence after balanced pair tests + context key fix
+
+Added 4 new `isCodeFenceUnbalanced` tests mirroring the user's scenario (bare ``` after language+bare balanced pair, bare ``` after pair with content, two completed pairs then bare, bare ``` closing a pair). All 4 tests pass — the hybrid algorithm from iteration 7 already handles these correctly.
+
+Additionally fixed an outstanding issue from iteration 6: `syncOutlinerLineContext` only checked `isStandaloneCodeFenceOpen` for the `onCodeFenceLine` context key. Now also checks `isClosingCodeFenceLine`, ensuring the keybinding fires for all standalone code fence lines (opening + closing). This was a planned change that was inadvertently missed.
+
+**Test results:** 601 passing, 14 files, build clean.
+
+[user]
+
 
