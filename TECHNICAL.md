@@ -129,6 +129,8 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Context keys](#context-keys)
   - [Enter — bullet continuation](#enter--bullet-continuation)
   - [Enter — code fence](#enter--code-fence)
+  - [Enter — code fence completion](#enter--code-fence-completion)
+    - [Fence balance detection](#fence-balance-detection)
   - [Tab / Shift+Tab — indent and outdent](#tab--shifttab--indent-and-outdent)
   - [Paste — multi-line bullet conversion](#paste--multi-line-bullet-conversion)
   - [Todo toggle in outliner mode](#todo-toggle-in-outliner-mode)
