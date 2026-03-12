@@ -121,6 +121,30 @@
             {
                 "command": "as-notes.toggleOutlinerMode",
                 "title": "AS Notes: Toggle Outliner Mode"
+            },
+            {
+                "command": "as-notes.openKanbanBoard",
+                "title": "AS Notes: Open Kanban Board"
+            },
+            {
+                "command": "as-notes.newKanbanCard",
+                "title": "AS Notes: New Kanban Card"
+            },
+            {
+                "command": "as-notes.selectKanbanBoard",
+                "title": "AS Notes: Select Kanban Board"
+            },
+            {
+                "command": "as-notes.createKanbanBoard",
+                "title": "AS Notes: Create Kanban Board"
+            },
+            {
+                "command": "as-notes.deleteKanbanBoard",
+                "title": "AS Notes: Delete Kanban Board"
+            },
+            {
+                "command": "as-notes.renameKanbanBoard",
+                "title": "AS Notes: Rename Kanban Board"
             }
         ],
         "keybindings": [
@@ -214,6 +238,12 @@
                     "default": false,
                     "scope": "window",
                     "description": "Enable Outliner Mode for markdown files. In outliner mode, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents the bullet line, and Shift+Tab outdents it. Only applies to lines beginning with `- `."
+                },
+                "as-notes.kanbanAssetSizeWarningMB": {
+                    "type": "number",
+                    "default": 10,
+                    "minimum": 0,
+                    "description": "Warn when attaching files larger than this size (in MB) to a Kanban card. Set to 0 to disable the warning."
                 }
             }
         },
@@ -237,6 +267,11 @@
                     "id": "as-notes-search",
                     "name": "Search",
                     "initialSize": 1
+                },
+                {
+                    "type": "webview",
+                    "id": "as-notes-kanban",
+                    "name": "Kanban"
                 },
                 {
                     "type": "webview",
@@ -317,6 +352,7 @@
     },
     "dependencies": {
         "ignore": "^7.0.5",
-        "sql.js": "^1.14.0"
+        "sql.js": "^1.14.0",
+        "yaml": "^2.7.1"
     }
 }

@@ -95,17 +95,17 @@ A task file name exists in the context — converse and collaborate **only** in 
 
 Iterative cycle: **plan** → **todo** → **implement**
 
-Use `@kanban /plan`, `@kanban /todo`, or `@kanban /implement` in chat to refresh context and keep instructions prominent in long conversations. Combine verbs with `#` tags (e.g. `@kanban /todo #implement`). Then type **go** to begin.
+Use `@kanban /refresh` in chat to re-inject context and keep instructions prominent in long conversations. Then type **plan**, **todo**, **implement** (or a combination) to proceed.
 
-### Verbs
+In a **worktree workspace**, AGENTS.md permanently contains the task reference — context is always available without `/task` or `/refresh`.
 
-Verbs can be combined (e.g. `@kanban /todo #implement`). Without `implement`, **never write code or create files**.
+### Phases
 
-#### `plan`
-Discuss, analyse, and plan the task collaboratively. Read the conversation, reason about requirements, explore approaches, record decisions. Append responses using `[agent]` markers. **No code, no files, no TODOs** unless combined with `implement`.
+#### plan
+Discuss, analyse, and plan the task collaboratively. Read the conversation, reason about requirements, explore approaches, record decisions. Append responses using `[agent]` markers. **No code, no files, no TODOs** during this phase.
 
-#### `todo`
-Create/update the TODO checklist based on the planning conversation. Read the task conversation for context. Write clear, actionable `- [ ]` items. **No implementation** unless combined with `implement`.
+#### todo
+Create/update the TODO checklist based on the planning conversation. Read the task conversation for context. Write clear, actionable `- [ ]` items. **No implementation** during this phase unless the user explicitly asks.
 
-#### `implement`
+#### implement
 Implement per the plan and TODOs. Read both task and todo files. Write clean, robust code. Check off TODO items as completed. Append a summary to the conversation. **Do not deviate** from the agreed plan without noting why.
