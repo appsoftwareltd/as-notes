@@ -4,6 +4,11 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.2.0]  - 2026-03-12
+
+- Added Kanban boards
+- Improved editor fenced codeblock completion behaviours in and out of outliner mode / context 
+
 ## [2.1.1]  - 2026-03-11
 
 - Wikilink / alias search section in side bar

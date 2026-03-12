@@ -33,7 +33,7 @@ import { SlashCommandProvider } from './SlashCommandProvider.js';
 import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
-import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, formatOutlinerPaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, getMaxOutlinerIndent } from './OutlinerService.js';
 import { KanbanStore } from './KanbanStore.js';
 import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
@@ -217,58 +217,192 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         }),
     );
 
-    // Track whether the active cursor is on a bullet line
-    const syncOnBulletLineContext = (editor: vscode.TextEditor | undefined) => {
+    // Track whether the active cursor is on a bullet line or a code fence line
+    const syncOutlinerLineContext = (editor: vscode.TextEditor | undefined) => {
         if (!editor || editor.document.languageId !== 'markdown') {
             vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', false);
+            vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', false);
             return;
         }
-        // True if ANY cursor's active line is a bullet line (consistent with multi-cursor outliner behaviour)
         const onBullet = editor.selections.some(
             sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
         );
+        const onCodeFence = editor.selections.some(
+            sel => {
+                const text = editor.document.lineAt(sel.active.line).text;
+                return isStandaloneCodeFenceOpen(text) || isClosingCodeFenceLine(text);
+            },
+        );
         vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', onBullet);
+        vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', onCodeFence);
     };
 
     context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorSelection((e) => syncOnBulletLineContext(e.textEditor)),
+        vscode.window.onDidChangeTextEditorSelection((e) => syncOutlinerLineContext(e.textEditor)),
     );
     context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor((editor) => syncOnBulletLineContext(editor)),
+        vscode.window.onDidChangeActiveTextEditor((editor) => syncOutlinerLineContext(editor)),
     );
     // Initialise for currently active editor
-    syncOnBulletLineContext(vscode.window.activeTextEditor);
+    syncOutlinerLineContext(vscode.window.activeTextEditor);
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerEnter', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
+
+            // Track which selections triggered code fence skeleton insertion so we
+            // can reposition cursors to the blank content line after the edit.
+            let hasCodeFenceSkeleton = false;
+
             editor.edit(editBuilder => {
                 for (const selection of editor.selections) {
                     const lineText = editor.document.lineAt(selection.active.line).text;
-                    const insertText = getOutlinerEnterInsert(lineText);
-                    // Delete from cursor to end of line, then insert the new bullet prefix.
-                    // This preserves any text before the cursor on the current line.
                     const lineEnd = new vscode.Position(
                         selection.active.line,
                         editor.document.lineAt(selection.active.line).range.end.character,
                     );
+
+                    // 1. Bullet line ending with opening code fence → open code block
+                    if (isCodeFenceOpen(lineText)) {
+                        hasCodeFenceSkeleton = true;
+                        editBuilder.insert(lineEnd, getCodeFenceEnterInsert(lineText));
+                        continue;
+                    }
+
+                    // 2. Bullet line → new bullet at same indentation
+                    const insertText = getOutlinerEnterInsert(lineText);
                     editBuilder.delete(new vscode.Range(selection.active, lineEnd));
                     editBuilder.insert(selection.active, insertText);
                 }
+            }).then(success => {
+                if (!success || !hasCodeFenceSkeleton) { return; }
+                // After code fence skeleton insertion, VS Code places the cursor at
+                // the end of the closing ```. Reposition it to the blank line inside
+                // the fence (one line above the closing ```).
+                const newSelections: vscode.Selection[] = editor.selections.map(sel => {
+                    const closingLine = sel.active.line;
+                    const contentLine = closingLine > 0 ? closingLine - 1 : closingLine;
+                    const contentLineLength = editor.document.lineAt(contentLine).text.length;
+                    const pos = new vscode.Position(contentLine, contentLineLength);
+                    return new vscode.Selection(pos, pos);
+                });
+                editor.selections = newSelections;
+            });
+        }),
+    );
+
+    // Code fence Enter — works in all markdown files regardless of outliner mode.
+    // On standalone opening fences: inserts closing skeleton only when unbalanced.
+    // On closing fences in outliner mode: inserts a new bullet line.
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.codeFenceEnter', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            const allLines = editor.document.getText().split('\n');
+            const outlinerMode = vscode.workspace.getConfiguration('as-notes').get<boolean>('outlinerMode', false);
+            let hasCodeFenceSkeleton = false;
+
+            editor.edit(editBuilder => {
+                for (const selection of editor.selections) {
+                    const lineText = editor.document.lineAt(selection.active.line).text;
+                    const lineEnd = new vscode.Position(
+                        selection.active.line,
+                        editor.document.lineAt(selection.active.line).range.end.character,
+                    );
+
+                    // Closing fence of a bullet code block (checked first to avoid
+                    // misidentifying it as an unbalanced standalone opener)
+                    if (isClosingCodeFenceLine(lineText)) {
+                        const bulletResult = getClosingFenceBulletInsert(allLines, selection.active.line);
+                        if (bulletResult !== null) {
+                            if (outlinerMode) {
+                                editBuilder.insert(lineEnd, bulletResult);
+                            } else {
+                                editBuilder.insert(lineEnd, '\n');
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Standalone fence (opening with language, or bare ```)
+                    if (isStandaloneCodeFenceOpen(lineText)) {
+                        if (isCodeFenceUnbalanced(allLines, selection.active.line)) {
+                            hasCodeFenceSkeleton = true;
+                            editBuilder.insert(lineEnd, getStandaloneCodeFenceEnterInsert(lineText));
+                        } else {
+                            editBuilder.insert(lineEnd, '\n');
+                        }
+                        continue;
+                    }
+                }
+            }).then(success => {
+                if (!success || !hasCodeFenceSkeleton) { return; }
+                const newSelections: vscode.Selection[] = editor.selections.map(sel => {
+                    const closingLine = sel.active.line;
+                    const contentLine = closingLine > 0 ? closingLine - 1 : closingLine;
+                    const contentLineLength = editor.document.lineAt(contentLine).text.length;
+                    const pos = new vscode.Position(contentLine, contentLineLength);
+                    return new vscode.Selection(pos, pos);
+                });
+                editor.selections = newSelections;
             });
         }),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerIndent', () => {
-            vscode.commands.executeCommand('editor.action.indentLines');
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            const allLines = editor.document.getText().split('\n');
+            const tabSize = editor.options.tabSize as number ?? 4;
+
+            // Only indent if every selection's bullet line would stay within
+            // one tab stop of the nearest bullet above it.
+            const allAllowed = editor.selections.every(sel => {
+                const lineText = editor.document.lineAt(sel.active.line).text;
+                const currentIndent = (lineText.match(/^(\s*)/)?.[1]?.length) ?? 0;
+                const maxIndent = getMaxOutlinerIndent(allLines, sel.active.line, tabSize);
+                return currentIndent + tabSize <= maxIndent;
+            });
+
+            if (allAllowed) {
+                vscode.commands.executeCommand('editor.action.indentLines');
+            }
         }),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerOutdent', () => {
             vscode.commands.executeCommand('editor.action.outdentLines');
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerPaste', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const clipboardText = await vscode.env.clipboard.readText();
+            if (!clipboardText) { return; }
+
+            // Check if any selection is on a bullet line with multi-line clipboard
+            const sel = editor.selection;
+            const lineText = editor.document.lineAt(sel.active.line).text;
+            const result = formatOutlinerPaste(lineText, sel.active.character, clipboardText);
+
+            if (!result) {
+                // Single-line or empty paste: fall through to default paste
+                vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+                return;
+            }
+
+            // Replace the entire line with the formatted multi-line bullets
+            const line = editor.document.lineAt(sel.active.line);
+            editor.edit(editBuilder => {
+                editBuilder.replace(line.range, result.text);
+            });
         }),
     );
 

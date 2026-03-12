@@ -124,6 +124,14 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Task hashtag insertion — TaskHashtagService](#task-hashtag-insertion--taskhashtagservice)
   - [Registration](#registration)
   - [Markdown table commands (Pro)](#markdown-table-commands-pro)
+- [Outliner mode](#outliner-mode)
+  - [OutlinerService](#outlinerservice)
+  - [Context keys](#context-keys)
+  - [Enter — bullet continuation](#enter--bullet-continuation)
+  - [Enter — code fence](#enter--code-fence)
+  - [Tab / Shift+Tab — indent and outdent](#tab--shifttab--indent-and-outdent)
+  - [Paste — multi-line bullet conversion](#paste--multi-line-bullet-conversion)
+  - [Todo toggle in outliner mode](#todo-toggle-in-outliner-mode)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
 - [Known limitations and future considerations](#known-limitations-and-future-considerations)
@@ -2067,6 +2075,135 @@ This is implemented in two places:
 - `sanitiseFileName()` in `WikilinkRenameTracker.ts` (standalone function for rename logic that operates on raw strings rather than `Wikilink` instances)
 
 Both use the same regex pattern. If the sanitisation rules change, both must be updated.
+
+---
+
+## Outliner mode
+
+Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a bullet-first outliner. It only affects lines beginning with `- ` (hyphen-space) — all other lines retain normal editor behaviour.
+
+### OutlinerService
+
+`vs-code-extension/src/OutlinerService.ts` contains all pure logic (no VS Code dependencies), making it fully unit-testable. The VS Code wiring lives in `extension.ts`.
+
+**Exports:**
+
+| Function | Purpose |
+|---|---|
+| `isOnBulletLine(lineText)` | Returns `true` for lines matching `/^\s*- /` |
+| `getOutlinerEnterInsert(lineText)` | Returns the `\n{indent}- ` or `\n{indent}- [ ] ` string to insert on Enter |
+| `isCodeFenceOpen(lineText)` | Returns `true` when a bullet line ends with `` ``` `` (optionally + language) |
+| `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
+| `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
+| `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
+| `isClosingCodeFenceLine(lineText)` | Returns `true` for non-bullet bare `` ``` `` lines (no language identifier) |
+| `getClosingFenceBulletInsert(lines, lineIndex)` | Scans upward from closing fence; returns new bullet insert if inside a bullet code block, else `null` |
+| `isCodeFenceUnbalanced(lines, lineIndex)` | Returns `true` when the standalone fence at `lineIndex` has no matching pair at the same indent |
+| `getMaxOutlinerIndent(lines, lineIndex, tabSize)` | Returns the maximum indent allowed for a bullet — at most one tab stop past the nearest bullet above |
+| `formatOutlinerPaste(lineText, cursorChar, clipboardText)` | Formats multi-line clipboard text as indented bullets |
+| `toggleOutlinerTodoLine(lineText)` | 3-state cycle: plain bullet → unchecked → done → plain bullet |
+
+### Context keys
+
+Three context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
+
+- **`as-notes.outlinerMode`** — mirrors the `as-notes.outlinerMode` setting value. Synced on activation and on `onDidChangeConfiguration`.
+- **`as-notes.onBulletLine`** — `true` when any cursor's active line matches `/^\s*- /`. Updated on `onDidChangeTextEditorSelection` and `onDidChangeActiveTextEditor`.
+- **`as-notes.onCodeFenceLine`** — `true` when any cursor's active line is a non-bullet code fence (opening or closing). Updated alongside `onBulletLine`.
+
+This combination allows keybindings to fire only when in outliner mode AND on a relevant line, preserving normal behaviour elsewhere.
+
+### Enter — bullet continuation
+
+Keybinding: `Enter` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible`.
+
+Command `as-notes.outlinerEnter` for each cursor (in priority order):
+1. **Bullet code fence open** — `isCodeFenceOpen` returns `true`: inserts code block skeleton indented +2 past bullet (see below).
+2. **Bullet line** — deletes from cursor to end of line, inserts `getOutlinerEnterInsert(lineText)`. Text after cursor is pushed to the new bullet.
+
+Standalone and closing code fences are handled by the separate `codeFenceEnter` command (see below).
+
+### Enter — code fence
+
+When a bullet line ends with `` ``` `` or `` ```language ``, `isCodeFenceOpen` returns `true` and the command inserts a code block skeleton instead of a new bullet:
+
+```
+- ```javascript     ← original line (unchanged)
+      ← cursor placed here (indent + 2 spaces past the `-`)
+  ```                ← closing fence at same content indent
+```
+
+The content inside the fence is indented 2 spaces past the bullet marker. This offset is hardcoded (not derived from editor tab size) to match standard markdown list continuation indent.
+
+For standalone (non-bullet) opening fences with a language identifier, `isStandaloneCodeFenceOpen` returns `true` and the skeleton is inserted at the same indentation as the opening fence (no +2 offset):
+
+```
+```python              ← original line (unchanged)
+                       ← cursor placed here (same indent)
+```                    ← closing fence at same indent
+```
+
+After the edit, the cursor is repositioned from the end of the closing fence to the blank content line via `editor.selections` assignment in the `.then()` callback.
+
+### Enter — code fence completion
+
+Command `as-notes.codeFenceEnter` handles standalone and closing code fences in **both** outliner and non-outliner modes.
+
+Keybinding: `Enter` when `editorLangId == markdown && as-notes.onCodeFenceLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible`.
+
+For each cursor (in priority order):
+
+1. **Closing fence of a bullet code block** — `isClosingCodeFenceLine` returns `true` and `getClosingFenceBulletInsert` returns a result. In outliner mode, inserts a new bullet at the parent's indentation. Outside outliner mode, inserts a plain newline.
+2. **Unbalanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` and `isCodeFenceUnbalanced` returns `true`: inserts the closing fence skeleton and positions cursor inside.
+3. **Balanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` but `isCodeFenceUnbalanced` returns `false` (the fence already has a matching closer at the same indent): inserts a plain newline.
+
+#### Fence balance detection
+
+`isCodeFenceUnbalanced(lines, lineIndex)` uses a two-phase approach:
+
+**Phase 1 — Language-aware matching (precise).** Language fences (e.g. ` ```javascript `) are unambiguously openers. Walking bottom-to-top at the target's indent level, each bare ` ``` ` is pushed onto a closer stack; each language opener pops the nearest closer to form a pair. If the target participates in a matched pair it is balanced. If it is a language opener with no closer it is unbalanced. This correctly handles a new opening fence typed between two existing balanced code blocks.
+
+**Phase 2 — Surrounding-balanced heuristic (bare fences only).** For bare ` ``` ` fences that were not matched by phase 1, count all standalone fences at the same indent before and after the target. When both counts are even the surrounding context is balanced and the target is the odd one out (unbalanced).
+
+Fences at different indent levels are never paired. Bullet-prefixed fences are excluded.
+
+### Tab / Shift+Tab — indent and outdent
+
+Keybinding: `Tab` / `Shift+Tab` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine`.
+
+`Tab` delegates to `editor.action.indentLines` but only when the resulting indent would not exceed one tab stop past the nearest bullet above. `getMaxOutlinerIndent(lines, lineIndex, tabSize)` scans upward for the closest bullet and returns its indent + tabSize. If no bullet exists above, 0 is returned (root level only). When any selection's line would exceed the maximum, the indent is suppressed entirely.
+
+`Shift+Tab` always delegates to `editor.action.outdentLines` with no guard — reducing indent is always valid.
+
+On non-bullet lines Tab retains normal VS Code behaviour with no extra logic.
+
+### Paste — multi-line bullet conversion
+
+Keybinding: `Ctrl+V` / `Cmd+V` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly`.
+
+Command `as-notes.outlinerPaste`:
+1. Reads clipboard via `vscode.env.clipboard.readText()`.
+2. Calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
+3. If result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
+4. Otherwise, replaces the entire current line with the formatted bullets.
+
+**`formatOutlinerPaste` rules:**
+- CRLF normalised to LF. Empty/whitespace-only lines stripped. Each remaining line trimmed.
+- Plain bullet: each line gets `{indent}- ` prefix.
+- Unchecked todo: each line gets `{indent}- [ ] ` prefix.
+- Done todo: first line keeps `{indent}- [x] `, subsequent lines get `{indent}- [ ] `.
+- Text before cursor on the current line is preserved; text after cursor is appended to the last pasted line.
+- Single-line clipboard text: no conversion (returns `null`).
+
+### Todo toggle in outliner mode
+
+When `as-notes.outlinerMode` is enabled and the line `isOnBulletLine`, the `as-notes.toggleTodo` command uses `toggleOutlinerTodoLine` instead of the default `toggleTodoLine`. The outliner cycle preserves the `- ` prefix:
+
+| State | Default toggle result | Outliner toggle result |
+|---|---|---|
+| `- [x] text` | `text` (no bullet) | `- text` (plain bullet) |
+| `- [ ] text` | `- [x] text` | `- [x] text` (same) |
+| `- text` | `- [ ] text` | `- [ ] text` (same) |
 
 ---
 

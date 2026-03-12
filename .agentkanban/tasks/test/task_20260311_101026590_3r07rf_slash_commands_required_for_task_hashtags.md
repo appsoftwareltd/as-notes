@@ -1,9 +1,9 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-12T17:57:24.356Z
+updated: 2026-03-12T21:47:03.488Z
 priority: high
-sortOrder: 5
+sortOrder: 3
 slug: slash_commands_required_for_task_hashtags
 ---
 
