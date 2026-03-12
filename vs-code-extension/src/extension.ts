@@ -34,6 +34,10 @@ import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
+import { KanbanStore } from './KanbanStore.js';
+import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
+import { KanbanEditorPanel } from './KanbanEditorPanel.js';
+import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -55,6 +59,9 @@ const DEFAULT_IGNORE_CONTENT = [
     '#',
     '# Node.js dependencies',
     'node_modules/',
+    '#',
+    '# Kanban board data',
+    'kanban/',
     '',
 ].join('\n');
 
@@ -101,6 +108,13 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.decryptCurrentNote',
     'as-notes.navigateToTask',
     'as-notes.navigateWikilink',
+    'as-notes.openKanbanBoard',
+    'as-notes.newKanbanCard',
+    'as-notes.selectKanbanBoard',
+    'as-notes.switchKanbanBoard',
+    'as-notes.createKanbanBoard',
+    'as-notes.deleteKanbanBoard',
+    'as-notes.renameKanbanBoard',
 ];
 
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
@@ -129,6 +143,13 @@ let taskPanelProvider: TaskPanelProvider | undefined;
 
 /** Search panel provider instance — alive while in full mode. */
 let searchPanelProvider: SearchPanelProvider | undefined;
+
+/** Kanban store instance — alive while in full mode. */
+let kanbanStore: KanbanStore | undefined;
+/** Kanban board config store instance — alive while in full mode. */
+let kanbanBoardConfigStore: KanbanBoardConfigStore | undefined;
+/** Kanban sidebar provider instance — alive while in full mode. */
+let kanbanSidebarProvider: KanbanSidebarProvider | undefined;
 
 /** Backlink panel provider instance — alive while in full mode. */
 let backlinkPanelProvider: BacklinkPanelProvider | undefined;
@@ -462,6 +483,112 @@ async function enterFullMode(
             searchPanelProvider,
             { webviewOptions: { retainContextWhenHidden: true } },
         ),
+    );
+
+    // Kanban board — sidebar summary + editor panel for full board.
+    const kanbanRootUri = vscode.Uri.joinPath(workspaceRoot, 'kanban');
+    kanbanStore = new KanbanStore(kanbanRootUri, logService);
+    kanbanBoardConfigStore = new KanbanBoardConfigStore(kanbanRootUri, logService);
+    kanbanSidebarProvider = new KanbanSidebarProvider(context, kanbanStore, kanbanBoardConfigStore);
+
+    fullModeDisposables.push(
+        vscode.window.registerWebviewViewProvider(
+            KanbanSidebarProvider.VIEW_ID,
+            kanbanSidebarProvider,
+            { webviewOptions: { retainContextWhenHidden: true } },
+        ),
+    );
+
+    // Auto-select first board if available
+    const boards = await kanbanBoardConfigStore.listBoards();
+    if (boards.length > 0) {
+        await kanbanStore.selectBoard(boards[0]);
+        await kanbanBoardConfigStore.selectBoard(boards[0]);
+    }
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.openKanbanBoard', () => {
+            KanbanEditorPanel.createOrShow(context.extensionUri, kanbanStore!, kanbanBoardConfigStore!, logService);
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.newKanbanCard', () => {
+            const panel = KanbanEditorPanel.createOrShow(context.extensionUri, kanbanStore!, kanbanBoardConfigStore!, logService);
+            panel.triggerCreateModal();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.switchKanbanBoard', async (slug?: string) => {
+            if (!slug) return;
+            await kanbanStore!.selectBoard(slug);
+            await kanbanBoardConfigStore!.selectBoard(slug);
+            KanbanEditorPanel.createOrShow(context.extensionUri, kanbanStore!, kanbanBoardConfigStore!, logService);
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.selectKanbanBoard', async () => {
+            const boardList = await kanbanBoardConfigStore!.listBoards();
+            if (boardList.length === 0) {
+                const create = await vscode.window.showInformationMessage('No boards found. Create one?', 'Create');
+                if (create === 'Create') { vscode.commands.executeCommand('as-notes.createKanbanBoard'); }
+                return;
+            }
+            const pick = await vscode.window.showQuickPick(boardList, { placeHolder: 'Select a board' });
+            if (pick) {
+                await kanbanStore!.selectBoard(pick);
+                await kanbanBoardConfigStore!.selectBoard(pick);
+                KanbanEditorPanel.currentPanel?.refresh();
+                kanbanSidebarProvider?.refresh();
+            }
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.createKanbanBoard', async () => {
+            const name = await vscode.window.showInputBox({ prompt: 'Board name', placeHolder: 'My Board' });
+            if (!name) return;
+            const slug = await kanbanBoardConfigStore!.createBoard(name);
+            await kanbanStore!.selectBoard(slug);
+            await kanbanBoardConfigStore!.selectBoard(slug);
+            KanbanEditorPanel.currentPanel?.refresh();
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.deleteKanbanBoard', async () => {
+            const currentSlug = kanbanStore!.currentBoard;
+            if (!currentSlug) { vscode.window.showInformationMessage('No board selected.'); return; }
+            const config = kanbanBoardConfigStore!.get();
+            const displayName = config.name || currentSlug;
+            const confirm = await vscode.window.showWarningMessage(`Delete board "${displayName}" and all its cards?`, { modal: true }, 'Delete');
+            if (confirm !== 'Delete') return;
+            await kanbanBoardConfigStore!.deleteBoard(currentSlug);
+            const remaining = await kanbanBoardConfigStore!.listBoards();
+            if (remaining.length > 0) {
+                await kanbanStore!.selectBoard(remaining[0]);
+                await kanbanBoardConfigStore!.selectBoard(remaining[0]);
+            } else {
+                await kanbanStore!.selectBoard('');
+                kanbanBoardConfigStore!.clear();
+            }
+            KanbanEditorPanel.currentPanel?.refresh();
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.renameKanbanBoard', async () => {
+            const currentSlug = kanbanStore!.currentBoard;
+            if (!currentSlug) { vscode.window.showInformationMessage('No board selected.'); return; }
+            const config = kanbanBoardConfigStore!.get();
+            const currentName = config.name || currentSlug.replace(/-/g, ' ');
+            const newName = await vscode.window.showInputBox({ prompt: 'New board name', value: currentName });
+            if (!newName) return;
+            const newSlug = await kanbanBoardConfigStore!.renameBoard(currentSlug, newName);
+            await kanbanStore!.selectBoard(newSlug);
+            await kanbanBoardConfigStore!.selectBoard(newSlug);
+            KanbanEditorPanel.currentPanel?.refresh();
+            kanbanSidebarProvider?.refresh();
+        }),
     );
 
     // Status bar: show indexing spinner
@@ -1633,6 +1760,9 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
 
     // Create .asnotes/ directory
     fs.mkdirSync(asnotesDir, { recursive: true });
+
+    // Create kanban/ directory for Kanban boards
+    fs.mkdirSync(path.join(workspaceRoot.fsPath, 'kanban'), { recursive: true });
 
     // Create .gitignore inside .asnotes/ to exclude the DB file
     fs.writeFileSync(path.join(asnotesDir, '.gitignore'), 'index.db\n');
