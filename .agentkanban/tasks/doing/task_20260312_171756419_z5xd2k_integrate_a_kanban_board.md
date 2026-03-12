@@ -1,9 +1,13 @@
 ---
 title: Integrate a Kanban board
 created: 2026-03-12T17:17:56.419Z
-updated: 2026-03-12T17:31:11.498Z
+updated: 2026-03-12T17:31:25.370Z
 sortOrder: 4
 slug: integrate_a_kanban_board
+worktree:
+  branch: agentkanban/20260312_171756419_z5xd2k_integrate_a_kanban_board
+  path: c:\Users\Gareth\src\as-notes-worktrees\20260312_171756419_z5xd2k_integrate_a_kanban_board
+  created: 2026-03-12T17:31:25.370Z
 ---
 
 ## Conversation

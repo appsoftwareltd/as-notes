@@ -1,9 +1,10 @@
 ---
 title: "Slash commands required for task #hashtags"
 created: 2026-03-11T10:10:26.590Z
-updated: 2026-03-11T21:50:37.737Z
+updated: 2026-03-12T17:34:05.791Z
 priority: high
-sortOrder: 3
+sortOrder: 5
+slug: slash_commands_required_for_task_hashtags
 ---
 
 ## Conversation
@@ -986,5 +987,77 @@ Tags embedded mid-text, in code blocks, or on non-task lines are left untouched.
 
 [user]
 
-Slash command menu should disappear as soon as there is a space char after
-Task slash command completions - would be nice if they left cursor after a space after last hash if ... only hashes, no trailing text in task - might need to think about this
+The HTML conversion needs to convert the markdown todo `- [ ]` portion of the task to an input checkbox (check state according to the markdown)
+
+[agent]
+
+## Plan — Convert markdown task checkboxes to HTML input checkboxes
+
+### Context
+
+By default markdown-it renders `- [ ] Task` as `<li>[ ] Task</li>` — just literal text. The user wants `[ ]` → `<input type="checkbox" disabled>` and `[x]` → `<input type="checkbox" checked disabled>`.
+
+### Approach
+
+Extend the existing `TaskTagPlugin.ts` since it already detects and processes the `[ ] ` / `[x] ` checkbox pattern via `TASK_CHECKBOX_RE`. The `transformTaskTags` function will replace the checkbox text with a proper HTML `<input>` element.
+
+Additionally, add a `task-list` class to the parent `<li>` token to enable CSS styling (list-style-type: none).
+
+### Changes
+
+1. **`html-conversion/src/TaskTagPlugin.ts`**
+   - Modify `transformTaskTags()` to replace `[ ] ` with `<input type="checkbox" disabled> ` and `[x] ` / `[X] ` with `<input type="checkbox" checked disabled> `
+   - Add a second core rule (or extend existing) to mark parent `list_item_open` tokens of task items with `class="task-list-item"` and their `bullet_list_open` with `class="task-list"`
+
+2. **`docs-src/docs.css`** — Add `.task-list` and `.task-list-item` styles (no bullet, padding adjustment)
+
+3. **`html-conversion/test/TaskTagPlugin.test.ts`** — New tests for checkbox rendering
+
+### Files changed
+- `html-conversion/src/TaskTagPlugin.ts`
+- `html-conversion/test/TaskTagPlugin.test.ts`
+- `docs-src/docs.css`
+
+Implementing now.
+
+[agent]
+
+## Implementation complete — Markdown task checkboxes converted to HTML inputs
+
+### Changes made
+
+**`html-conversion/src/TaskTagPlugin.ts`**
+- Modified `TASK_CHECKBOX_RE` to capture the check character: `/^\[([ xX])\]\s*/`
+- `transformTaskTags()` now replaces `[ ] ` with `<input type="checkbox" disabled> ` and `[x] `/`[X] ` with `<input type="checkbox" checked disabled> `
+- Added parent token class injection: walks backwards from each task inline token to add `class="task-list-item"` to `list_item_open` and `class="task-list"` to `bullet_list_open`
+
+**`docs-src/docs.css`**
+- Added `.task-list` — `list-style: none`, `padding-left: 1.5em`
+- Added `.task-list-item` — `position: relative`
+- Added `.task-list-item input[type="checkbox"]` — margin and alignment
+
+**`html-conversion/test/TaskTagPlugin.test.ts`**
+- 7 new tests: unchecked/checked/uppercase checkbox rendering, checkbox with tags, task-list-item class, task-list class, regular items not affected
+
+### Build & tests
+- html-conversion: 37/37 tests pass
+- vs-code-extension: 503/503 tests pass
+- Build clean
+
+[user]
+
+Test feedback - should the render as lists? Is that normal html conversion behaviour?
+
+[agent]
+
+Yes — this is correct and expected. Markdown task items (`- [ ] Task`) use `- ` which is list syntax, so markdown-it naturally produces `<ul><li>` wrappers. This is the same behaviour as GitHub, Obsidian, and every other markdown renderer.
+
+The key transformation we've made:
+- **Before:** `<li>[ ] Buy groceries</li>` (raw checkbox text)
+- **After:** `<li class="task-list-item"><input type="checkbox" disabled> Buy groceries</li>` (proper checkbox)
+
+The CSS class `task-list` on the `<ul>` removes the bullet markers (`list-style: none`) so they look like checkbox lists rather than bulleted lists. This matches GitHub Flavored Markdown's rendering of task lists.
+
+If you're seeing bullet dots alongside checkboxes, it could mean the CSS file wasn't included/reloaded. The docs were regenerated via `node dist/convert.js --input ../docs-src/pages --output ../docs` — can you confirm the `docs.css` stylesheet is linked and loaded?
+
+[user]

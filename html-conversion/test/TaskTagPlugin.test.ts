@@ -114,4 +114,49 @@ describe('TaskTagPlugin', () => {
             expect(html).not.toContain('task-tag');
         });
     });
+
+    describe('checkbox rendering', () => {
+        it('should render unchecked checkbox as disabled HTML input', () => {
+            const html = render('- [ ] Buy groceries');
+            expect(html).toContain('<input type="checkbox" disabled>');
+            expect(html).not.toContain('[ ]');
+            expect(html).toContain('Buy groceries');
+        });
+
+        it('should render checked checkbox as checked disabled HTML input', () => {
+            const html = render('- [x] Done task');
+            expect(html).toContain('<input type="checkbox" checked disabled>');
+            expect(html).not.toContain('[x]');
+            expect(html).toContain('Done task');
+        });
+
+        it('should render uppercase [X] as checked', () => {
+            const html = render('- [X] Also done');
+            expect(html).toContain('<input type="checkbox" checked disabled>');
+            expect(html).not.toContain('[X]');
+        });
+
+        it('should render checkbox with tags', () => {
+            const html = render('- [ ] #P1 Important task');
+            expect(html).toContain('<input type="checkbox" disabled>');
+            expect(html).toContain('<span class="task-tag priority-1">Priority 1</span>');
+            expect(html).toContain('Important task');
+        });
+
+        it('should add task-list-item class to task list items', () => {
+            const html = render('- [ ] Task one\n- [x] Task two');
+            expect(html).toContain('class="task-list-item"');
+        });
+
+        it('should add task-list class to parent list', () => {
+            const html = render('- [ ] Task one\n- [x] Task two');
+            expect(html).toContain('class="task-list"');
+        });
+
+        it('should NOT add checkbox to regular list items', () => {
+            const html = render('- Regular item');
+            expect(html).not.toContain('<input');
+            expect(html).not.toContain('task-list');
+        });
+    });
 });
