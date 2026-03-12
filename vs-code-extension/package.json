@@ -149,6 +149,11 @@
                 "when": "as-notes.fullMode"
             },
             {
+                "command": "as-notes.codeFenceEnter",
+                "key": "enter",
+                "when": "editorLangId == markdown && as-notes.onCodeFenceLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible"
+            },
+            {
                 "command": "as-notes.outlinerEnter",
                 "key": "enter",
                 "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible"
@@ -162,6 +167,12 @@
                 "command": "as-notes.outlinerOutdent",
                 "key": "shift+tab",
                 "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine"
+            },
+            {
+                "command": "as-notes.outlinerPaste",
+                "key": "ctrl+v",
+                "mac": "cmd+v",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly"
             }
         ],
         "configuration": {
