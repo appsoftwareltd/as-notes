@@ -1,8 +1,13 @@
 ---
 title: Outliner style hyphen prefix and indentation retention
 created: 2026-03-10T15:52:14.785Z
-updated: 2026-03-11T10:32:01.819Z
+updated: 2026-03-12T17:58:36.148Z
 sortOrder: 1
+slug: outliner_style_hyphen_prefix_and_indentation_reten
+worktree:
+  branch: agentkanban/20260310_155214785_4cg00z_outliner_style_hyphen_prefix_and_indentation_reten
+  path: c:\Users\Gareth\src\as-notes-worktrees\20260310_155214785_4cg00z_outliner_style_hyphen_prefix_and_indentation_reten
+  created: 2026-03-12T17:58:36.148Z
 ---
 
 ## Conversation
