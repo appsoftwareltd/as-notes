@@ -187,6 +187,28 @@ Hover over any image link in a markdown file to see a preview of the image inlin
 
 AS Notes can work alongside knowledge bases created in Obsidian or Logseq due to similar file structures. Be aware there are format and behavioural differences differences however.
 
+### Outliner Mode
+
+Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `- ` and custom keybindings keep you in flow:
+
+| Key | Action |
+|---|---|
+| **Enter** | Inserts a new bullet at the same indentation. Todo lines (`- [ ]`) continue as unchecked todos. |
+| **Tab** | Indents the bullet one level (capped at one level deeper than the bullet above). |
+| **Shift+Tab** | Outdents the bullet one level. |
+| **Ctrl+Shift+Enter** | Cycles: plain bullet → `- [ ]` → `- [x]` → plain bullet. |
+| **Ctrl+V / Cmd+V** | Multi-line paste: each clipboard line becomes a separate bullet. |
+
+#### Code Block Completion
+
+Code block completion works in **all** markdown files — outliner mode is not required.
+
+When you type `` ``` `` (with optional language, e.g. `` ```javascript ``) and press **Enter**, AS Notes automatically inserts the closing `` ``` `` and places the cursor inside the block. On a bullet line the content is indented to match markdown list continuation.
+
+The extension is aware of existing fence pairs: if the backticks are already balanced (i.e. there is a matching closing fence at the same indentation), Enter simply inserts a newline instead of a second skeleton.
+
+In outliner mode, pressing Enter on a closing `` ``` `` line that belongs to a bullet code block inserts a new bullet at the parent's indentation.
+
 ## AS Notes Pro Features
 
 A **Pro licence** unlocks premium features. Enter your licence key in VS Code settings under `as-notes.licenceKey`. When a valid key is active the status bar shows **AS Notes (Pro)**.
