@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { parse, stringify } from 'yaml';
-import type { Card, Priority, CardEntry, AssetMeta } from './KanbanTypes.js';
+import type { Card, Priority, CardEntryDisplay, AssetMeta } from './KanbanTypes.js';
 import { RESERVED_LANES, ASSETS_DIR } from './KanbanTypes.js';
 import type { LogService } from './LogService.js';
 import { NO_OP_LOGGER } from './LogService.js';
@@ -76,14 +76,14 @@ export class KanbanStore {
             return;
         }
         for (const [name, type] of entries) {
-            if (type === vscode.FileType.File && name.endsWith('.yaml') && name.startsWith('card_')) {
+            if (type === vscode.FileType.File && name.endsWith('.md') && name.startsWith('card_')) {
                 const uri = vscode.Uri.joinPath(dirUri, name);
                 try {
                     const content = await vscode.workspace.fs.readFile(uri);
                     const text = new TextDecoder().decode(content);
                     const card = KanbanStore.deserialise(text);
                     if (card) {
-                        card.id = name.slice(0, -5); // strip .yaml
+                        card.id = name.slice(0, -3); // strip .md
                         card.lane = lane;
                         if (!card.slug) {
                             card.slug = KanbanStore.extractSlugFromId(card.id);
@@ -143,9 +143,9 @@ export class KanbanStore {
     getCardUri(id: string): vscode.Uri {
         const card = this.cards.get(id);
         if (card) {
-            return vscode.Uri.joinPath(this.boardUri, card.lane, `${id}.yaml`);
+            return vscode.Uri.joinPath(this.boardUri, card.lane, `${id}.md`);
         }
-        return vscode.Uri.joinPath(this.boardUri, 'todo', `${id}.yaml`);
+        return vscode.Uri.joinPath(this.boardUri, 'todo', `${id}.md`);
     }
 
     /** Get the asset directory URI for a card. */
@@ -161,7 +161,17 @@ export class KanbanStore {
             await vscode.workspace.fs.createDirectory(laneDir);
         } catch { /* exists */ }
         const uri = this.getCardUri(card.id);
-        const content = new TextEncoder().encode(KanbanStore.serialise(card));
+        // Read existing file to preserve markdown body (entries)
+        let existingBody = '';
+        try {
+            const existing = await vscode.workspace.fs.readFile(uri);
+            const existingText = new TextDecoder().decode(existing);
+            existingBody = KanbanStore.extractMarkdownBody(existingText);
+        } catch { /* new file */ }
+        // Keep parsedEntries in sync with the body on disk
+        const parsed = KanbanStore.parseEntries(existingBody);
+        card.parsedEntries = parsed.length > 0 ? parsed : undefined;
+        const content = new TextEncoder().encode(KanbanStore.serialise(card, existingBody));
         await vscode.workspace.fs.writeFile(uri, content);
         this.logger.info('kanbanStore', `Saved card ${card.id}`);
         this._onDidChange.fire();
@@ -177,9 +187,9 @@ export class KanbanStore {
             return;
         }
 
-        const oldUri = vscode.Uri.joinPath(this.boardUri, oldLane, `${id}.yaml`);
+        const oldUri = vscode.Uri.joinPath(this.boardUri, oldLane, `${id}.md`);
         const newDir = vscode.Uri.joinPath(this.boardUri, newLane);
-        const newUri = vscode.Uri.joinPath(newDir, `${id}.yaml`);
+        const newUri = vscode.Uri.joinPath(newDir, `${id}.md`);
 
         try { await vscode.workspace.fs.createDirectory(newDir); } catch { /* exists */ }
 
@@ -187,7 +197,16 @@ export class KanbanStore {
         card.updated = new Date().toISOString();
         this.cards.set(id, card);
 
-        const content = new TextEncoder().encode(KanbanStore.serialise(card));
+        // Read existing file to preserve markdown body (entries)
+        let existingBody = '';
+        try {
+            const existing = await vscode.workspace.fs.readFile(oldUri);
+            const existingText = new TextDecoder().decode(existing);
+            existingBody = KanbanStore.extractMarkdownBody(existingText);
+        } catch { /* file may not exist */ }
+        const parsed = KanbanStore.parseEntries(existingBody);
+        card.parsedEntries = parsed.length > 0 ? parsed : undefined;
+        const content = new TextEncoder().encode(KanbanStore.serialise(card, existingBody));
         await vscode.workspace.fs.writeFile(newUri, content);
 
         try {
@@ -204,7 +223,7 @@ export class KanbanStore {
         const card = this.cards.get(id);
         this.cards.delete(id);
         const cardUri = card
-            ? vscode.Uri.joinPath(this.boardUri, card.lane, `${id}.yaml`)
+            ? vscode.Uri.joinPath(this.boardUri, card.lane, `${id}.md`)
             : this.getCardUri(id);
         try {
             await vscode.workspace.fs.delete(cardUri);
@@ -285,24 +304,18 @@ export class KanbanStore {
 
     // ── Static helpers ─────────────────────────────────────────────────────
 
-    static generateId(date: Date, title: string): string {
-        const y = date.getFullYear();
-        const mo = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        const h = String(date.getHours()).padStart(2, '0');
-        const mi = String(date.getMinutes()).padStart(2, '0');
-        const s = String(date.getSeconds()).padStart(2, '0');
-        const ms = String(date.getMilliseconds()).padStart(3, '0');
-        const ts = `${y}${mo}${d}_${h}${mi}${s}${ms}`;
+    static generateId(_date: Date, title: string): string {
         const uuid = Math.random().toString(36).slice(2, 8);
         const slug = KanbanStore.slugify(title);
-        return `card_${ts}_${uuid}_${slug}`;
+        return slug ? `card_${slug}_${uuid}` : `card_${uuid}`;
     }
 
     static extractSlugFromId(id: string): string {
         const parts = id.split('_');
-        if (parts.length < 5 || parts[0] !== 'card') { return ''; }
-        return parts.slice(4).join('_');
+        if (parts.length < 2 || parts[0] !== 'card') { return ''; }
+        // Last part is the uuid (6 chars), slug is everything between card_ and _uuid
+        if (parts.length === 2) { return ''; } // card_<uuid> only, no slug
+        return parts.slice(1, -1).join('_');
     }
 
     static slugify(title: string): string {
@@ -314,8 +327,63 @@ export class KanbanStore {
             .replace(/_+$/, '');
     }
 
-    /** Serialise a card to pure YAML. */
-    static serialise(card: Card): string {
+    /** Extract the markdown body (everything after the closing `---` of frontmatter). */
+    static extractMarkdownBody(text: string): string {
+        const lines = text.split(/\r?\n/);
+        if (lines.length === 0 || lines[0].trim() !== '---') { return text; }
+        for (let i = 1; i < lines.length; i++) {
+            if (lines[i].trim() === '---') {
+                return lines.slice(i + 1).join('\n');
+            }
+        }
+        return ''; // no closing fence
+    }
+
+    /** Parse `## entry` headings from markdown body into CardEntryDisplay objects. */
+    static parseEntries(body: string): CardEntryDisplay[] {
+        const entries: CardEntryDisplay[] = [];
+        const lines = body.split(/\r?\n/);
+        const entryRe = /^##\s+entry(?:\s+(.*))?$/i;
+        const dateRe = /^(\d{4}-\d{2}-\d{2})(?:\s+(.*))?$/;
+
+        let current: { date?: string; title?: string; bodyLines: string[] } | null = null;
+
+        for (const line of lines) {
+            const m = entryRe.exec(line);
+            if (m) {
+                // Flush previous entry
+                if (current) {
+                    entries.push({
+                        date: current.date,
+                        title: current.title,
+                        body: current.bodyLines.join('\n').trim(),
+                    });
+                }
+                // Parse rest of heading
+                const rest = (m[1] ?? '').trim();
+                const dm = dateRe.exec(rest);
+                if (dm) {
+                    current = { date: dm[1], title: dm[2]?.trim() || undefined, bodyLines: [] };
+                } else {
+                    current = { date: undefined, title: rest || undefined, bodyLines: [] };
+                }
+            } else if (current) {
+                current.bodyLines.push(line);
+            }
+        }
+        // Flush last entry
+        if (current) {
+            entries.push({
+                date: current.date,
+                title: current.title,
+                body: current.bodyLines.join('\n').trim(),
+            });
+        }
+        return entries;
+    }
+
+    /** Serialise a card to markdown with YAML frontmatter. */
+    static serialise(card: Card, existingBody: string = ''): string {
         const data: Record<string, unknown> = {
             title: card.title,
             created: card.created,
@@ -328,16 +396,39 @@ export class KanbanStore {
         if (card.dueDate) { data.dueDate = card.dueDate; }
         if (card.sortOrder != null) { data.sortOrder = card.sortOrder; }
         if (card.slug) { data.slug = card.slug; }
-        if (card.entries?.length) { data.entries = card.entries; }
         if (card.assets?.length) { data.assets = card.assets; }
-        return stringify(data, { lineWidth: 0 });
+        // No entries in frontmatter — they live in the markdown body
+        const frontmatter = stringify(data, { lineWidth: 0 });
+        return `---\n${frontmatter}---\n${existingBody}`;
     }
 
-    /** Deserialise a YAML string into a Card. */
+    /** Deserialise a markdown file with YAML frontmatter into a Card. */
     static deserialise(text: string): Card | null {
         try {
-            const data = parse(text) as Record<string, unknown>;
+            const lines = text.split(/\r?\n/);
+            let frontmatterText: string;
+            let body: string;
+
+            if (lines.length > 0 && lines[0].trim() === '---') {
+                // Find closing ---
+                let endIdx = -1;
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].trim() === '---') { endIdx = i; break; }
+                }
+                if (endIdx === -1) { return null; } // No closing fence
+                frontmatterText = lines.slice(1, endIdx).join('\n');
+                body = lines.slice(endIdx + 1).join('\n');
+            } else {
+                // Try parsing as pure YAML for backwards compat
+                frontmatterText = text;
+                body = '';
+            }
+
+            const data = parse(frontmatterText) as Record<string, unknown>;
             if (!data || typeof data.title !== 'string') { return null; }
+
+            const parsedEntries = KanbanStore.parseEntries(body);
+
             return {
                 id: '',
                 title: data.title,
@@ -351,9 +442,7 @@ export class KanbanStore {
                 dueDate: (data.dueDate as string) || undefined,
                 sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : undefined,
                 slug: typeof data.slug === 'string' ? data.slug : undefined,
-                entries: Array.isArray(data.entries)
-                    ? (data.entries as CardEntry[])
-                    : undefined,
+                parsedEntries: parsedEntries.length > 0 ? parsedEntries : undefined,
                 assets: Array.isArray(data.assets)
                     ? (data.assets as AssetMeta[])
                     : undefined,

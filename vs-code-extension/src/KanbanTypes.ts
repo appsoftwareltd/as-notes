@@ -6,10 +6,14 @@ export interface AssetMeta {
     addedBy?: string;
 }
 
-export interface CardEntry {
-    author?: string;
-    date: string;
-    text: string;
+/** Parsed entry from markdown body `## entry` headings. Read-only in the UI. */
+export interface CardEntryDisplay {
+    /** Date string from the heading (YYYY-MM-DD), if present. */
+    date?: string;
+    /** Title/summary text after the date on the heading line. */
+    title?: string;
+    /** Body text below the heading (until next ## entry or EOF). */
+    body: string;
 }
 
 export interface Card {
@@ -25,7 +29,8 @@ export interface Card {
     dueDate?: string;
     sortOrder?: number;
     slug?: string;
-    entries?: CardEntry[];
+    /** Parsed from markdown body — never stored in frontmatter. */
+    parsedEntries?: CardEntryDisplay[];
     assets?: AssetMeta[];
 }
 

@@ -66,28 +66,30 @@ describe('KanbanStore.slugify', () => {
 
 describe('KanbanStore.generateId', () => {
     it('starts with card_ prefix', () => {
-        const id = KanbanStore.generateId(new Date(2026, 2, 12, 14, 30, 45, 123), 'Fix Login');
+        const id = KanbanStore.generateId(new Date(), 'Fix Login');
         expect(id).toMatch(/^card_/);
     });
 
-    it('contains timestamp segment', () => {
-        const id = KanbanStore.generateId(new Date(2026, 2, 12, 14, 30, 45, 123), 'Fix Login');
-        expect(id).toContain('20260312_143045123');
-    });
-
-    it('contains slugified title at the end', () => {
+    it('contains slugified title', () => {
         const id = KanbanStore.generateId(new Date(), 'Fix Login Bug');
-        expect(id).toMatch(/fix_login_bug$/);
+        expect(id).toContain('fix_login_bug');
     });
 
-    it('contains a random segment', () => {
-        const date = new Date(2026, 0, 1);
-        const id1 = KanbanStore.generateId(date, 'test');
-        const id2 = KanbanStore.generateId(date, 'test');
-        // Very unlikely to be the same due to random uuid part
-        // Check that the structure has 5+ parts (card, ts, ms, uuid, slug)
-        const parts = id1.split('_');
-        expect(parts.length).toBeGreaterThanOrEqual(5);
+    it('ends with a 6-char random segment', () => {
+        const id = KanbanStore.generateId(new Date(), 'Test Card');
+        const parts = id.split('_');
+        const lastPart = parts[parts.length - 1];
+        expect(lastPart.length).toBe(6);
+    });
+
+    it('uses format card_<slug>_<uuid>', () => {
+        const id = KanbanStore.generateId(new Date(), 'My Task');
+        expect(id).toMatch(/^card_my_task_[a-z0-9]{6}$/);
+    });
+
+    it('handles empty title', () => {
+        const id = KanbanStore.generateId(new Date(), '');
+        expect(id).toMatch(/^card_[a-z0-9]{6}$/);
     });
 });
 
@@ -95,13 +97,18 @@ describe('KanbanStore.generateId', () => {
 
 describe('KanbanStore.extractSlugFromId', () => {
     it('extracts the slug portion from a card id', () => {
-        const id = 'card_20260312_143045123_a1b2c3_fix_login_bug';
+        const id = 'card_fix_login_bug_a1b2c3';
         expect(KanbanStore.extractSlugFromId(id)).toBe('fix_login_bug');
     });
 
     it('handles single-word slugs', () => {
-        const id = 'card_20260312_143045123_a1b2c3_test';
+        const id = 'card_test_a1b2c3';
         expect(KanbanStore.extractSlugFromId(id)).toBe('test');
+    });
+
+    it('returns empty string for card with no slug (just uuid)', () => {
+        const id = 'card_a1b2c3';
+        expect(KanbanStore.extractSlugFromId(id)).toBe('');
     });
 
     it('returns empty string for malformed ids', () => {
@@ -110,7 +117,107 @@ describe('KanbanStore.extractSlugFromId', () => {
     });
 
     it('returns empty string when prefix is not card', () => {
-        expect(KanbanStore.extractSlugFromId('task_20260312_143045123_a1b2c3_test')).toBe('');
+        expect(KanbanStore.extractSlugFromId('task_test_a1b2c3')).toBe('');
+    });
+});
+
+// ── KanbanStore.extractMarkdownBody ───────────────────────────────────────────
+
+describe('KanbanStore.extractMarkdownBody', () => {
+    it('extracts body after frontmatter', () => {
+        const text = '---\ntitle: Test\n---\n\n## entry 2026-03-12\n\nSome text';
+        expect(KanbanStore.extractMarkdownBody(text)).toBe('\n## entry 2026-03-12\n\nSome text');
+    });
+
+    it('returns empty string when no body after frontmatter', () => {
+        const text = '---\ntitle: Test\n---\n';
+        expect(KanbanStore.extractMarkdownBody(text)).toBe('');
+    });
+
+    it('returns full text when no frontmatter', () => {
+        const text = 'Just plain text';
+        expect(KanbanStore.extractMarkdownBody(text)).toBe('Just plain text');
+    });
+
+    it('returns empty when frontmatter has no closing fence', () => {
+        const text = '---\ntitle: Test\nno closing fence';
+        expect(KanbanStore.extractMarkdownBody(text)).toBe('');
+    });
+});
+
+// ── KanbanStore.parseEntries ──────────────────────────────────────────────────
+
+describe('KanbanStore.parseEntries', () => {
+    it('parses a single entry with date', () => {
+        const body = '## entry 2026-03-12\n\nSome notes here.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].date).toBe('2026-03-12');
+        expect(entries[0].title).toBeUndefined();
+        expect(entries[0].body).toBe('Some notes here.');
+    });
+
+    it('parses entry with date and title', () => {
+        const body = '## entry 2026-03-13 Further analysis\n\nPool size too small.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].date).toBe('2026-03-13');
+        expect(entries[0].title).toBe('Further analysis');
+        expect(entries[0].body).toBe('Pool size too small.');
+    });
+
+    it('parses entry with no date', () => {
+        const body = '## entry\n\nJust some text.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].date).toBeUndefined();
+        expect(entries[0].title).toBeUndefined();
+        expect(entries[0].body).toBe('Just some text.');
+    });
+
+    it('parses entry with title but no date', () => {
+        const body = '## entry Quick note\n\nSome info.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].date).toBeUndefined();
+        expect(entries[0].title).toBe('Quick note');
+        expect(entries[0].body).toBe('Some info.');
+    });
+
+    it('parses multiple entries', () => {
+        const body = '## entry 2026-03-12\n\nFirst entry.\n\n## entry 2026-03-13 Second\n\nSecond entry.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(2);
+        expect(entries[0].date).toBe('2026-03-12');
+        expect(entries[0].body).toBe('First entry.');
+        expect(entries[1].date).toBe('2026-03-13');
+        expect(entries[1].title).toBe('Second');
+        expect(entries[1].body).toBe('Second entry.');
+    });
+
+    it('returns empty array for text with no entries', () => {
+        expect(KanbanStore.parseEntries('Just plain text')).toEqual([]);
+        expect(KanbanStore.parseEntries('')).toEqual([]);
+    });
+
+    it('ignores text before the first ## entry heading', () => {
+        const body = 'Some intro text\n\n## entry 2026-03-12\n\nActual entry.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].body).toBe('Actual entry.');
+    });
+
+    it('trims whitespace from entry bodies', () => {
+        const body = '## entry 2026-03-12\n\n   Padded text   \n\n';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries[0].body).toBe('Padded text');
+    });
+
+    it('is case-insensitive for ## entry heading', () => {
+        const body = '## Entry 2026-03-12\n\nContent.';
+        const entries = KanbanStore.parseEntries(body);
+        expect(entries).toHaveLength(1);
+        expect(entries[0].date).toBe('2026-03-12');
     });
 });
 
@@ -119,7 +226,7 @@ describe('KanbanStore.extractSlugFromId', () => {
 describe('KanbanStore serialise/deserialise round-trip', () => {
     it('round-trips a minimal card', () => {
         const card = {
-            id: 'card_20260312_143045123_a1b2c3_test',
+            id: 'card_test_a1b2c3',
             title: 'Test Card',
             lane: 'todo',
             created: '2026-03-12T14:30:45.123Z',
@@ -127,40 +234,29 @@ describe('KanbanStore serialise/deserialise round-trip', () => {
             description: '',
         };
 
-        const yaml = KanbanStore.serialise(card);
-        const deserialized = KanbanStore.deserialise(yaml);
-
+        const md = KanbanStore.serialise(card);
+        expect(md).toMatch(/^---\n/);
+        expect(md).toContain('title: Test Card');
+        const deserialized = KanbanStore.deserialise(md);
         expect(deserialized).not.toBeNull();
         expect(deserialized!.title).toBe('Test Card');
         expect(deserialized!.created).toBe('2026-03-12T14:30:45.123Z');
     });
 
-    it('round-trips a card with all fields populated', () => {
+    it('round-trips a card with all frontmatter fields populated', () => {
         const card = {
-            id: 'card_20260312_143045123_a1b2c3_full',
+            id: 'card_full_a1b2c3',
             title: 'Full Card',
             lane: 'doing',
             created: '2026-03-12T14:30:45.123Z',
             updated: '2026-03-12T16:00:00.000Z',
-            description: 'A detailed description spanning multiple lines.\nSecond line.',
+            description: 'A detailed description.',
             priority: 'high' as const,
             assignee: 'alice',
             labels: ['backend', 'bug'],
             dueDate: '2026-03-20',
             sortOrder: 100,
             slug: 'full',
-            entries: [
-                {
-                    author: 'alice',
-                    date: '2026-03-12T14:30:45.123Z',
-                    text: 'Initial investigation complete.',
-                },
-                {
-                    author: 'bob',
-                    date: '2026-03-12T15:00:00.000Z',
-                    text: 'Fixing the pool size.',
-                },
-            ],
             assets: [
                 {
                     filename: 'screenshot.png',
@@ -170,30 +266,66 @@ describe('KanbanStore serialise/deserialise round-trip', () => {
             ],
         };
 
-        const yaml = KanbanStore.serialise(card);
-        const deserialized = KanbanStore.deserialise(yaml);
+        const md = KanbanStore.serialise(card);
+        const deserialized = KanbanStore.deserialise(md);
 
         expect(deserialized).not.toBeNull();
         expect(deserialized!.title).toBe('Full Card');
-        expect(deserialized!.description).toBe('A detailed description spanning multiple lines.\nSecond line.');
+        expect(deserialized!.description).toBe('A detailed description.');
         expect(deserialized!.priority).toBe('high');
         expect(deserialized!.assignee).toBe('alice');
         expect(deserialized!.labels).toEqual(['backend', 'bug']);
         expect(deserialized!.dueDate).toBe('2026-03-20');
         expect(deserialized!.sortOrder).toBe(100);
         expect(deserialized!.slug).toBe('full');
-        expect(deserialized!.entries).toHaveLength(2);
-        expect(deserialized!.entries![0].author).toBe('alice');
-        expect(deserialized!.entries![0].text).toBe('Initial investigation complete.');
-        expect(deserialized!.entries![1].author).toBe('bob');
         expect(deserialized!.assets).toHaveLength(1);
         expect(deserialized!.assets![0].filename).toBe('screenshot.png');
-        expect(deserialized!.assets![0].addedBy).toBe('alice');
     });
 
-    it('omits empty optional fields in serialised YAML', () => {
+    it('preserves the markdown body through serialise', () => {
         const card = {
-            id: 'card_test',
+            id: 'card_test_a1b2c3',
+            title: 'Test',
+            lane: 'todo',
+            created: '2026-01-01T00:00:00.000Z',
+            updated: '2026-01-01T00:00:00.000Z',
+            description: '',
+        };
+        const existingBody = '\n## entry 2026-03-12\n\nSome notes.\n';
+        const md = KanbanStore.serialise(card, existingBody);
+        expect(md).toContain('## entry 2026-03-12');
+        expect(md).toContain('Some notes.');
+    });
+
+    it('deserialises entries from markdown body', () => {
+        const md = `---
+title: Test Card
+created: 2026-03-12T14:30:45.123Z
+updated: 2026-03-12T14:30:45.123Z
+---
+
+## entry 2026-03-12
+
+Initial notes.
+
+## entry 2026-03-13 Follow-up
+
+More details.
+`;
+        const card = KanbanStore.deserialise(md);
+        expect(card).not.toBeNull();
+        expect(card!.title).toBe('Test Card');
+        expect(card!.parsedEntries).toHaveLength(2);
+        expect(card!.parsedEntries![0].date).toBe('2026-03-12');
+        expect(card!.parsedEntries![0].body).toBe('Initial notes.');
+        expect(card!.parsedEntries![1].date).toBe('2026-03-13');
+        expect(card!.parsedEntries![1].title).toBe('Follow-up');
+        expect(card!.parsedEntries![1].body).toBe('More details.');
+    });
+
+    it('omits empty optional fields in serialised markdown', () => {
+        const card = {
+            id: 'card_test_a1b2c3',
             title: 'Minimal',
             lane: 'todo',
             created: '2026-01-01T00:00:00.000Z',
@@ -201,19 +333,18 @@ describe('KanbanStore serialise/deserialise round-trip', () => {
             description: '',
         };
 
-        const yaml = KanbanStore.serialise(card);
-        expect(yaml).not.toContain('priority');
-        expect(yaml).not.toContain('assignee');
-        expect(yaml).not.toContain('labels');
-        expect(yaml).not.toContain('dueDate');
-        expect(yaml).not.toContain('entries');
-        expect(yaml).not.toContain('assets');
-        expect(yaml).not.toContain('description');
+        const md = KanbanStore.serialise(card);
+        expect(md).not.toContain('priority');
+        expect(md).not.toContain('assignee');
+        expect(md).not.toContain('labels');
+        expect(md).not.toContain('dueDate');
+        expect(md).not.toContain('assets');
+        expect(md).not.toContain('description');
     });
 
-    it('omits priority none in serialised YAML', () => {
+    it('omits priority none in serialised markdown', () => {
         const card = {
-            id: 'card_test',
+            id: 'card_test_a1b2c3',
             title: 'Test card',
             lane: 'todo',
             created: '2026-01-01T00:00:00.000Z',
@@ -222,8 +353,25 @@ describe('KanbanStore serialise/deserialise round-trip', () => {
             priority: 'none' as const,
         };
 
-        const yaml = KanbanStore.serialise(card);
-        expect(yaml).not.toMatch(/^priority:/m);
+        const md = KanbanStore.serialise(card);
+        expect(md).not.toMatch(/priority:/);
+    });
+
+    it('does not include entries in frontmatter', () => {
+        const card = {
+            id: 'card_test_a1b2c3',
+            title: 'Test',
+            lane: 'todo',
+            created: '2026-01-01T00:00:00.000Z',
+            updated: '2026-01-01T00:00:00.000Z',
+            description: '',
+            parsedEntries: [{ date: '2026-03-12', body: 'test' }],
+        };
+
+        const md = KanbanStore.serialise(card);
+        const frontmatter = md.split('---')[1];
+        expect(frontmatter).not.toContain('entries');
+        expect(frontmatter).not.toContain('parsedEntries');
     });
 });
 
@@ -232,29 +380,40 @@ describe('KanbanStore.deserialise — edge cases', () => {
         expect(KanbanStore.deserialise('')).toBeNull();
     });
 
-    it('returns null for invalid YAML', () => {
-        expect(KanbanStore.deserialise('{{{')).toBeNull();
+    it('returns null for invalid YAML frontmatter', () => {
+        expect(KanbanStore.deserialise('---\n{{{\n---\n')).toBeNull();
     });
 
     it('returns null when title is missing', () => {
-        const yaml = 'description: No title field\n';
-        expect(KanbanStore.deserialise(yaml)).toBeNull();
+        const md = '---\ndescription: No title field\n---\n';
+        expect(KanbanStore.deserialise(md)).toBeNull();
     });
 
-    it('deserialises YAML with only title', () => {
-        const yaml = 'title: Just a title\n';
-        const card = KanbanStore.deserialise(yaml);
+    it('deserialises markdown with only title in frontmatter', () => {
+        const md = '---\ntitle: Just a title\n---\n';
+        const card = KanbanStore.deserialise(md);
         expect(card).not.toBeNull();
         expect(card!.title).toBe('Just a title');
         expect(card!.id).toBe('');
         expect(card!.lane).toBe('');
-        expect(card!.description).toBe('');
     });
 
-    it('handles YAML with unknown extra fields gracefully', () => {
-        const yaml = 'title: Test\nextraField: should be ignored\n';
-        const card = KanbanStore.deserialise(yaml);
+    it('handles frontmatter with unknown extra fields gracefully', () => {
+        const md = '---\ntitle: Test\nextraField: should be ignored\n---\n';
+        const card = KanbanStore.deserialise(md);
         expect(card).not.toBeNull();
         expect(card!.title).toBe('Test');
+    });
+
+    it('returns null when frontmatter has no closing fence', () => {
+        const md = '---\ntitle: Test\nno closing fence';
+        expect(KanbanStore.deserialise(md)).toBeNull();
+    });
+
+    it('falls back to pure YAML parsing for backwards compat', () => {
+        const yaml = 'title: Legacy Card\ncreated: 2026-01-01T00:00:00.000Z\n';
+        const card = KanbanStore.deserialise(yaml);
+        expect(card).not.toBeNull();
+        expect(card!.title).toBe('Legacy Card');
     });
 });

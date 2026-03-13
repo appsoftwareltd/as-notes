@@ -59,9 +59,6 @@ const DEFAULT_IGNORE_CONTENT = [
     '#',
     '# Node.js dependencies',
     'node_modules/',
-    '#',
-    '# Kanban board data',
-    'kanban/',
     '',
 ].join('\n');
 

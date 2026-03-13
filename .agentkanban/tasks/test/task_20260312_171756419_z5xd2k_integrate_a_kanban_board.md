@@ -746,3 +746,213 @@ You don't need to close yaml editor tabs - revert that
 Build clean, 562 tests pass.
 
 [user]
+
+On reflection, I realise that the yaml format for the card file was a mistake. This app is primarily about working in markdown. If we work in markdown in these files, then the kanban cards directory becomes something that we DO NOT ignore in .asnotesignore - then the user can open to edit in markdown.
+
+Most of the structured data from the current yaml can go into the card markdown front matter.
+
+For the user entries, the user will simply delimit with `## entry` or `## entry YYYY-MM-DD` with date which they can manually type or they can use a new slash command that will be available in card files only for creating the `## entry YYYY-MM-DD` heading for the current date and moving the cursor to a new line. They can also type the entry manually and any text can follow on the same line.
+
+
+```
+---
+title: Test card
+created: 2026-03-12T21:00:33.098Z
+updated: 2026-03-13T07:00:46.981Z
+description: Test card info
+sortOrder: 1
+slug: test_card
+assets:
+  - filename: kingfisher-icon-full.png
+    added: 2026-03-13T07:00:36.925Z
+---
+
+## entry 
+
+```
+
+With the `## entry` delimiters, the card edit modal in the task window can display separated entries much like it does now, however they will be read-only. Editing happens in the file.
+
+Don't worry about converting existing yaml. This is a new feature
+
+[agent]
+
+### Plan — YAML → Markdown Transition
+
+I've read README.md, INSTRUCTION.md, the task file, and thoroughly explored the current kanban implementation. Here's my analysis and plan.
+
+---
+
+#### What's Changing
+
+Card files switch from **pure YAML** (`.yaml`) to **Markdown with YAML frontmatter** (`.md`). This is a significant architectural change touching the entire card lifecycle.
+
+**Key requirements:**
+
+1. **Card files become `.md`** with YAML frontmatter (not pure YAML)
+2. **No longer ignored** by `.asnotesignore` — cards become part of the indexed note space
+3. **Entries become `## entry` headings** in the markdown body (not YAML `entries` array)
+4. **Entry date format**: `## entry YYYY-MM-DD` with optional text after
+5. **New slash command**: Available only in card files, inserts `## entry YYYY-MM-DD` heading
+6. **Card edit modal**: Entries displayed **read-only**; editing happens in the markdown file
+7. **No conversion of existing YAML** — greenfield
+
+---
+
+#### Card File Format (New)
+
+```markdown
+---
+title: Fix login timeout
+created: 2026-03-12T14:30:45.123Z
+updated: 2026-03-12T16:00:00.000Z
+description: Users experiencing timeouts under load
+priority: high
+assignee: alice
+labels:
+  - backend
+  - bug
+dueDate: 2026-03-20
+sortOrder: 100
+slug: fix_login_timeout
+assets:
+  - filename: screenshot.png
+    added: 2026-03-12T14:30:45.123Z
+---
+
+## entry 2026-03-12
+
+Initial investigation shows the database connection pool is exhausted.
+
+## entry 2026-03-13 Further analysis
+
+Confirmed — pool size is set to 5, needs to be at least 20.
+```
+
+---
+
+#### Scope of Changes
+
+| File | Changes |
+|------|---------|
+| **KanbanTypes.ts** | Add `CardEntryDisplay` (parsed entry for webview rendering — date, title, body text); keep or simplify `CardEntry` |
+| **KanbanStore.ts** | Full rewrite of `serialise`/`deserialise` to markdown+frontmatter; `.yaml` → `.md` extension; parse `## entry` headings from body; remove `entries` from frontmatter serialisation |
+| **KanbanEditorPanel.ts** | Remove `addEntry` handler; make entries read-only in state push; remove pending entry from `updateCardMeta` |
+| **webview/kanban.ts** | Remove entry creation UI (author input, textarea, Add button); render entries read-only; remove `addEntry` message; clean `saveModal()` of pending entry logic |
+| **webview/kanban.css** | Minor adjustments for read-only entry styling |
+| **SlashCommandProvider.ts** | Add `Entry Date` slash command restricted to card files, inserts `## entry YYYY-MM-DD\n` |
+| **extension.ts** | Remove `kanban/` from default `.asnotesignore` patterns |
+| **KanbanStore.test.ts** | Rewrite serialise/deserialise tests for markdown format and entry parsing |
+| **KanbanTypes.test.ts** | Update if interface changes |
+
+---
+
+#### Questions
+
+1. **Entry heading extras** — The format shows `## entry YYYY-MM-DD` and `## entry 2026-03-13 Further analysis`. Should text after the date be treated as a title/summary displayed in the modal? Or should the heading be strictly `## entry [date]`? [comment] Yes treat it as title for entry
+
+2. **Indexing** — Since cards become `.md` and are NOT ignored, they'll enter the wikilink index. Users could `[[link to card titles]]`. Is standard indexing fine, or do we need special treatment?
+
+[comment] Standard linking is fine, but we need to simplify the card filename format to `card_<slug>_<short uuid>.md` - so no date in the title
+
+3. **Slash command** — Should the new command always insert `## entry YYYY-MM-DD` with today's date (and the user can type a bare `## entry` manually)?
+
+[comment] Yes
+
+4. **`CardEntry` removal** — Currently `Card.entries` is `CardEntry[]` in the interface and is stored in YAML. I'll replace this with a `parsedEntries` field (or separate property) that's populated on deserialise from parsing the markdown body. The frontmatter won't contain entries. Confirmed?
+
+[comment] OK if this is done on the fly on opening the modal - if it's necessary. I don't want any entry info in the front matter
+
+[agent]
+
+### Plan — YAML → Markdown Transition (Consolidated)
+
+All decisions confirmed. Proceeding with plan, todo, and implementation.
+
+#### Consolidated Decisions
+
+1. **Entry heading extras** — Text after the date IS a title/summary, displayed in the modal
+2. **Indexing** — Standard indexing fine. **Filename format changed** to `card_<slug>_<short_uuid>.md` (no date)
+3. **Slash command** — Always inserts `## entry YYYY-MM-DD\n` with today's date
+4. **No entry info in frontmatter** — Entries parsed from markdown body on the fly for modal display
+5. **`.asnotesignore`** — Remove `kanban/` from default ignore patterns (cards are now indexed `.md` files)
+
+#### Key Changes
+
+**Filename format change**: `card_<slug>_<uuid>.md` instead of `card_<timestamp>_<uuid>_<slug>.yaml`
+- `generateId()` → simplified: `card_<slug>_<6-char-uuid>`
+- `extractSlugFromId()` → extract slug from new format
+- File extension: `.md` not `.yaml`
+- `loadCardsFromDirectory()` → reads `.md` files with `card_` prefix
+
+**Serialisation change**: Pure YAML → Markdown with YAML frontmatter
+- `serialise()` → outputs `---\n<yaml frontmatter>\n---\n\n<markdown body>`
+- `deserialise()` → splits frontmatter from body, parses frontmatter as YAML, parses `## entry` headings from body
+- No `entries` field in frontmatter
+- `CardEntry` interface removed from Card; new `CardEntryDisplay` type for parsed entries (date?, title?, body)
+- Card interface: replace `entries?: CardEntry[]` with `parsedEntries?: CardEntryDisplay[]` (populated on deserialise, never written)
+
+**Webview entry rendering**: Read-only
+- Remove entry creation UI (author input, textarea, Add button)
+- Remove `addEntry` message handler
+- Remove pending entry logic from `saveModal()`
+- Render entries as simple read-only blocks showing date, title, body
+
+**Slash command**: New `Card: Entry Date` command
+- Only shown when the file is inside a `kanban/` directory (detected by filepath)
+- Inserts `## entry YYYY-MM-DD\n` with cursor on new line
+
+[user]
+
+[agent]
+
+### YAML → Markdown Transition — Implementation Complete
+
+All source and test files updated. Build and tests pass (582 tests, 16 files).
+
+#### Files Modified
+
+| File | Change |
+|------|--------|
+| `KanbanTypes.ts` | Removed `CardEntry`, added `CardEntryDisplay` (`date?`, `title?`, `body`). `Card.entries` → `Card.parsedEntries` |
+| `KanbanStore.ts` | Full rewrite: markdown frontmatter serialise/deserialise, `generateId` → `card_<slug>_<uuid>`, new `extractMarkdownBody` and `parseEntries`, `.md` extensions throughout |
+| `KanbanEditorPanel.ts` | Removed `addEntry` handler and pending entry logic from `updateCardMeta` |
+| `webview/kanban.ts` | Entries section read-only, removed entry creation UI, uses `parsedEntries` with `date`/`title`/`body` |
+| `SlashCommandProvider.ts` | Added `Card: Entry Date` slash command (kanban card files only) |
+| `extension.ts` | Removed `kanban/` from `DEFAULT_IGNORE_CONTENT` so card `.md` files are indexed |
+| `KanbanStore.test.ts` | Rewritten: 43 tests covering new format — `generateId`, `extractSlugFromId`, `extractMarkdownBody`, `parseEntries`, serialise/deserialise round-trips, edge cases |
+
+#### Test Results
+- **582 tests passed** across 16 test files
+- Build successful
+
+[user]
+
+Test feedback: 
+
+- There is too much space under the LABELS header and the labels input
+- Add file (asset) should not close the card editor when added - it should keep open and display the asset thumbnail
+- Entries from split markdown headers are not showing in card editor `C:\Users\Gareth\src\as-notes-demo-notes\kanban\plant-projecty\todo\card_test_card_7ovc6h.md`
+- Clicking the board name in the side bar does not need to open the switch dialogue - we already have the switch control in the sidebar
+
+[agent]
+
+### UI Feedback — 4 Fixes Implemented
+
+All 582 tests pass, build successful.
+
+| # | Issue | Fix |
+|---|-------|-----|
+| 1 | Too much space under LABELS header | Removed `min-height` from empty `.tags-row`, added `:empty { display: none }` CSS. Styled input+button as attached input-group with `btn-tag-add` class for better visibility. |
+| 2 | Asset add closes card editor | Removed `closeModal()` from `stateUpdate` handler in webview. `renderBoard()` already saves/restores modal state during re-renders, so the modal stays open and shows the new asset thumbnail. |
+| 3 | Entries not showing in card editor | **Two fixes:** (a) `save()` and `moveCardToLane()` now re-parse `parsedEntries` from the markdown body after reading from disk. (b) Added a `FileSystemWatcher` for `**/card_*.md` in KanbanEditorPanel — when card files are created/changed/deleted externally (e.g. user adds entries in the text editor), the store reloads automatically. |
+| 4 | Board name click opens switch dialog | Removed `board-name` class from click handler in sidebar and removed the "Click to switch board" tooltip. The dedicated switch input control in the sidebar is sufficient. |
+
+#### Files Modified
+- `webview/kanban.css` — Input-group styling for label add, hidden empty tags-row
+- `webview/kanban.ts` — New `btn-tag-add` class on Add button, removed `closeModal()` from stateUpdate
+- `KanbanStore.ts` — Re-parse `parsedEntries` in `save()` and `moveCardToLane()`
+- `KanbanEditorPanel.ts` — Added FileSystemWatcher for card .md files
+- `webview/kanban-sidebar.ts` — Removed board-name click handler and tooltip
+
+[user]

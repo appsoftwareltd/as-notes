@@ -112,6 +112,17 @@ export class KanbanEditorPanel {
 
         this._disposables.push(this._kanbanStore.onDidChange(() => this._sendState()));
         this._disposables.push(this._boardConfigStore.onDidChange(() => this._sendState()));
+
+        // Reload cards when a card .md file is saved externally (e.g. user editing entries)
+        const cardWatcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(this._kanbanStore.kanbanRootUri, '**/card_*.md'),
+        );
+        const reloadFromDisk = async () => { await this._kanbanStore.reload(); };
+        this._disposables.push(cardWatcher.onDidChange(reloadFromDisk));
+        this._disposables.push(cardWatcher.onDidCreate(reloadFromDisk));
+        this._disposables.push(cardWatcher.onDidDelete(reloadFromDisk));
+        this._disposables.push(cardWatcher);
+
         this._panel.onDidDispose(() => this._dispose(), undefined, this._disposables);
     }
 
@@ -246,13 +257,6 @@ export class KanbanEditorPanel {
                 if (typeof message.description === 'string') {
                     card.description = message.description.trim();
                 }
-                // Auto-save pending entry text from the input field
-                const pendingText = (typeof message.pendingEntry === 'string') ? message.pendingEntry.trim() : '';
-                if (pendingText) {
-                    if (!card.entries) { card.entries = []; }
-                    const pendingAuthor = (typeof message.pendingEntryAuthor === 'string') ? message.pendingEntryAuthor.trim() || undefined : undefined;
-                    card.entries.push({ author: pendingAuthor, date: new Date().toISOString(), text: pendingText });
-                }
                 if (message.lane && message.lane !== card.lane) {
                     await this._kanbanStore.moveCardToLane(message.cardId, message.lane);
                 } else {
@@ -261,20 +265,6 @@ export class KanbanEditorPanel {
                 break;
             }
 
-            case 'addEntry': {
-                const card = this._kanbanStore.get(message.cardId);
-                if (!card) { break; }
-                const entry = {
-                    author: (message.author ?? '').trim() || undefined,
-                    date: new Date().toISOString(),
-                    text: (message.text ?? '').trim(),
-                };
-                if (!entry.text) { break; }
-                if (!card.entries) { card.entries = []; }
-                card.entries.push(entry);
-                await this._kanbanStore.save(card);
-                break;
-            }
 
             case 'addLane': {
                 const config = this._boardConfigStore.get();

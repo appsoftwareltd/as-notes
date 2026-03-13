@@ -528,13 +528,13 @@ In the editor panel:
 
 #### Cards
 
-Cards are the primary unit of work. Each card has a title, optional description, priority, assignee, labels, and due date.
+Cards are the primary unit of work. Each card is stored as a **Markdown file** with YAML front-matter for structured fields (title, lane, priority, assignee, labels, due date) and a Markdown body for free-form description. This means every card is a readable `.md` file you can open, edit, and diff with standard tools.
 
 - **Create card** — click **+ Card** in any lane, or run **AS Notes: New Kanban Card**.
 - **Move card** — drag a card between lanes, or use the lane drop-down in the card editor.
 - **Open card editor** — click a card to open an inline modal with all fields editable.
 - **Delete card** — click the trash icon in the card editor.
-- **Open card YAML** — click the file icon in the card editor to open the raw YAML file in the editor.
+- **Open card file** — click the **Open File** button in the card editor to open the Markdown file directly.
 
 **Priority levels:** critical · high · medium · low · none
 
@@ -550,18 +550,42 @@ A size warning is shown for files exceeding `as-notes.kanbanAssetSizeWarningMB` 
 
 #### Storage format
 
-All kanban data is plain YAML, version-control friendly, and human-readable:
+All kanban data is plain-text, version-control friendly, and human-readable. Board configuration uses YAML; cards are Markdown files with YAML front-matter:
 
 ```
 kanban/
   <board-slug>/
     board.yaml              ← board name, lanes, users, labels
-    <lane-slug>/
-      card_YYYYMMDD_HHmmssfff_<id>_<slug>.yaml
+    card_YYYYMMDD_HHmmssfff_<id>_<slug>.md   ← card (front-matter + body)
     assets/
       <card-id>/
         <filename>
 ```
+
+A typical card file looks like:
+
+```markdown
+---
+title: Implement search
+lane: doing
+priority: high
+assignee: gareth
+labels:
+  - backend
+  - v2
+dueDate: "2026-03-20"
+created: "2026-03-12T10:00:00.000Z"
+updated: "2026-03-13T09:15:00.000Z"
+---
+Acceptance criteria:
+- Full-text index across all notes
+- Results ranked by relevance
+
+## entry 2026-03-13T09:00:00.000Z
+Started on the indexing module today.
+```
+
+Front-matter holds the structured fields; the Markdown body is the card description. Entries (timestamped comments) are appended as `## entry <ISO-timestamp>` sections, keeping the entire card history in one diffable file.
 
 #### Commands
 
@@ -609,6 +633,12 @@ Wikilinks can be nested by adding more bracket pairs:
 The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and `]]` that balances correctly forms a valid wikilink. See [docs/TECHNICAL.md](docs/TECHNICAL.md) for a detailed explanation of the parsing algorithm and edge cases.
 
 ## Troubleshooting
+
+### Poor performance when under file sync tool management
+
+It has been observed that the VS Code editor can feel slower when the directory is under management by some sync tools (e.g. MS OneDrive, Google Drive, Dropbox etc). 
+
+AS Notes directories can be managed via sync, though Git is recommended as it does not watch files like the sync tools do and has full conflict resolution features.
 
 ### "This file is not yet indexed"
 

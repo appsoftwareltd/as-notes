@@ -461,15 +461,42 @@
 
     .tags-row {
         @apply flex flex-wrap gap-1;
-        min-height: 1.5rem;
+    }
+
+    .tags-row:empty {
+        @apply hidden;
     }
 
     .tag-add-row {
-        @apply flex gap-1.5 items-center;
+        @apply flex items-center;
     }
 
-    .tag-add-input {
+    .tag-add-row .tag-add-input {
         @apply flex-1;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        border-right: none;
+    }
+
+    .tag-add-row .autocomplete-wrapper {
+        @apply flex-1;
+    }
+
+    .tag-add-row .btn-tag-add {
+        @apply px-3 py-1.5 text-xs font-medium cursor-pointer border-0 whitespace-nowrap;
+        border-top-right-radius: theme('borderRadius.DEFAULT');
+        border-bottom-right-radius: theme('borderRadius.DEFAULT');
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        background-color: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+        border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+        border-left: none;
+        transition: background-color 0.15s;
+    }
+
+    .tag-add-row .btn-tag-add:hover {
+        background-color: var(--vscode-button-secondaryHoverBackground);
     }
 
     .tag-chip {
