@@ -41,3 +41,19 @@ task: task_20260312_171756419_z5xd2k_integrate_a_kanban_board
 - [x] Compact lane counts — horizontal row with headers and counts
 - [x] Confirm asset cleanup on card delete (already implemented)
 - [x] Add rename board button floated right of board name in sidebar
+
+### YAML → Markdown Transition
+
+- [ ] KanbanTypes.ts: Remove CardEntry, add CardEntryDisplay, update Card interface
+- [ ] KanbanStore.ts: Change filename format to card_<slug>_<uuid>.md
+- [ ] KanbanStore.ts: Rewrite serialise() to output markdown+frontmatter
+- [ ] KanbanStore.ts: Rewrite deserialise() to parse frontmatter + ## entry headings
+- [ ] KanbanStore.ts: Update loadCardsFromDirectory() for .md files
+- [ ] KanbanStore.ts: Update getCardUri(), save(), moveCardToLane(), delete() for .md extension
+- [ ] KanbanEditorPanel.ts: Remove addEntry handler, remove pending entry logic
+- [ ] webview/kanban.ts: Make entries read-only, remove entry creation UI
+- [ ] SlashCommandProvider.ts: Add Card: Entry Date command for kanban files
+- [ ] extension.ts: Remove kanban/ from default .asnotesignore patterns
+- [ ] KanbanStore.test.ts: Rewrite tests for new format
+- [ ] KanbanTypes.test.ts: Update for interface changes
+- [ ] Build and run all tests

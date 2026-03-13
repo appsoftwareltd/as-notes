@@ -125,8 +125,7 @@ export class KanbanSidebarProvider implements vscode.WebviewViewProvider {
     <style nonce="${nonce}">
         body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); padding: 8px; }
         .board-header { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
-        .board-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-        .board-name:hover { text-decoration: underline; }
+        .board-name { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .actions { display: flex; flex-wrap: wrap; gap: 6px; }
         .actions button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; padding: 4px 10px; cursor: pointer; border-radius: 2px; font-size: var(--vscode-font-size); }
         .actions button:hover { background: var(--vscode-button-hoverBackground); }

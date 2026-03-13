@@ -588,6 +588,12 @@ The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and 
 
 ## Troubleshooting
 
+### Poor performance when under file sync tool management
+
+It has been observed that the VS Code editor can feel slower when the directory is under management by some sync tools (e.g. MS OneDrive, Google Drive, Dropbox etc). 
+
+AS Notes directories can be managed via sync, though Git is recommended as it does not watch files like the sync tools do and has full conflict resolution features.
+
 ### "This file is not yet indexed"
 
 The backlinks panel shows this message when the current file is not in the AS Notes index. Common causes:

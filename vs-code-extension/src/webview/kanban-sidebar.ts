@@ -25,7 +25,7 @@ function handleClick(e: MouseEvent): void {
     const t = e.target as HTMLElement;
     if (t.id === 'btn-open-board' || t.closest('#btn-open-board')) { vscode.postMessage({ type: 'openBoard' }); return; }
     if (t.id === 'btn-new-card' || t.closest('#btn-new-card')) { vscode.postMessage({ type: 'newCard' }); return; }
-    if (t.id === 'btn-select-board' || t.closest('#btn-select-board') || t.classList.contains('board-name')) { vscode.postMessage({ type: 'selectBoard' }); return; }
+    if (t.id === 'btn-select-board' || t.closest('#btn-select-board')) { vscode.postMessage({ type: 'selectBoard' }); return; }
     if (t.id === 'btn-create-board' || t.closest('#btn-create-board')) { vscode.postMessage({ type: 'createBoard' }); return; }
     if (t.id === 'btn-delete-board' || t.closest('#btn-delete-board')) { vscode.postMessage({ type: 'deleteBoard' }); return; }
     if (t.id === 'btn-rename-board' || t.closest('#btn-rename-board')) { vscode.postMessage({ type: 'renameBoard' }); return; }
@@ -110,7 +110,7 @@ function render(): void {
 
     app.innerHTML = `
         <div class="board-header">
-            <span class="board-name" title="Click to switch board">${esc(state.boardName || state.boardSlug)}</span>
+            <span class="board-name">${esc(state.boardName || state.boardSlug)}</span>
             <button id="btn-rename-board" class="btn-sm-secondary">Rename</button>
             <button id="btn-delete-board" class="btn-sm-secondary">Delete</button>
         </div>

@@ -5,14 +5,14 @@ const vscode = acquireVsCodeApi();
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface CardEntry { author?: string; date: string; text: string }
+interface CardEntryDisplay { date?: string; title?: string; body: string }
 interface AssetMeta { filename: string; added: string; addedBy?: string }
 
 interface Card {
     id: string; title: string; lane: string; created: string; updated: string;
     description?: string; priority?: Priority; assignee?: string; labels?: string[];
     dueDate?: string; sortOrder?: number; slug: string;
-    entries?: CardEntry[]; assets?: AssetMeta[];
+    parsedEntries?: CardEntryDisplay[]; assets?: AssetMeta[];
 }
 
 interface BoardConfig {
@@ -67,6 +67,7 @@ const ICON_ARCHIVE = '<svg class="inline-icon" viewBox="0 0 16 16" fill="none" s
 const ICON_CALENDAR = '<svg class="inline-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1v3M11 1v3M2 7h12"/></svg>';
 const ICON_ATTACH = '<svg class="inline-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 7.5l-5.8 5.8a3.2 3.2 0 01-4.5-4.5L9 3a2 2 0 012.8 2.8l-5.5 5.5a.8.8 0 01-1.1-1.1L10.5 5"/></svg>';
 const ICON_FILE = '<svg class="inline-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5z"/><path d="M9 1v4h4"/></svg>';
+const ICON_ENTRY = '<svg class="inline-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v8H5l-3 3V3z"/></svg>';
 
 function isOverdue(isoDate: string): boolean {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -90,7 +91,6 @@ const PRIORITY_LABELS: Record<string, string> = {
 window.addEventListener('message', (event: MessageEvent) => {
     const msg = event.data as { type: string; state?: BoardState };
     if (msg.type === 'stateUpdate' && msg.state) {
-        closeModal();
         if (isDragging) { pendingState = msg.state; }
         else { state = msg.state; renderBoard(); }
     }
@@ -230,7 +230,7 @@ function buildCardHtml(card: Card): string {
         : '<span class="priority-badge priority-none">No Priority</span>';
     const hasMeta = card.assignee || card.dueDate || (card.labels && card.labels.length > 0);
     const assetCount = card.assets?.length ?? 0;
-    const entryCount = card.entries?.length ?? 0;
+    const entryCount = card.parsedEntries?.length ?? 0;
 
     return `
         <div class="card" draggable="true" data-card-id="${esc(card.id)}">
@@ -249,7 +249,7 @@ function buildCardHtml(card: Card): string {
             <div class="card-footer">
                 <div class="card-date">${formatIsoToDate(card.updated)}</div>
                 <div class="card-footer-actions">
-                    ${entryCount > 0 ? `<span class="card-badge" title="${entryCount} entries">${entryCount}💬</span>` : ''}
+                    ${entryCount > 0 ? `<span class="card-badge" title="${entryCount} entries">${ICON_ENTRY}${entryCount}</span>` : ''}
                     ${assetCount > 0 ? `<span class="card-badge" title="${assetCount} assets">${ICON_ATTACH}${assetCount}</span>` : ''}
                     <button class="icon-btn card-archive" data-archive-card-id="${esc(card.id)}" title="Archive card">${ICON_ARCHIVE}</button>
                 </div>
@@ -303,7 +303,7 @@ function buildModalHtml(): string {
                                     <input class="form-control tag-add-input" id="modal-label-input" type="text" placeholder="Add label\u2026" autocomplete="off">
                                     <div class="autocomplete-dropdown" id="label-ac-dropdown" hidden></div>
                                 </div>
-                                <button class="btn-secondary btn-sm" id="btn-add-label-tag" type="button">Add</button>
+                                <button class="btn-tag-add" id="btn-add-label-tag" type="button">Add</button>
                             </div>
                         </div>
                     </div>
@@ -319,14 +319,11 @@ function buildModalHtml(): string {
                         </div>
                     </div>
 
-                    <!-- Entries section (edit mode only) -->
+                    <!-- Entries section (edit mode only, read-only) -->
                     <div class="form-row" id="modal-entries-section" hidden>
                         <label class="form-label">Entries</label>
                         <div class="entries-list" id="entries-list"></div>
-                        <div class="entry-add-row">
-                            <textarea class="form-control entry-add-input" id="modal-entry-input" rows="2" placeholder="Add an entry…"></textarea>
-                            <button class="btn-secondary btn-sm" id="btn-add-entry" type="button">Add</button>
-                        </div>
+                        <div class="entries-edit-hint">Open the card file to add or edit entries.</div>
                     </div>
 
                     <!-- Assets section (edit mode only) -->
@@ -342,7 +339,7 @@ function buildModalHtml(): string {
                 </div>
                 <div class="modal-footer">
                     <div class="modal-footer-left" id="modal-footer-left">
-                        <button class="btn-link" id="btn-open-card-file">${ICON_FILE} Open File</button>
+                        <button class="btn-primary" id="btn-open-card-file">${ICON_FILE} Open File</button>
                     </div>
                     <div class="modal-actions">
                         <button class="btn-secondary" id="modal-cancel">Cancel</button>
@@ -388,7 +385,6 @@ function handleClick(e: MouseEvent): void {
         return;
     }
     if ((t as HTMLElement).id === 'btn-add-label-tag') { addLabelTag(); return; }
-    if ((t as HTMLElement).id === 'btn-add-entry') { addEntry(); return; }
     if ((t as HTMLElement).id === 'btn-add-asset') {
         if (modalCardId) { vscode.postMessage({ type: 'addAsset', cardId: modalCardId }); }
         return;
@@ -466,7 +462,6 @@ function handleKeydown(e: KeyboardEvent): void {
     }
     if (e.key === 'Enter' && (e.target as Element).id === 'modal-label-input') { e.preventDefault(); addLabelTag(); return; }
     if (e.key === 'Enter' && (e.target as Element).id === 'modal-duedate') { e.preventDefault(); if (validateDateInput()) document.getElementById('datepicker-overlay')?.setAttribute('hidden', ''); return; }
-    if (e.key === 'Enter' && !e.shiftKey && (e.target as Element).id === 'modal-entry-input') { e.preventDefault(); addEntry(); return; }
 }
 
 // ── Drag and Drop ────────────────────────────────────────────────────────────
@@ -673,7 +668,6 @@ function populateModal(card: Card): void {
     if (dueDateEl) dueDateEl.value = card.dueDate ?? '';
     initAutocomplete('modal-assignee', 'assignee-ac-dropdown', () => state.config.users ?? [], 'select');
     initAutocomplete('modal-label-input', 'label-ac-dropdown', () => state.config.labels ?? [], 'add-tag');
-    initAutocomplete('modal-entry-author', 'entry-author-ac-dropdown', () => state.config.users ?? [], 'select');
     renderTags();
     renderEntries(card);
     renderAssets(card);
@@ -737,12 +731,9 @@ function saveModal(): void {
     } else {
         if (!modalCardId) return;
         const description = ((document.getElementById('modal-description') as HTMLTextAreaElement).value ?? '').trim();
-        const pendingText = ((document.getElementById('modal-entry-input') as HTMLTextAreaElement | null)?.value ?? '').trim();
-        const pendingAuthor = ((document.getElementById('modal-entry-author') as HTMLInputElement | null)?.value ?? '').trim() || undefined;
         vscode.postMessage({
             type: 'updateCardMeta', cardId: modalCardId, lane, description,
             priority: priority === 'none' ? undefined : priority, assignee, labels, dueDate,
-            ...(pendingText ? { pendingEntry: pendingText, pendingEntryAuthor: pendingAuthor } : {}),
         });
     }
 
@@ -753,32 +744,21 @@ function saveModal(): void {
     closeModal();
 }
 
-// ── Entries ──────────────────────────────────────────────────────────────────
+// ── Entries (read-only) ─────────────────────────────────────────────────────
 
 function renderEntries(card: Card): void {
     const list = document.getElementById('entries-list');
     if (!list) return;
-    const entries = card.entries ?? [];
-    if (entries.length === 0) { list.innerHTML = '<div class="entries-empty">No entries yet.</div>'; return; }
+    const entries = card.parsedEntries ?? [];
+    if (entries.length === 0) { list.innerHTML = '<div class="entries-empty">No entries yet. Open the card file and use <code>/Entry Date</code> to add one.</div>'; return; }
     list.innerHTML = entries.map(e => `
         <div class="entry-item">
             <div class="entry-header">
-                ${e.author ? `<span class="entry-author">${esc(e.author)}</span>` : ''}
-                <span class="entry-date">${formatIsoToDate(e.date)}</span>
+                ${e.date ? `<span class="entry-date">${esc(e.date)}</span>` : ''}
+                ${e.title ? `<span class="entry-title">${esc(e.title)}</span>` : ''}
             </div>
-            <div class="entry-text">${esc(e.text)}</div>
+            <div class="entry-text">${esc(e.body)}</div>
         </div>`).join('');
-}
-
-function addEntry(): void {
-    const input = document.getElementById('modal-entry-input') as HTMLTextAreaElement | null;
-    const authorInput = document.getElementById('modal-entry-author') as HTMLInputElement | null;
-    if (!input || !modalCardId) return;
-    const text = input.value.trim();
-    if (!text) return;
-    const author = authorInput?.value.trim() || undefined;
-    vscode.postMessage({ type: 'addEntry', cardId: modalCardId, text, author });
-    input.value = '';
 }
 
 // ── Assets ───────────────────────────────────────────────────────────────────

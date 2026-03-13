@@ -234,6 +234,24 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
         };
         items.push(removeColsLeftItem);
 
+        // ── Card: Entry Date (kanban card files only) ─────────────────────
+        const filePath = document.uri.fsPath.replace(/\\/g, '/');
+        const isKanbanCardFile = /\/kanban\//.test(filePath) && /\/card_[^/]+\.md$/.test(filePath);
+        if (isKanbanCardFile) {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const d = String(today.getDate()).padStart(2, '0');
+            const dateStr = `${y}-${m}-${d}`;
+            const entryItem = new vscode.CompletionItem('Card: Entry Date', vscode.CompletionItemKind.Snippet);
+            entryItem.detail = `Insert ## entry ${dateStr} heading`;
+            entryItem.sortText = 'e-card-entry';
+            entryItem.filterText = '/Card Entry Date';
+            entryItem.insertText = new vscode.SnippetString(`## entry ${dateStr}\n\n$0`);
+            entryItem.range = range;
+            items.push(entryItem);
+        }
+
         if (isTaskLine) {
             // ── Task: Priority 1 ──────────────────────────────────────────
             const taskP1Item = new vscode.CompletionItem('Task: Priority 1', vscode.CompletionItemKind.Event);
