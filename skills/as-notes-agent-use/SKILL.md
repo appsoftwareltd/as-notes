@@ -1,9 +1,9 @@
 ---
 name: as-notes-agent-use
-description: "Use when working with the AS Notes VS Code extension — a Personal Knowledge Management System (PKMS). Two use cases: (1) writing/contributing notes in AS Notes format (wikilinks, task tags, aliases, journal entries, kanban cards, outliner mode) — notes can also be published as a static HTML site, and (2) helping users use, configure, and troubleshoot AS Notes (settings, commands, keyboard shortcuts, workspace setup, backlinks, encryption)."
+description: "Use when working with the AS Notes VS Code extension - a Personal Knowledge Management System (PKMS). Two use cases: (1) writing/contributing notes in AS Notes format (wikilinks, task tags, aliases, journal entries, kanban cards, outliner mode) - notes can also be published as a static HTML site, and (2) helping users use, configure, and troubleshoot AS Notes (settings, commands, keyboard shortcuts, workspace setup, backlinks, encryption)."
 ---
 
-# AS Notes — VS Code Extension
+# AS Notes - VS Code Extension
 
 AS Notes turns VS Code into a PKMS. Activates when `.asnotes/` exists at the workspace root.
 
@@ -15,9 +15,9 @@ AS Notes turns VS Code into a PKMS. Activates when `.asnotes/` exists at the wor
 
 ## How to Use This Skill
 
-**Use case 1 — Writing notes:** Create/edit markdown using wikilinks, task tags, aliases, journal entries, kanban cards, outliner bullets. Notes authored in AS Notes format can be published as a static HTML site (docs, content) via the `html-conversion` tool. → [Writing Notes in AS Notes Format](#writing-notes-in-as-notes-format), [Publishing to Static HTML](#publishing-to-static-html)
+**Use case 1 - Writing notes:** Create/edit markdown using wikilinks, task tags, aliases, journal entries, kanban cards, outliner bullets. Notes authored in AS Notes format can be published as a static HTML site (docs, content) via the `html-conversion` tool. → [Writing Notes in AS Notes Format](#writing-notes-in-as-notes-format), [Publishing to Static HTML](#publishing-to-static-html)
 
-**Use case 2 — Help & troubleshooting:** Answer questions about features, settings, commands, keyboard shortcuts, workspace setup, and diagnose problems. → Reference sections below.
+**Use case 2 - Help & troubleshooting:** Answer questions about features, settings, commands, keyboard shortcuts, workspace setup, and diagnose problems. → Reference sections below.
 
 ---
 
@@ -40,7 +40,7 @@ Nested wikilinks: [[Specific [[Topic]] Details]].
 
 - YAML front matter optional; include only when aliases are needed
 - First `# heading` is the page title in the index
-- Omit `.md` in wikilinks — `[[My Page]]` resolves to `My Page.md`
+- Omit `.md` in wikilinks - `[[My Page]]` resolves to `My Page.md`
 
 ### Task lines
 
@@ -113,8 +113,8 @@ Requires `.asnotes/` at workspace root. Without it: passive mode (no index, comm
 
 **Initialise:** Command Palette → **AS Notes: Initialise Workspace**
 
-- **AS Notes: Rebuild Index** — drop and recreate the index
-- **AS Notes: Clean Workspace** — remove `.asnotes/`, reset to passive mode (preserves `.asnotesignore`)
+- **AS Notes: Rebuild Index** - drop and recreate the index
+- **AS Notes: Clean Workspace** - remove `.asnotes/`, reset to passive mode (preserves `.asnotesignore`)
 
 ### .asnotesignore
 
@@ -149,33 +149,33 @@ logseq/
 
 **Disambiguation** (multiple files with same name): same directory wins, otherwise closest folder by distance.
 
-**Aliases** — YAML front matter: `aliases: [Short Name, Another Name]`
+**Aliases** - YAML front matter: `aliases: [Short Name, Another Name]`
 `[[Short Name]]` navigates to the page declaring that alias. Hover shows `Short Name.md → ActualPage.md`. Backlink counts include alias refs.
 
-**Rename sync** — editing wikilink text and moving the cursor away offers to rename the `.md` file and update all matching links.
+**Rename sync** - editing wikilink text and moving the cursor away offers to rename the `.md` file and update all matching links.
 
-**Autocomplete** — type `[[` to list all pages/aliases; selecting appends `]]`.
+**Autocomplete** - type `[[` to list all pages/aliases; selecting appends `]]`.
 
-**Colour** — `as-notes.wikilinkColour` (hex, e.g. `#3794ff`); empty = theme default.
+**Colour** - `as-notes.wikilinkColour` (hex, e.g. `#3794ff`); empty = theme default.
 
 ---
 
 ## Task / TODO Management
 
-**Toggle:** `Ctrl+Shift+Enter` / `Cmd+Shift+Enter` — cycles `plain → - [ ] → - [x] → plain` on the current line. Multi-cursor supported.
+**Toggle:** `Ctrl+Shift+Enter` / `Cmd+Shift+Enter` - cycles `plain → - [ ] → - [x] → plain` on the current line. Multi-cursor supported.
 
 ### Metadata tags
 
 | Tag | Description |
 |---|---|
-| `#P1` / `#P2` / `#P3` | Priority — Critical / High / Normal |
+| `#P1` / `#P2` / `#P3` | Priority - Critical / High / Normal |
 | `#W` | Waiting |
 | `#D-YYYY-MM-DD` | Due date |
 | `#C-YYYY-MM-DD` | Completion date |
 
 Tags stripped from display. First priority tag wins. Dates: `YYYY-MM-DD`.
 
-### Tasks sidebar — `Ctrl+Alt+T` / `Cmd+Alt+T`
+### Tasks sidebar - `Ctrl+Alt+T` / `Cmd+Alt+T`
 
 **Group By:** Page · Priority (P1→P2→P3→None, sorted by due date) · Due Date (Overdue/Today/This Week/Later/None) · Completion Date
 
@@ -183,21 +183,21 @@ Tags stripped from display. First priority tag wins. Dates: `YYYY-MM-DD`.
 
 ---
 
-## Backlinks Panel — `Ctrl+Alt+B` / `Cmd+Alt+B`
+## Backlinks Panel - `Ctrl+Alt+B` / `Cmd+Alt+B`
 
 All incoming wikilink references to the current file, displayed as context chains.
 
-- **Flat by page** (default) — sorted by source page name
-- **Grouped by chain** — grouped by link chain pattern (e.g. `[[Project]] → [[Tasks]] → [[Topic]]`)
+- **Flat by page** (default) - sorted by source page name
+- **Grouped by chain** - grouped by link chain pattern (e.g. `[[Project]] → [[Tasks]] → [[Topic]]`)
 - Default mode: `as-notes.backlinkGroupByChain` (default `false`)
-- Context verbosity: compact or wrapped — `as-notes.backlinkWrapContext` (default `false`)
+- Context verbosity: compact or wrapped - `as-notes.backlinkWrapContext` (default `false`)
 - Right-click any wikilink → **View Backlinks** for that page (works with aliases and forward refs)
 
 ---
 
-## Daily Journal — `Ctrl+Alt+J` / `Cmd+Alt+J`
+## Daily Journal - `Ctrl+Alt+J` / `Cmd+Alt+J`
 
-Creates or opens today's file. Filename: `YYYY_MM_DD.md` in `journals/` (or `as-notes.journalFolder`). Template: `journal_template.md` — `YYYY-MM-DD` replaced on creation. Folder and template auto-created on first use.
+Creates or opens today's file. Filename: `YYYY_MM_DD.md` in `journals/` (or `as-notes.journalFolder`). Template: `journal_template.md` - `YYYY-MM-DD` replaced on creation. Folder and template auto-created on first use.
 
 ---
 
@@ -287,8 +287,8 @@ Default lanes: **TODO**, **DOING**, **DONE** (TODO and DONE protected). Add/rena
 
 - **Algorithm:** AES-256-GCM, random 12-byte nonce per encryption
 - **Key derivation:** PBKDF2-SHA256, 100,000 iterations
-- **Storage:** passphrase in OS keychain (VS Code SecretStorage) — never written to disk
-- **File marker:** `ASNOTES_ENC_V1:<base64url payload>` — detected by Git pre-commit hook
+- **Storage:** passphrase in OS keychain (VS Code SecretStorage) - never written to disk
+- **File marker:** `ASNOTES_ENC_V1:<base64url payload>` - detected by Git pre-commit hook
 
 | Command | Description |
 |---|---|
@@ -342,7 +342,7 @@ Setting: `as-notes.licenceKey` (machine-scoped, not synced). Status bar shows **
 - Scans `--input` for `.md` → outputs `.html` files
 - `[[wikilinks]]` → relative `.html` links; auto-generates `<nav>` sidebar
 - Creates placeholder pages for missing wikilink targets
-- Content in `<article class="markdown-body">` — compatible with `github-markdown-css`
+- Content in `<article class="markdown-body">` - compatible with `github-markdown-css`
 - **Wipes output directory before each run**
 
 ```bash
