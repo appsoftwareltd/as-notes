@@ -1,5 +1,6 @@
 ---
 title: Integrate a Kanban board
+lane: test
 created: 2026-03-12T17:17:56.419Z
 updated: 2026-03-12T21:47:05.177Z
 sortOrder: 4

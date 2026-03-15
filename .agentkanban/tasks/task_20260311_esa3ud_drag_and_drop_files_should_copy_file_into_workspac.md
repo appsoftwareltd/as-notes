@@ -1,5 +1,6 @@
 ---
 title: Drag and drop files should copy file into workspace, not a file path
+lane: todo
 created: 2026-03-11T21:46:32.868Z
 updated: 2026-03-11T21:46:32.869Z
 description: Or at least have a configurable option for the behaviour

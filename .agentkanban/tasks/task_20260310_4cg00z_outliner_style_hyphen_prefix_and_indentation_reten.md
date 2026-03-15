@@ -1,8 +1,9 @@
 ---
 title: Outliner style hyphen prefix and indentation retention
+lane: doing
 created: 2026-03-10T15:52:14.785Z
-updated: 2026-03-12T21:46:57.294Z
-sortOrder: 2
+updated: 2026-03-13T19:52:12.064Z
+sortOrder: 1
 slug: outliner_style_hyphen_prefix_and_indentation_reten
 worktree:
   branch: agentkanban/20260310_155214785_4cg00z_outliner_style_hyphen_prefix_and_indentation_reten
@@ -1011,4 +1012,6 @@ Additionally fixed an outstanding issue from iteration 6: `syncOutlinerLineConte
 
 [user]
 
+There is an issue with code blocks where by even when not in a code block (seems to be a balancing issue), slash commands become unavailable. Try before the backticks / codeblock and it works again
 
+Outliner behaviours - should indenting a bullet indent all it's children? 

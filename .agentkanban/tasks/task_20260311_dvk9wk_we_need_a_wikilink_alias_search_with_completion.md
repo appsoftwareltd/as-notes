@@ -1,5 +1,6 @@
 ---
 title: We need a wikilink / alias search with completion
+lane: done
 created: 2026-03-11T11:37:51.643Z
 updated: 2026-03-12T17:35:31.847Z
 priority: high

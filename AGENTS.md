@@ -26,6 +26,10 @@ If you need more tools to help you test autonomously, ask.
 
 Important: Use red/green TDD. Write failing tests according to requirements first, and then iterate until your solution makes the tests pass.
 
+## Version Control
+
+Never commit or add to version control (Git) without express instruction / permission.
+
 ## Further Information
 
 Documentation aimed at humans is maintained in `README.md` at the root of the repository. This should also be read and understood as it will provide additional context and guidance for your work.
