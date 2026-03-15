@@ -755,7 +755,7 @@ Pushing the tag triggers the [Release workflow](.github/workflows/release.yml), 
 An [agent skill](https://skills.sh/) is available for AS Notes. Install it to give your AI assistant (GitHub Copilot, Claude, etc.) full knowledge of the extension — wikilink syntax, commands, settings, keyboard shortcuts, and more.
 
 ```bash
-npx skills add appsoftwareltd/as-notes
+npx skills add appsoftwareltd/as-notes/skills/as-notes-agent-use
 ```
 
 Once installed, your AI assistant can answer questions about AS Notes, help configure settings, explain features, and assist with your notes workflow.
