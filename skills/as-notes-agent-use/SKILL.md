@@ -1,6 +1,6 @@
 ---
 name: as-notes-agent-use
-description: "Use when working with the AS Notes VS Code extension - a Personal Knowledge Management System (PKMS). Two use cases: (1) writing/contributing notes in AS Notes format (wikilinks, task tags, aliases, journal entries, kanban cards, outliner mode) - notes can also be published as a static HTML site, and (2) helping users use, configure, and troubleshoot AS Notes (settings, commands, keyboard shortcuts, workspace setup, backlinks, encryption)."
+description: "Use when working with the AS Notes VS Code extension - a Personal Knowledge Management System (PKMS). Two use cases: (1) writing/contributing notes in AS Notes format (wikilinks, task tags, aliases, journal entries, kanban cards, outliner mode) - notes can also be published as a static HTML site, and (2) helping users use, configure, and troubleshoot AS Notes (settings, commands, keyboard shortcuts, workspace setup, backlinks, encryption). Use this skill whenever the user mentions AS Notes, .asnotes, wikilinks, [[double bracket links]], backlinks, outliner mode, kanban boards, encrypted notes, .enc.md, daily journal, task tags (#P1, #P2, #W, #D-), slash commands, todo toggle, task panel, rebuilding the index, .asnotesignore, or any as-notes.* VS Code setting. Also use when the user is writing or editing markdown notes that use wikilink syntax, managing tasks with priority/due-date tags, setting up a notes workspace, or publishing notes to static HTML."
 ---
 
 # AS Notes - VS Code Extension
@@ -13,11 +13,25 @@ AS Notes turns VS Code into a PKMS. Activates when `.asnotes/` exists at the wor
 
 ---
 
-## How to Use This Skill
+## Agent Directives
 
-**Use case 1 - Writing notes:** Create/edit markdown using wikilinks, task tags, aliases, journal entries, kanban cards, outliner bullets. Notes authored in AS Notes format can be published as a static HTML site (docs, content) via the `html-conversion` tool. → [Writing Notes in AS Notes Format](#writing-notes-in-as-notes-format), [Publishing to Static HTML](#publishing-to-static-html)
+### When writing or editing notes (use case 1)
 
-**Use case 2 - Help & troubleshooting:** Answer questions about features, settings, commands, keyboard shortcuts, workspace setup, and diagnose problems. → Reference sections below.
+- Always use `[[wikilinks]]` for cross-references between pages - never raw markdown links for internal pages
+- Omit `.md` in wikilinks: `[[My Page]]` not `[[My Page.md]]`
+- Add `aliases:` front matter only when a page genuinely needs alternative names
+- Use task tags (`#P1`, `#D-YYYY-MM-DD`, etc.) inline on task lines - do not invent new tag formats
+- In outliner mode every line must start with `- `; use indentation for hierarchy
+- When the user's notes may be published as a static HTML site, ensure wikilinks and structure are clean - the `html-conversion` tool converts them to relative `.html` links
+- See [Writing Notes in AS Notes Format](#writing-notes-in-as-notes-format) for templates
+
+### When helping or troubleshooting (use case 2)
+
+- Check whether `.asnotes/` exists before suggesting features that require an initialised workspace
+- Refer users to specific commands (e.g. **AS Notes: Rebuild Index**) rather than manual workarounds
+- For backlink/index issues, follow the [Troubleshooting Checklist](#troubleshooting-checklist) below
+- Quote exact setting names (`as-notes.*`) and keyboard shortcuts for the user's platform
+- See reference sections below for full feature details
 
 ---
 
@@ -321,6 +335,23 @@ Setting: `as-notes.licenceKey` (machine-scoped, not synced). Status bar shows **
 | `as-notes.backlinkWrapContext` | `false` | Backlinks: wrap context (`true`) or compact (`false`). |
 | `as-notes.outlinerMode` | `false` | Outliner Mode. Window-scoped. |
 | `as-notes.kanbanAssetSizeWarningMB` | `10` | Kanban attachment size warning (MB). `0` disables. |
+
+---
+
+## Troubleshooting Checklist
+
+When a user reports a problem, work through these checks in order:
+
+1. **Is the workspace initialised?** Check for `.asnotes/` directory. If missing → **AS Notes: Initialise Workspace**
+2. **Is the file indexed?** If backlinks/tasks are missing for a specific file:
+   - Check `.asnotesignore` - is the file matched by an exclude pattern?
+   - Check VS Code `files.exclude` / `search.exclude` settings - AS Notes respects these
+   - Is the file saved to disk? Unsaved files are not indexed
+3. **Is the index stale?** Suggest **AS Notes: Rebuild Index** if features worked before but stopped
+4. **Is the extension in a bad state?** (e.g. WASM errors after crash) → **AS Notes: Clean Workspace**, then re-initialise
+5. **Pro feature without licence?** Check `as-notes.licenceKey` is set. Status bar should show **AS Notes (Pro)**
+6. **Performance issues?** Check if the workspace is under file sync tool management (OneDrive, Dropbox, Google Drive) - these can cause slowness. Recommend Git instead
+7. **Enable logging** for deeper diagnosis: set `as-notes.enableLogging` to `true` (requires reload), then check `.asnotes/logs/`
 
 ---
 
