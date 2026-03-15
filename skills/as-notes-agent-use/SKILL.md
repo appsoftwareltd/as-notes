@@ -1,5 +1,5 @@
 ---
-name: as-notes
+name: as-notes-agent-use
 description: Use when working with the AS Notes VS Code extension — a Personal Knowledge Management System (PKMS). Two use cases: (1) writing/contributing notes in AS Notes format (wikilinks, task tags, aliases, journal entries, kanban cards, outliner mode) — notes can also be published as a static HTML site, and (2) helping users use, configure, and troubleshoot AS Notes (settings, commands, keyboard shortcuts, workspace setup, backlinks, encryption).
 license: MIT
 metadata:
