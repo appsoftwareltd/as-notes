@@ -245,7 +245,6 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 
 [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 
-
 ## Getting started
 
 For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-demo-notes and follow the instructions there to initialise.
@@ -750,6 +749,16 @@ git push origin main --tags
 ```
 
 Pushing the tag triggers the [Release workflow](.github/workflows/release.yml), which creates a GitHub Release automatically with auto-generated release notes and the VS Code Marketplace install link.
+
+## Agent Skills
+
+An [agent skill](https://skills.sh/) is available for AS Notes. Install it to give your AI assistant (GitHub Copilot, Claude, etc.) full knowledge of the extension — wikilink syntax, commands, settings, keyboard shortcuts, and more.
+
+```bash
+npx skills add appsoftwareltd/as-notes
+```
+
+Once installed, your AI assistant can answer questions about AS Notes, help configure settings, explain features, and assist with your notes workflow.
 
 ## Disclaimer
 
