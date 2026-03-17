@@ -7,11 +7,13 @@ Features include:
 - Wikilinks and Backlinks View
 - Task Management
 - Kanban Board
-- Markdown editing Support
+- Markdown editing support
+- Daily Journals
+- Encrypted Notes
 - And much more!
 
 For full documentation see [https://docs.asnotes.io](https://docs.asnotes.io)
 
 For product information see [https://github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
 
-AS Notes is free to use. **To purchase a licence for pro features, visit [https://www.asnotes.io/pricing](https://www.asnotes.io/pricing)**
+AS Notes is free to use. **To purchase a licence for Pro features, visit [https://www.asnotes.io/pricing](https://www.asnotes.io/pricing)**
