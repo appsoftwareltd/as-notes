@@ -1,8 +1,6 @@
-# AS Notes
+# AS Notes (Personal Knowledge Management VS Code Extension)
 
-Website: [asnotes.io](https://asnotes.io) Developer: [appsoftware.com](https://www.appsoftware.com)
-
-Social: [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/)
+Website: [asnotes.io](https://asnotes.io) | Developer: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
 
 [![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/appsoftwareltd.as-notes?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
@@ -11,13 +9,14 @@ Social: [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com
 [![License](https://img.shields.io/badge/license-Elastic--2.0-lightgrey)](https://github.com/appsoftwareltd/as-notes/blob/main/LICENSE)
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
-> Install: [AS Notes on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+|Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
+|-----|--|
+|Pro Features | [asnotes.io/pricing](https://asnotes.io)|
+|Docs | [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)|
 
-> Pro Features: [asnotes.io/pricing](https://asnotes.io)
+## What is AS Notes?
 
-> Docs: [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)
-
-AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
+AS Notes brings [[wikilink]] style note-taking (and much more) directly into VS Code. Capture ideas, link concepts, and stay focused - without ever leaving your editor.
 
 (Click for 1 minute Youtube video demo)
 
@@ -25,7 +24,7 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 
 ## Why VS Code?
 
-Using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features: 
+Many of us spend a lot of time in VS Code and using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features: 
 
 - Cross platform + Web (via Workspaces)
 - UI features such as Tabs, File Explorer, Themes
@@ -35,12 +34,14 @@ Using VS Code as your main notes application gives you so much for free, even be
 - Code highlighting 
 - And all of the many features that VS Code has
 
-## Main Features
+## Features of AS Notes
+
+### General
 
 - Privacy focused - does not send your data anywhere
-- Version control friendly (e.g. Git)
+- Version control friendly (Git & GitOps)
 - Lightweight indexing of your notes (local sqlite3 WASM)
-- Automatic wikilink / file rename tracking
+
 - Performant on large (~20k markdown files) knowledge bases 
 
 ### Wikilinks
@@ -48,6 +49,7 @@ Using VS Code as your main notes application gives you so much for free, even be
 - Logseq / Roam / Obsidian style `[[wikilinks]]` with nested link support e.g. `[[[[AS Notes]] Page]]`
 - Links resolve to the target page anywhere in your workspace
 - Renaming a link updates the target file and all matching references
+- Automatic wikilink / file rename tracking
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/wikilinks.png" alt="AS Notes backlinks wikilinks" style="max-height:200px; margin-top: 10px">
 
@@ -88,7 +90,7 @@ Tags can be placed anywhere on the task line:
 
 Multiple tags can be combined. Only one priority tag is used — if more than one is present, the first wins.
 
-#### Tasks Sidebar
+#### Task Managemnt
 
 The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all tasks across your entire workspace.
 
@@ -112,6 +114,10 @@ The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all task
 `Ctrl+Alt+B` (Windows/Linux) / `Cmd+Alt+B` (macOS)
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/backlinks.png" alt="AS Notes backlinks panel" style="max-height:400px; margin-top: 10px">
+
+### Kanban Board
+
+AS Notes has a built in Kanban board backed by markdown files that can be used and edited just like any other page under AS Notes.
 
 ### Daily Journal
 
