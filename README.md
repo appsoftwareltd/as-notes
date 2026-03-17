@@ -9,8 +9,10 @@ Website: [asnotes.io](https://asnotes.io) | Developer: [App Software Ltd](https:
 [![License](https://img.shields.io/badge/license-Elastic--2.0-lightgrey)](https://github.com/appsoftwareltd/as-notes/blob/main/LICENSE)
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
+
+|||
+|--|--|
 |Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
-|-----|--|
 |Pro Features | [asnotes.io/pricing](https://asnotes.io)|
 |Docs | [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)|
 
