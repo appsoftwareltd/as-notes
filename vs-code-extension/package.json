@@ -145,6 +145,10 @@
             {
                 "command": "as-notes.renameKanbanBoard",
                 "title": "AS Notes: Rename Kanban Board"
+            },
+            {
+                "command": "as-notes.enterLicenceKey",
+                "title": "AS Notes: Enter Licence Key"
             }
         ],
         "keybindings": [
@@ -217,7 +221,7 @@
                     "type": "string",
                     "default": "",
                     "scope": "machine",
-                    "description": "AS Notes Pro licence key. Enter your 24-character licence key to activate Pro features."
+                    "description": "AS Notes Pro licence key (format: ASNO-XXXX-XXXX-XXXX-XXXX). Enter your licence key to activate Pro features. Purchase at https://www.asnotes.io/pricing"
                 },
                 "as-notes.assetPath": {
                     "type": "string",

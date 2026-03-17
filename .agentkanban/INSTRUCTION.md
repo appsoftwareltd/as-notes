@@ -100,6 +100,16 @@ IMPORTANT: Do not add or commit to version control unless specifically instructe
 
 Command verbs direct the action during each phase. The user may combine verbs (e.g. `todo implement`) to action multiple phases in one turn.
 
+Shorthand single-letter aliases are also accepted and may be combined freely (e.g. `ti` or `t i` means `todo implement`, `pti` means `plan todo implement`):
+
+| Verb | Shorthand |
+|------|-----------|
+| `plan` | `p` |
+| `todo` | `t` |
+| `implement` | `i` |
+
+The intent of each verb is:
+
 #### plan
 Discuss, analyse, and plan the task collaboratively. Read the conversation, reason about requirements, explore approaches, record decisions. **No code, no files, no TODOs.**
 

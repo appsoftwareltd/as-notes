@@ -21,8 +21,13 @@ import {
     DEFAULT_TEMPLATE,
     TEMPLATE_FILENAME,
 } from './JournalService.js';
-import { isValidStatus, type LicenceStatus } from './LicenceService.js';
-import { activateWithServer } from './LicenceActivationService.js';
+import {
+    hasProEditorAccess,
+    hasProAiSyncAccess,
+    defaultLicenceState,
+    type LicenceState,
+} from './LicenceService.js';
+import { activateWithServer, validateWithServer, loadCachedLicenceState } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
@@ -157,8 +162,8 @@ let logService: LogService = NO_OP_LOGGER;
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
 
-/** Current licence validation result — updated on activation and config change. */
-let licenceStatus: LicenceStatus = 'not-entered';
+/** Current licence state — updated on activation, config change, and periodic validation. */
+let licenceState: LicenceState = defaultLicenceState();
 
 /** True only when running as the official appsoftwareltd.as-notes build. 
  *  This is deliberately a **deterrent, not a lock** - The legal protection is the licence; the ID check is friction on misuse and a clear indication to the user that the version violates licence terms.
@@ -166,13 +171,55 @@ let licenceStatus: LicenceStatus = 'not-entered';
 const OFFICIAL_EXTENSION_ID = 'appsoftwareltd.as-notes';
 let isOfficialBuild = false;
 
+/** Periodic validation timer handle — for cleanup on deactivation. */
+let validationIntervalHandle: ReturnType<typeof setInterval> | undefined;
+
+/** Validation interval: 24 hours. */
+const VALIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Returns true when a valid Pro licence key is configured AND the extension
- * is running as the official published build. Unofficial forks will never
- * pass this check regardless of licence key.
+ * Shows a warning notification with action buttons for managing the licence.
  */
-export function isProLicenced(): boolean {
-    return isOfficialBuild && isValidStatus(licenceStatus);
+async function showLicenceWarning(): Promise<void> {
+    const action = await vscode.window.showWarningMessage(
+        'AS Notes: Your AS Notes licence is not valid or is expired (Pro features have been disabled).',
+        'Manage Licence',
+        'Enter Licence Key',
+    );
+    if (action === 'Manage Licence') {
+        vscode.env.openExternal(vscode.Uri.parse('https://www.asnotes.io/billing'));
+    } else if (action === 'Enter Licence Key') {
+        vscode.commands.executeCommand('as-notes.enterLicenceKey');
+    }
+}
+
+/**
+ * Shows a warning when the licence server could not be reached.
+ */
+async function showServerUnreachableWarning(): Promise<void> {
+    const action = await vscode.window.showWarningMessage(
+        'AS Notes: Could not reach the licence server to validate your key. Please try removing and re-entering your licence key.',
+        'Enter Licence Key',
+    );
+    if (action === 'Enter Licence Key') {
+        vscode.commands.executeCommand('as-notes.enterLicenceKey');
+    }
+}
+
+/**
+ * Returns true when a valid Pro Editor (or higher) licence is active AND the
+ * extension is running as the official published build.
+ */
+export function hasProEditor(): boolean {
+    return isOfficialBuild && hasProEditorAccess(licenceState);
+}
+
+/**
+ * Returns true when a valid Pro AI & Sync licence is active AND the
+ * extension is running as the official published build.
+ */
+export function hasProAiSync(): boolean {
+    return isOfficialBuild && hasProAiSyncAccess(licenceState);
 }
 
 // ── Activation ─────────────────────────────────────────────────────────────
@@ -413,38 +460,89 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.cleanWorkspace', () => cleanWorkspace()),
     );
-
-    // Validate licence key on activation (checks stored token first, then local rule).
-    // Fire-and-forget: result is stored in licenceStatus; we show a warning if invalid.
-    const rawKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
-    activateWithServer(rawKey, context).then((status) => {
-        licenceStatus = status;
-        if (licenceStatus === 'invalid') {
-            vscode.window.showWarningMessage(
-                'AS Notes: The configured licence key is invalid. Pro features are disabled.',
-            );
+    /** Validate a licence key against the server with appropriate UI feedback. */
+    function validateLicenceKeyWithUI(key: string): void {
+        // Handle empty/invalid keys locally — no server call, no spinner.
+        const trimmed = key.trim();
+        if (!trimmed) {
+            activateWithServer(key, context).then((state) => {
+                licenceState = state;
+                showLicenceWarning();
+                updateFullModeStatusBar();
+            });
+            return;
         }
+
+        // Valid-format key — show progress spinner while contacting server.
+        vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'AS Notes: Validating licence key…' },
+            () => activateWithServer(key, context).then((state) => {
+                const wasValid = hasProEditorAccess(licenceState);
+                licenceState = state;
+                if (licenceState.serverUnreachable) {
+                    showServerUnreachableWarning();
+                } else if (licenceState.status === 'invalid' || licenceState.status === 'not-entered') {
+                    showLicenceWarning();
+                } else if (licenceState.status === 'valid' && !wasValid) {
+                    vscode.window.showInformationMessage('AS Notes: Licence activated successfully \u2714');
+                }
+                updateFullModeStatusBar();
+            }),
+        ).then(undefined, (err) => {
+            console.warn('as-notes: licence validation failed:', err);
+        });
+    }
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.enterLicenceKey', async () => {
+            const currentKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
+            const key = await vscode.window.showInputBox({
+                title: 'AS Notes: Enter Licence Key',
+                prompt: 'Enter your AS Notes Pro licence key (format: ASNO-XXXX-XXXX-XXXX-XXXX)',
+                placeHolder: 'ASNO-XXXX-XXXX-XXXX-XXXX',
+                value: currentKey,
+                ignoreFocusOut: true,
+            });
+            if (key === undefined) { return; } // cancelled
+            if (key === currentKey) {
+                // Same key re-entered — config change won't fire, validate directly.
+                validateLicenceKeyWithUI(key);
+            } else {
+                // Different key — update setting, config change handler will validate.
+                await vscode.workspace.getConfiguration('as-notes').update('licenceKey', key, vscode.ConfigurationTarget.Global);
+            }
+        }),
+    );
+
+    // Restore cached licence state on startup — no server call.
+    // The periodic 24h validation handles server-side checks.
+    loadCachedLicenceState(context).then((state) => {
+        licenceState = state;
         updateFullModeStatusBar();
     }).catch((err) => {
-        console.warn('as-notes: licence activation check failed:', err);
+        console.warn('as-notes: failed to load cached licence state:', err);
     });
+
+    // Periodic background validation (every 24 hours).
+    validationIntervalHandle = setInterval(() => {
+        validateWithServer(context).then((state) => {
+            const wasValid = hasProEditorAccess(licenceState);
+            licenceState = state;
+            if (wasValid && !hasProEditorAccess(licenceState)) {
+                showLicenceWarning();
+            }
+            updateFullModeStatusBar();
+        }).catch((err) => {
+            console.warn('as-notes: periodic licence validation failed:', err);
+        });
+    }, VALIDATION_INTERVAL_MS);
 
     // Re-validate whenever the licence key setting changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (!e.affectsConfiguration('as-notes.licenceKey')) { return; }
             const newKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
-            activateWithServer(newKey, context).then((status) => {
-                licenceStatus = status;
-                if (licenceStatus === 'invalid') {
-                    vscode.window.showWarningMessage(
-                        'AS Notes: The configured licence key is invalid. Pro features are disabled.',
-                    );
-                }
-                updateFullModeStatusBar();
-            }).catch((err) => {
-                console.warn('as-notes: licence re-validation failed:', err);
-            });
+            validateLicenceKeyWithUI(newKey);
         }),
     );
 
@@ -503,6 +601,10 @@ export function deactivate(): void {
         indexService?.close();
     }
     clearPeriodicScan();
+    if (validationIntervalHandle !== undefined) {
+        clearInterval(validationIntervalHandle);
+        validationIntervalHandle = undefined;
+    }
     disposeFullMode();
 }
 
@@ -793,7 +895,7 @@ async function enterFullMode(
 
     // Slash command provider — in-editor command menu triggered by /
     fullModeDisposables.push(
-        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, new SlashCommandProvider(() => isProLicenced()), '/'),
+        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, new SlashCommandProvider(() => hasProEditor()), '/'),
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.openDatePicker', () => openDatePicker()),
@@ -816,7 +918,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.insertTable', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -841,7 +943,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableAddColumn', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -874,7 +976,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableAddRow', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -904,7 +1006,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableFormat', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -933,7 +1035,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveRow', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -960,7 +1062,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveColumn', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -987,7 +1089,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveRowsAbove', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -1020,7 +1122,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveRowsBelow', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -1053,7 +1155,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveColumnsRight', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -1086,7 +1188,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveColumnsLeft', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -1226,7 +1328,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.setEncryptionKey', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1248,7 +1350,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.clearEncryptionKey', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1259,7 +1361,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.encryptNotes', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1315,7 +1417,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.decryptNotes', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1370,7 +1472,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.createEncryptedFile', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1395,7 +1497,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.createEncryptedJournalNote', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1426,7 +1528,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.encryptCurrentNote', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1467,7 +1569,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.decryptCurrentNote', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1809,7 +1911,7 @@ async function enterFullMode(
 function updateFullModeStatusBar(): void {
     if (!indexService?.isOpen) { return; }
     const pageCount = indexService.getAllPages().length;
-    const proLabel = isProLicenced() ? ' (Pro)' : '';
+    const proLabel = hasProEditor() ? ' (Pro)' : '';
     statusBarItem.text = `$(database) AS Notes${proLabel} — ${pageCount} pages`;
     statusBarItem.tooltip = 'Click to rebuild the AS Notes index';
     statusBarItem.command = 'as-notes.rebuildIndex';

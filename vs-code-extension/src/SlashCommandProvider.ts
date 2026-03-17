@@ -15,10 +15,10 @@ import { formatWikilinkDate } from './DatePickerService.js';
  * - Inline code spans (` `)
  */
 export class SlashCommandProvider implements vscode.CompletionItemProvider {
-    private readonly _isProLicenced: () => boolean;
+    private readonly _hasProEditor: () => boolean;
 
-    constructor(isProLicenced: () => boolean) {
-        this._isProLicenced = isProLicenced;
+    constructor(hasProEditor: () => boolean) {
+        this._hasProEditor = hasProEditor;
     }
 
     provideCompletionItems(
@@ -102,7 +102,7 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
         items.push(multilineCodeItem);
 
         // ── Table commands (Pro-gated) ─────────────────────────────────────
-        const proSuffix = this._isProLicenced() ? '' : ' (Pro)';
+        const proSuffix = this._hasProEditor() ? '' : ' (Pro)';
 
         // ── Table ──────────────────────────────────────────────────────────
         const tableItem = new vscode.CompletionItem('Table' + proSuffix, vscode.CompletionItemKind.Event);
