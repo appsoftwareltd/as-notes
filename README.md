@@ -1,6 +1,6 @@
 # AS Notes
 
-Developer: [appsoftware.com](https://www.appsoftware.com)
+Website: [asnotes.io](https://asnotes.io) Developer: [appsoftware.com](https://www.appsoftware.com)
 
 Social: [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/)
 
@@ -12,6 +12,8 @@ Social: [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
 > Install: [AS Notes on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+
+> Pro Features: [asnotes.io/pricing](https://asnotes.io)
 
 > Docs: [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)
 
@@ -211,9 +213,20 @@ In outliner mode, pressing Enter on a closing `` ``` `` line that belongs to a b
 
 ## AS Notes Pro Features
 
-A **Pro licence** unlocks premium features. Enter your licence key in VS Code settings under `as-notes.licenceKey`. When a valid key is active the status bar shows **AS Notes (Pro)**.
+A **Pro licence** unlocks premium features. When a valid key is active the status bar shows **AS Notes (Pro)**.
 
-To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/contact).
+To obtain a licence key, visit [asnotes.io](https://www.asnotes.io/pricing)
+
+**Entering your licence key:**
+
+- Run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`) — the quickest way.
+- Or open VS Code Settings (`Ctrl+,`), search for `as-notes.licenceKey`, and paste your key there.
+
+### Table commands
+
+All table operations in the slash command menu (`/`) are Pro features. Free users see them listed with **(Pro)** appended — they are visible but blocked until a licence is active.
+
+See [Slash Commands](#slash-commands) for the full list of table commands.
 
 ### Encrypted notes
 
@@ -604,7 +617,7 @@ Front-matter holds the structured fields; the Markdown body is the card descript
 |---|---|---|
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 | `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
-| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key. Scope: machine (not synced). |
+| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Enter via **AS Notes: Enter Licence Key** in the Command Palette or directly in Settings. Scope: machine (not synced). |
 | `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
 
 ## Supported file types
@@ -743,8 +756,8 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.2.1"   # change version
-git tag v2.2.1                   # change version
+git commit -m "Release v2.2.2"   # change version
+git tag v2.2.2                   # change version
 git push origin main --tags
 ```
 
