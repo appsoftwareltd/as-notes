@@ -65,7 +65,10 @@ These commands only appear in the slash menu when the cursor is on a task line (
 | **Task: Priority 3** | Inserts `#P3`, replacing any existing priority tag |
 | **Task: Waiting** | Inserts `#W` at the task text start |
 | **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD format). On confirm, inserts `#D-YYYY-MM-DD` at the task text start |
+| **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD format). On confirm, inserts `#C-YYYY-MM-DD` at the task text start |
 
 ## Pro Licence
 
-Pro users see clean command names in the menu. Free users see the same commands with **(Pro)** appended. See [[Encrypted Notes]] for how to obtain and enter a licence key.
+Pro users see clean command names in the menu. Free users see the same commands with **(Pro)** appended.
+
+To enter your licence key, run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`), or open VS Code Settings (`Ctrl+,`) and search for `as-notes.licenceKey`. See [[Settings]] for details.

@@ -21,16 +21,26 @@ Using VS Code as your notes app gives you a huge amount for free before you even
 
 ## Features at a Glance
 
+### Free
+
 | Feature | Summary |
 |---|---|
 | [[Wikilinks]] | Link between notes with `[[Page Name]]` — resolves anywhere in your workspace |
 | [[Backlinks]] | See every note that links to the current page |
 | [[Daily Journal]] | Open today's journal with a single shortcut |
 | [[Task Management]] | Toggle todos with a keyboard shortcut and browse them all in a panel |
-| [[Slash Commands]] | Insert tables, code blocks, dates, and more — type `/` to open the menu |
+| [[Slash Commands]] | Insert code blocks, dates, and task tags — type `/` to open the menu |
 | [[Images and Files]] | Drag and drop images, paste from clipboard, hover to preview |
-| [[Encrypted Notes]] | Store sensitive notes in AES-256-GCM encrypted `.enc.md` files *(Pro)* |
 | [[Publishing a Static Site]] | Convert your notes to a static website and deploy to GitHub Pages |
+
+### Pro
+
+| Feature | Summary |
+|---|---|
+| [[Slash Commands]] (Tables) | Insert and edit markdown tables directly from the slash menu |
+| [[Encrypted Notes]] | Store sensitive notes in AES-256-GCM encrypted `.enc.md` files |
+
+Obtain a Pro licence key at [asnotes.io/pricing](https://www.asnotes.io/pricing).
 
 ### Task Features
 

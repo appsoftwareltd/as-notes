@@ -1,122 +1,331 @@
 /**
- * LicenceActivationService — handles licence activation with optional server
- * verification and persistent token storage via VS Code SecretStorage.
+ * LicenceActivationService — handles licence activation and periodic
+ * validation against the AS Notes licence server at asnotes.io.
  *
- * ## Architecture (Option A)
+ * ## Flow
  *
- * The long-term design is:
- *   1. User enters licence key in settings.
- *   2. Extension calls the activation server ONCE → server records the activation
- *      and returns a signed token (Ed25519/HMAC).
- *   3. Signed token is stored in VS Code's `SecretStorage` (OS keychain, encrypted).
- *   4. On every subsequent startup the token is verified locally against the
- *      baked-in public key — no further network calls.
+ *   1. User enters licence key (ASNO-XXXX-XXXX-XXXX-XXXX) in settings.
+ *   2. Extension calls POST /api/v1/licence/activate → server returns JWT.
+ *   3. JWT is stored in VS Code's SecretStorage (OS keychain, encrypted).
+ *   4. On subsequent startups, if the cached JWT is not expired the
+ *      extension uses it directly. If expired, it re-activates.
+ *   5. A periodic background validation (POST /api/v1/licence/validate)
+ *      runs every 24 hours to detect revocation.
  *
- * ## Current state (stub — server not yet available)
+ * ## Grace period
  *
- * The activation server is not yet built.  This stub preserves the full
- * structure of Option A without any network call:
- *
- *   - First activation:  validates the key locally (format check only),
- *     then writes a stub token (`stub:<base64(key)>`) to SecretStorage.
- *   - Subsequent startups:  reads the stored token, checks it matches the
- *     current key, and falls back to local validation.
- *
- * **Replacing the stub:** When the server is ready, replace `_callServer()`
- * with a real HTTP call and replace `_verifyToken()` with Ed25519/HMAC
- * signature verification against the baked-in public key.  All call sites
- * remain unchanged.
+ *   When the server is unreachable, the extension falls back to the
+ *   cached token state for up to 7 days from the last successful
+ *   validation. After that, pro features are disabled.
  */
 
 import * as vscode from 'vscode';
-import { validateLicenceKey, type LicenceStatus } from './LicenceService.js';
+import {
+    validateLicenceKeyFormat,
+    defaultLicenceState,
+    invalidLicenceState,
+    type LicenceState,
+    type LicenceProduct,
+} from './LicenceService.js';
 
-const SECRET_KEY = 'as-notes.activationToken';
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const SECRET_TOKEN = 'as-notes.activationToken';
+const SECRET_LICENCE_KEY = 'as-notes.licenceKey';
+const SECRET_LAST_VALIDATED = 'as-notes.lastValidated';
+const SECRET_LICENCE_STATE = 'as-notes.licenceState';
+
+const DEFAULT_BASE_URL = 'https://www.asnotes.io';
+const GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const MAX_RETRIES = 3;
+const RETRY_DELAYS_MS = [1_000, 4_000, 16_000];
+
+// ── Base URL resolution ────────────────────────────────────────────────────
+
+function getBaseUrl(): string {
+    return process.env.AS_NOTES_LICENCE_SERVER_URL || DEFAULT_BASE_URL;
+}
+
+// ── JWT helpers (decode only — no signature verification) ──────────────────
+
+interface JwtPayload {
+    sub?: string;
+    licenceKey?: string;
+    product?: string;
+    iat?: number;
+    exp?: number;
+}
+
+function decodeJwtPayload(token: string): JwtPayload | null {
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) { return null; }
+        const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
+        return JSON.parse(payload) as JwtPayload;
+    } catch {
+        return null;
+    }
+}
+
+function isTokenExpired(token: string): boolean {
+    const payload = decodeJwtPayload(token);
+    if (!payload?.exp) { return true; }
+    return Date.now() >= payload.exp * 1000;
+}
+
+function extractProduct(token: string): LicenceProduct | null {
+    const payload = decodeJwtPayload(token);
+    if (payload?.product === 'pro_editor' || payload?.product === 'pro_ai_sync') {
+        return payload.product;
+    }
+    return null;
+}
+
+// ── HTTP helpers ───────────────────────────────────────────────────────────
+
+async function fetchWithRetry(
+    url: string,
+    body: Record<string, string>,
+): Promise<Response> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            // Only retry on 5xx
+            if (response.status >= 500 && attempt < MAX_RETRIES) {
+                lastError = new Error(`Server error ${response.status}`);
+                await delay(RETRY_DELAYS_MS[attempt]);
+                continue;
+            }
+            return response;
+        } catch (err) {
+            lastError = err;
+            if (attempt < MAX_RETRIES) {
+                await delay(RETRY_DELAYS_MS[attempt]);
+            }
+        }
+    }
+    throw lastError;
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ── Persisted state helpers ────────────────────────────────────────────────
+
+async function persistLicenceState(
+    secrets: vscode.SecretStorage,
+    token: string,
+    key: string,
+    state: LicenceState,
+): Promise<void> {
+    await secrets.store(SECRET_TOKEN, token);
+    await secrets.store(SECRET_LICENCE_KEY, key);
+    await secrets.store(SECRET_LAST_VALIDATED, Date.now().toString());
+    await secrets.store(SECRET_LICENCE_STATE, JSON.stringify(state));
+}
+
+async function clearPersistedState(secrets: vscode.SecretStorage): Promise<void> {
+    await secrets.delete(SECRET_TOKEN);
+    await secrets.delete(SECRET_LICENCE_KEY);
+    await secrets.delete(SECRET_LAST_VALIDATED);
+    await secrets.delete(SECRET_LICENCE_STATE);
+}
+
+async function loadPersistedState(secrets: vscode.SecretStorage): Promise<{
+    token: string | undefined;
+    key: string | undefined;
+    lastValidated: number | undefined;
+    state: LicenceState | undefined;
+}> {
+    const token = await secrets.get(SECRET_TOKEN);
+    const key = await secrets.get(SECRET_LICENCE_KEY);
+    const lastValidatedStr = await secrets.get(SECRET_LAST_VALIDATED);
+    const stateStr = await secrets.get(SECRET_LICENCE_STATE);
+
+    return {
+        token,
+        key,
+        lastValidated: lastValidatedStr ? parseInt(lastValidatedStr, 10) : undefined,
+        state: stateStr ? JSON.parse(stateStr) as LicenceState : undefined,
+    };
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Determine the licence status for the given key, using a stored activation
- * token where available.
+ * Load the cached licence state from SecretStorage without contacting the server.
+ * Used on startup to restore the previous licence state immediately.
+ * Returns defaultLicenceState() if nothing is cached.
+ */
+export async function loadCachedLicenceState(
+    context: vscode.ExtensionContext,
+): Promise<LicenceState> {
+    const persisted = await loadPersistedState(context.secrets);
+    return persisted.state ?? defaultLicenceState();
+}
+
+/**
+ * Activate a licence key against the server and return the resulting
+ * LicenceState. Stores the JWT and metadata in SecretStorage.
  *
- * On the FIRST call with a valid key the result is persisted to SecretStorage
- * so subsequent calls skip re-validation.
- *
- * Call this on every activation and configuration change — it is safe to
- * call repeatedly.
+ * Safe to call repeatedly — uses cached token when available and valid.
  */
 export async function activateWithServer(
     key: string,
     context: vscode.ExtensionContext,
-): Promise<LicenceStatus> {
-    // Not entered — clear any stale token and return early.
-    const localStatus = validateLicenceKey(key);
-    if (localStatus === 'not-entered') {
-        await context.secrets.delete(SECRET_KEY);
-        return 'not-entered';
+): Promise<LicenceState> {
+    // Not entered — clear persisted state.
+    const formatStatus = validateLicenceKeyFormat(key);
+    if (formatStatus === 'not-entered') {
+        await clearPersistedState(context.secrets);
+        return defaultLicenceState();
     }
 
-    // Format is invalid — no point storing or checking a token.
-    if (localStatus === 'invalid') {
-        await context.secrets.delete(SECRET_KEY);
-        return 'invalid';
+    // Format invalid — clear and return immediately.
+    if (formatStatus === 'invalid') {
+        await clearPersistedState(context.secrets);
+        return invalidLicenceState();
     }
 
-    // Key is locally valid — check whether we already have a stored token for it.
-    const storedToken = await context.secrets.get(SECRET_KEY);
-    if (storedToken && _verifyToken(storedToken, key)) {
-        // Previously activated and token still matches — no server call needed.
-        return 'valid';
+    // Key format is valid — check cached token.
+    const persisted = await loadPersistedState(context.secrets);
+
+    // If we have a cached token for this exact key and it's not expired, reuse it.
+    if (persisted.token && persisted.key === key && !isTokenExpired(persisted.token) && persisted.state) {
+        return persisted.state;
     }
 
-    // No valid stored token found — run "activation" (stub: local only).
-    // REPLACE THIS with a real server call when the activation API is available.
-    const serverStatus = await _callServer(key);
+    // Need to activate (or re-activate) with the server.
+    try {
+        const baseUrl = getBaseUrl();
+        const response = await fetchWithRetry(`${baseUrl}/api/v1/licence/activate`, {
+            licenceKey: key,
+            deviceId: vscode.env.machineId,
+            deviceInfo: `VS Code ${vscode.version} / ${getOsPlatformLabel()}`,
+        });
 
-    if (serverStatus === 'valid') {
-        // Persist the token so future startups skip network/validation work.
-        await context.secrets.store(SECRET_KEY, _buildToken(key));
-    } else {
-        await context.secrets.delete(SECRET_KEY);
+        if (response.ok) {
+            const data = await response.json() as { token: string; expiresAt: string };
+            const product = extractProduct(data.token);
+            const state: LicenceState = {
+                status: 'valid',
+                product,
+            };
+            await persistLicenceState(context.secrets, data.token, key, state);
+            return state;
+        }
+
+        // Handle specific error statuses per spec
+        if (response.status === 403 || response.status === 404) {
+            await clearPersistedState(context.secrets);
+            return invalidLicenceState();
+        }
+
+        // 400 = extension bug, log and return invalid
+        if (response.status === 400) {
+            console.warn('as-notes: licence activation returned 400 (bad request) — possible extension bug');
+            return invalidLicenceState();
+        }
+
+        // Other errors — fall through to grace period
+        throw new Error(`Unexpected status ${response.status}`);
+
+    } catch (err) {
+        // Server unreachable or all retries exhausted — apply grace period
+        return applyGracePeriod(persisted);
     }
-
-    return serverStatus;
 }
 
-// ── Stub internals (replace when server is available) ─────────────────────
-
 /**
- * Stub implementation of the server call.
- *
- * REPLACE with a real HTTP request to the activation endpoint.
- * The server should record the activation and return a signed token.
- * This function should return the validated `LicenceStatus` based on the
- * server's response.
+ * Validate the current licence key against the server (lightweight check).
+ * Returns the updated LicenceState. Call this periodically (every 24h).
  */
-async function _callServer(_key: string): Promise<LicenceStatus> {
-    // TODO: replace with real HTTP call + signed token handling.
-    // For now, local validation IS the "server" response.
-    return validateLicenceKey(_key);
+export async function validateWithServer(
+    context: vscode.ExtensionContext,
+): Promise<LicenceState> {
+    const persisted = await loadPersistedState(context.secrets);
+
+    if (!persisted.key || !persisted.token) {
+        return defaultLicenceState();
+    }
+
+    try {
+        const baseUrl = getBaseUrl();
+        const response = await fetchWithRetry(`${baseUrl}/api/v1/licence/validate`, {
+            licenceKey: persisted.key,
+        });
+
+        if (response.ok) {
+            const data = await response.json() as {
+                valid: boolean;
+                product: string;
+                revoked: boolean;
+                issuedAt: string;
+            };
+
+            if (data.revoked || !data.valid) {
+                await clearPersistedState(context.secrets);
+                return invalidLicenceState();
+            }
+
+            // Update last validated timestamp
+            const product = (data.product === 'pro_editor' || data.product === 'pro_ai_sync')
+                ? data.product as LicenceProduct
+                : null;
+            const state: LicenceState = { status: 'valid', product };
+            await context.secrets.store(SECRET_LAST_VALIDATED, Date.now().toString());
+            await context.secrets.store(SECRET_LICENCE_STATE, JSON.stringify(state));
+            return state;
+        }
+
+        if (response.status === 403 || response.status === 404) {
+            await clearPersistedState(context.secrets);
+            return invalidLicenceState();
+        }
+
+        throw new Error(`Unexpected status ${response.status}`);
+
+    } catch {
+        // Server unreachable — apply grace period
+        return applyGracePeriod(persisted);
+    }
 }
 
-/**
- * Build a stub token from the key.
- *
- * REPLACE with storage of the real signed token returned by the server.
- * The real token will be an opaque string (e.g. JWT or raw Ed25519 signature)
- * that can be verified against the baked-in public key without calling home.
- */
-function _buildToken(key: string): string {
-    // Stub: prefix makes it obvious this is not a real server token.
-    return `stub:${Buffer.from(key, 'utf8').toString('base64')}`;
+// ── Grace period ───────────────────────────────────────────────────────────
+
+function applyGracePeriod(persisted: {
+    token: string | undefined;
+    lastValidated: number | undefined;
+    state: LicenceState | undefined;
+}): LicenceState {
+    if (!persisted.token || !persisted.lastValidated || !persisted.state) {
+        return { ...defaultLicenceState(), serverUnreachable: true };
+    }
+
+    const elapsed = Date.now() - persisted.lastValidated;
+    if (elapsed <= GRACE_PERIOD_MS) {
+        // Within grace period — maintain current state
+        return { ...persisted.state, serverUnreachable: true };
+    }
+
+    // Grace period exceeded
+    return { ...defaultLicenceState(), serverUnreachable: true };
 }
 
-/**
- * Verify that a stored token matches the current key.
- *
- * REPLACE with Ed25519/HMAC signature verification against the baked-in
- * public key once the server returns real tokens.
- */
-function _verifyToken(token: string, key: string): boolean {
-    // Stub: token is `stub:<base64(key)>` — check both prefix and key match.
-    const expected = `stub:${Buffer.from(key, 'utf8').toString('base64')}`;
-    return token === expected;
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function getOsPlatformLabel(): string {
+    switch (process.platform) {
+        case 'win32': return 'Windows';
+        case 'darwin': return 'macOS';
+        case 'linux': return 'Linux';
+        default: return process.platform;
+    }
 }

@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.2.1",
+    "version": "2.2.2",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -145,6 +145,10 @@
             {
                 "command": "as-notes.renameKanbanBoard",
                 "title": "AS Notes: Rename Kanban Board"
+            },
+            {
+                "command": "as-notes.enterLicenceKey",
+                "title": "AS Notes: Enter Licence Key"
             }
         ],
         "keybindings": [
@@ -217,7 +221,7 @@
                     "type": "string",
                     "default": "",
                     "scope": "machine",
-                    "description": "AS Notes Pro licence key. Enter your 24-character licence key to activate Pro features."
+                    "description": "AS Notes Pro licence key (format: ASNO-XXXX-XXXX-XXXX-XXXX). Enter your licence key to activate Pro features. Purchase at https://www.asnotes.io/pricing"
                 },
                 "as-notes.assetPath": {
                     "type": "string",
