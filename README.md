@@ -1,6 +1,6 @@
 # AS Notes (Personal Knowledge Management VS Code Extension)
 
-Website: [asnotes.io](https://asnotes.io) | Developer: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
+Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
 
 [![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/appsoftwareltd.as-notes?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
@@ -13,7 +13,7 @@ Website: [asnotes.io](https://asnotes.io) | Developer: [App Software Ltd](https:
 |||
 |--|--|
 |Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
-|Pro Features | [asnotes.io/pricing](https://asnotes.io)|
+|Pro Features | [asnotes.io/pricing](https://www.asnotes.io)|
 |Docs | [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)|
 
 ## What is AS Notes?
