@@ -66,6 +66,7 @@ These commands only appear in the slash menu when the cursor is on a task line (
 | **Task: Waiting** | Inserts `#W` at the task text start |
 | **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD format). On confirm, inserts `#D-YYYY-MM-DD` at the task text start |
 | **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD format). On confirm, inserts `#C-YYYY-MM-DD` at the task text start |
+| **Convert to Kanban Card** *(Pro)* | Marks the task as done, creates a Kanban card in the **TODO** lane with the task title (stripped of tags), matching priority and due date, and the **Waiting** flag set. Only available on unchecked tasks |
 
 ## Pro Licence
 

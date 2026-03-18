@@ -325,7 +325,8 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
             convertToCardItem.insertText = '';
             convertToCardItem.range = range;
             convertToCardItem.command = { command: 'as-notes.convertTaskToKanbanCard', title: 'Convert to Kanban Card' };
-            items.push(convertToCardItem);        }
+            items.push(convertToCardItem);
+        }
 
         return new vscode.CompletionList(items, false);
     }

@@ -164,6 +164,7 @@ The following commands only appear in the slash menu when the cursor is on a tas
 | **Task: Waiting** | Toggles `#W` at the start of the task text (inserts if absent, removes if present) |
 | **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text. Replaces any existing due date tag |
 | **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#C-YYYY-MM-DD` at the start of the task text. Replaces any existing completion date tag |
+| **Convert to Kanban Card** *(Pro)* | Marks the task as done, creates a Kanban card in the **TODO** lane with the task title (stripped of tags), matching priority and due date, and the **Waiting** flag set. Only available on unchecked tasks |
 
 Priority and waiting tags toggle: issuing the same tag again removes it. Issuing a different priority replaces the existing one. Due date and completion date tags replace any existing tag of the same type.
 
@@ -556,7 +557,7 @@ Cards are the primary unit of work. Each card is stored as a **Markdown file** w
 - **Delete card** — click the trash icon in the card editor.
 - **Open card file** — click the **Open File** button in the card editor to open the Markdown file directly.
 
-**Priority levels:** critical · high · medium · low · none
+**Priority levels:** P1 · P2 · P3 · P4 · P5 · none
 
 #### Entries (comments)
 
@@ -588,7 +589,7 @@ A typical card file looks like:
 ---
 title: Implement search
 lane: doing
-priority: high
+priority: p2
 assignee: gareth
 labels:
   - backend
@@ -618,6 +619,7 @@ Front-matter holds the structured fields; the Markdown body is the card descript
 | **AS Notes: Create Kanban Board** | Create a new board |
 | **AS Notes: Rename Kanban Board** | Rename the current board |
 | **AS Notes: Delete Kanban Board** | Delete the current board and all its data |
+| **AS Notes: Convert Task to Kanban Card** | Mark the current task done and create a Kanban card from it *(Pro)* |
 
 ## Settings
 
