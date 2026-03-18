@@ -27,7 +27,7 @@ All AS Notes settings are available in VS Code Settings (`Ctrl+,`). Search for `
 
 | Setting | Default | Description |
 |---|---|---|
-| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key. Stored at machine scope (not synced across devices). See [[Encrypted Notes]]. |
+| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Unlocks table commands and encrypted notes. Enter via **AS Notes: Enter Licence Key** in the Command Palette, or paste directly here. Stored at machine scope (not synced across devices). See [[Encrypted Notes]]. |
 
 ## Keyboard Shortcuts
 

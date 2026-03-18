@@ -1,6 +1,6 @@
-# AS Notes
+# AS Notes (Personal Knowledge Management VS Code Extension)
 
-By [appsoftware.com](https://www.appsoftware.com)
+Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
 
 [![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/appsoftwareltd.as-notes?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
@@ -9,11 +9,16 @@ By [appsoftware.com](https://www.appsoftware.com)
 [![License](https://img.shields.io/badge/license-Elastic--2.0-lightgrey)](https://github.com/appsoftwareltd/as-notes/blob/main/LICENSE)
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
-> Install: [AS Notes on VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 
-> Docs: [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)
+|||
+|--|--|
+|Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
+|Pro Features | [asnotes.io/pricing](https://www.asnotes.io)|
+|Docs | [docs.asnotes.io](https://docs.asnotes.io)|
 
-AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS).
+## What is AS Notes?
+
+AS Notes brings [[wikilink]] style note-taking (and much more) directly into VS Code. Capture ideas, link concepts, and stay focused - without ever leaving your editor.
 
 (Click for 1 minute Youtube video demo)
 
@@ -21,7 +26,7 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 
 ## Why VS Code?
 
-Using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features: 
+Many of us spend a lot of time in VS Code and using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features: 
 
 - Cross platform + Web (via Workspaces)
 - UI features such as Tabs, File Explorer, Themes
@@ -31,12 +36,14 @@ Using VS Code as your main notes application gives you so much for free, even be
 - Code highlighting 
 - And all of the many features that VS Code has
 
-## Main Features
+## Features of AS Notes
+
+### General
 
 - Privacy focused - does not send your data anywhere
-- Version control friendly (e.g. Git)
+- Version control friendly (Git & GitOps)
 - Lightweight indexing of your notes (local sqlite3 WASM)
-- Automatic wikilink / file rename tracking
+
 - Performant on large (~20k markdown files) knowledge bases 
 
 ### Wikilinks
@@ -44,6 +51,7 @@ Using VS Code as your main notes application gives you so much for free, even be
 - Logseq / Roam / Obsidian style `[[wikilinks]]` with nested link support e.g. `[[[[AS Notes]] Page]]`
 - Links resolve to the target page anywhere in your workspace
 - Renaming a link updates the target file and all matching references
+- Automatic wikilink / file rename tracking
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/wikilinks.png" alt="AS Notes backlinks wikilinks" style="max-height:200px; margin-top: 10px">
 
@@ -72,6 +80,7 @@ Add structured hashtag metadata anywhere in a task line to categorise and organi
 | `#P3` | Priority 3 — Normal |
 | `#W` | Waiting — task is blocked or waiting on someone/something |
 | `#D-YYYY-MM-DD` | Due date — e.g. `#D-2026-03-15` |
+| `#C-YYYY-MM-DD` | Completion date — e.g. `#C-2026-03-15` |
 
 Tags can be placed anywhere on the task line:
 
@@ -83,7 +92,7 @@ Tags can be placed anywhere on the task line:
 
 Multiple tags can be combined. Only one priority tag is used — if more than one is present, the first wins.
 
-#### Tasks Sidebar
+#### Task Managemnt
 
 The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all tasks across your entire workspace.
 
@@ -94,6 +103,7 @@ The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all task
 | **Page** | Tasks grouped alphabetically by source page |
 | **Priority** | Tasks grouped by priority level (P1 → P2 → P3 → No Priority), sorted by due date within each group |
 | **Due Date** | Tasks grouped into buckets: Overdue / Today / This Week / Later / No Due Date |
+| **Completion Date** | Tasks grouped into buckets: Completed Today / This Week / Earlier / No Completion Date |
 
 **Filters:**
 
@@ -106,6 +116,10 @@ The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all task
 `Ctrl+Alt+B` (Windows/Linux) / `Cmd+Alt+B` (macOS)
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/backlinks.png" alt="AS Notes backlinks panel" style="max-height:400px; margin-top: 10px">
+
+### Kanban Board
+
+AS Notes has a built in Kanban board backed by markdown files that can be used and edited just like any other page under AS Notes.
 
 ### Daily Journal
 
@@ -147,8 +161,11 @@ The following commands only appear in the slash menu when the cursor is on a tas
 | **Task: Priority 1** | Inserts `#P1` at the start of the task text. Replaces any existing priority tag (`#P1`–`#P9`) on the line |
 | **Task: Priority 2** | Inserts `#P2`, replacing any existing priority tag |
 | **Task: Priority 3** | Inserts `#P3`, replacing any existing priority tag |
-| **Task: Waiting** | Inserts `#W` at the start of the task text |
-| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text |
+| **Task: Waiting** | Toggles `#W` at the start of the task text (inserts if absent, removes if present) |
+| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text. Replaces any existing due date tag |
+| **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#C-YYYY-MM-DD` at the start of the task text. Replaces any existing completion date tag |
+
+Priority and waiting tags toggle: issuing the same tag again removes it. Issuing a different priority replaces the existing one. Due date and completion date tags replace any existing tag of the same type.
 
 The menu appears inline as you type and supports filtering — just keep typing to narrow the list. Press Escape or any non-matching key to dismiss and keep the `/` as-is.
 
@@ -180,11 +197,44 @@ Hover over any image link in a markdown file to see a preview of the image inlin
 
 AS Notes can work alongside knowledge bases created in Obsidian or Logseq due to similar file structures. Be aware there are format and behavioural differences differences however.
 
+### Outliner Mode
+
+Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `- ` and custom keybindings keep you in flow:
+
+| Key | Action |
+|---|---|
+| **Enter** | Inserts a new bullet at the same indentation. Todo lines (`- [ ]`) continue as unchecked todos. |
+| **Tab** | Indents the bullet one level (capped at one level deeper than the bullet above). |
+| **Shift+Tab** | Outdents the bullet one level. |
+| **Ctrl+Shift+Enter** | Cycles: plain bullet → `- [ ]` → `- [x]` → plain bullet. |
+| **Ctrl+V / Cmd+V** | Multi-line paste: each clipboard line becomes a separate bullet. |
+
+#### Code Block Completion
+
+Code block completion works in **all** markdown files — outliner mode is not required.
+
+When you type `` ``` `` (with optional language, e.g. `` ```javascript ``) and press **Enter**, AS Notes automatically inserts the closing `` ``` `` and places the cursor inside the block. On a bullet line the content is indented to match markdown list continuation.
+
+The extension is aware of existing fence pairs: if the backticks are already balanced (i.e. there is a matching closing fence at the same indentation), Enter simply inserts a newline instead of a second skeleton.
+
+In outliner mode, pressing Enter on a closing `` ``` `` line that belongs to a bullet code block inserts a new bullet at the parent's indentation.
+
 ## AS Notes Pro Features
 
-A **Pro licence** unlocks premium features. Enter your licence key in VS Code settings under `as-notes.licenceKey`. When a valid key is active the status bar shows **AS Notes (Pro)**.
+A **Pro licence** unlocks premium features. When a valid key is active the status bar shows **AS Notes (Pro)**.
 
-To obtain a licence key, contact [appsoftware.com](https://www.appsoftware.com/contact).
+To obtain a licence key, visit [asnotes.io](https://www.asnotes.io/pricing)
+
+**Entering your licence key:**
+
+- Run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`) — the quickest way.
+- Or open VS Code Settings (`Ctrl+,`), search for `as-notes.licenceKey`, and paste your key there.
+
+### Table commands
+
+All table operations in the slash command menu (`/`) are Pro features. Free users see them listed with **(Pro)** appended — they are visible but blocked until a licence is active.
+
+See [Slash Commands](#slash-commands) for the full list of table commands.
 
 ### Encrypted notes
 
@@ -216,14 +266,13 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 
 [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 
-
 ## Getting started
 
 For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-demo-notes and follow the instructions there to initialise.
 
 ### Initialise a workspace
 
-AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** - you'll see a status bar item inviting you to initialise.
+AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** — commands show a friendly notification prompting you to initialise, and the status bar invites you to set up.
 
 To initialise:
 
@@ -474,13 +523,109 @@ Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journa
 - **Instant indexing:** new journal files are indexed immediately for wikilink completion and backlinks
 - **Idempotent:** pressing the shortcut again on the same day opens the existing file
 
+### Kanban board
+
+The **AS Notes Kanban** sidebar and editor panel let you manage work visually with cards organised into lanes.
+
+#### Boards
+
+A workspace can contain any number of named boards, stored as plain files in a `kanban/` directory at the workspace root. Each board has its own lanes and set of cards.
+
+- **Create a board** — run **AS Notes: Create Kanban Board** from the Command Palette and enter a name. The first board is selected automatically on activation.
+- **Switch board** — type in the board-switcher field in the sidebar to filter and select from existing boards. The editor panel opens automatically.
+- **Rename board** — click **Rename** in the sidebar board header, or run **AS Notes: Rename Kanban Board**.
+- **Delete board** — click **Delete** in the sidebar board header, or run **AS Notes: Delete Kanban Board**. Requires confirmation; all cards and assets are removed.
+
+#### Lanes
+
+Each board starts with three lanes: **TODO**, **DOING**, and **DONE**. TODO and DONE are protected and cannot be removed or renamed.
+
+In the editor panel:
+- **Add lane** — click **+ Lane** in the board header.
+- **Rename lane** — click the pencil icon on any non-protected lane header.
+- **Remove lane** — click the × button; if the lane contains cards a confirmation is shown and cards are deleted along with it.
+- **Reorder lanes** — drag a lane header to a new position.
+
+#### Cards
+
+Cards are the primary unit of work. Each card is stored as a **Markdown file** with YAML front-matter for structured fields (title, lane, priority, assignee, labels, due date) and a Markdown body for free-form description. This means every card is a readable `.md` file you can open, edit, and diff with standard tools.
+
+- **Create card** — click **+ Card** in any lane, or run **AS Notes: New Kanban Card**.
+- **Move card** — drag a card between lanes, or use the lane drop-down in the card editor.
+- **Open card editor** — click a card to open an inline modal with all fields editable.
+- **Delete card** — click the trash icon in the card editor.
+- **Open card file** — click the **Open File** button in the card editor to open the Markdown file directly.
+
+**Priority levels:** critical · high · medium · low · none
+
+#### Entries (comments)
+
+Each card has a log of timestamped entries. Type in the entry field at the bottom of the card modal and press **Add Entry** (or **Ctrl+Enter**). Entries show the author name (optional) and date in reverse-chronological order.
+
+#### Assets
+
+Files can be attached to a card. In the card editor, drag and drop a file onto the attachment area, or click **Add Files**. Images render as thumbnails; other files show as named links. Clicking a file opens it in VS Code. Assets are stored in `kanban/<board>/assets/<card-id>/`.
+
+A size warning is shown for files exceeding `as-notes.kanbanAssetSizeWarningMB` (default: 10 MB).
+
+#### Storage format
+
+All kanban data is plain-text, version-control friendly, and human-readable. Board configuration uses YAML; cards are Markdown files with YAML front-matter:
+
+```
+kanban/
+  <board-slug>/
+    board.yaml              ← board name, lanes, users, labels
+    card_YYYYMMDD_HHmmssfff_<id>_<slug>.md   ← card (front-matter + body)
+    assets/
+      <card-id>/
+        <filename>
+```
+
+A typical card file looks like:
+
+```markdown
+---
+title: Implement search
+lane: doing
+priority: high
+assignee: gareth
+labels:
+  - backend
+  - v2
+dueDate: "2026-03-20"
+created: "2026-03-12T10:00:00.000Z"
+updated: "2026-03-13T09:15:00.000Z"
+---
+Acceptance criteria:
+- Full-text index across all notes
+- Results ranked by relevance
+
+## entry 2026-03-13T09:00:00.000Z
+Started on the indexing module today.
+```
+
+Front-matter holds the structured fields; the Markdown body is the card description. Entries (timestamped comments) are appended as `## entry <ISO-timestamp>` sections, keeping the entire card history in one diffable file.
+
+#### Commands
+
+| Command | Description |
+|---|---|
+| **AS Notes: Open Kanban Board** | Open the editor panel for the current board |
+| **AS Notes: New Kanban Card** | Open the editor panel with the create-card modal pre-opened |
+| **AS Notes: Switch Kanban Board** | Switch to a board by slug (used internally by the sidebar) |
+| **AS Notes: Select Kanban Board** | Pick a board from a quick-pick list |
+| **AS Notes: Create Kanban Board** | Create a new board |
+| **AS Notes: Rename Kanban Board** | Rename the current board |
+| **AS Notes: Delete Kanban Board** | Delete the current board and all its data |
+
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 | `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
-| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key. Scope: machine (not synced). |
+| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Enter via **AS Notes: Enter Licence Key** in the Command Palette or directly in Settings. Scope: machine (not synced). |
 | `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
 
 ## Supported file types
@@ -508,6 +653,12 @@ Wikilinks can be nested by adding more bracket pairs:
 The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and `]]` that balances correctly forms a valid wikilink. See [docs/TECHNICAL.md](docs/TECHNICAL.md) for a detailed explanation of the parsing algorithm and edge cases.
 
 ## Troubleshooting
+
+### Poor performance when under file sync tool management
+
+It has been observed that the VS Code editor can feel slower when the directory is under management by some sync tools (e.g. MS OneDrive, Google Drive, Dropbox etc). 
+
+AS Notes directories can be managed via sync, though Git is recommended as it does not watch files like the sync tools do and has full conflict resolution features.
 
 ### "This file is not yet indexed"
 
@@ -613,12 +764,22 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.1.0"   # change version
-git tag v2.1.0                   # change version
+git commit -m "Release v2.2.2"   # change version
+git tag v2.2.2                   # change version
 git push origin main --tags
 ```
 
 Pushing the tag triggers the [Release workflow](.github/workflows/release.yml), which creates a GitHub Release automatically with auto-generated release notes and the VS Code Marketplace install link.
+
+## Agent Skills
+
+An [agent skill](https://skills.sh/) is available for AS Notes. Install it to give your AI assistant (GitHub Copilot, Claude, etc.) full knowledge of the extension — wikilink syntax, commands, settings, keyboard shortcuts, and more.
+
+```bash
+npx skills add appsoftwareltd/as-notes/skills/as-notes-agent-use
+```
+
+Once installed, your AI assistant can answer questions about AS Notes, help configure settings, explain features, and assist with your notes workflow.
 
 ## Disclaimer
 

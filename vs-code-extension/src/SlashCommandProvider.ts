@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { isLineInsideFrontMatter, isPositionInsideCode } from './CompletionUtils.js';
+import { formatWikilinkDate } from './DatePickerService.js';
 
 /**
  * Provides slash command completions in markdown files.
@@ -14,10 +15,10 @@ import { isLineInsideFrontMatter, isPositionInsideCode } from './CompletionUtils
  * - Inline code spans (` `)
  */
 export class SlashCommandProvider implements vscode.CompletionItemProvider {
-    private readonly _isProLicenced: () => boolean;
+    private readonly _hasProEditor: () => boolean;
 
-    constructor(isProLicenced: () => boolean) {
-        this._isProLicenced = isProLicenced;
+    constructor(hasProEditor: () => boolean) {
+        this._hasProEditor = hasProEditor;
     }
 
     provideCompletionItems(
@@ -101,7 +102,7 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
         items.push(multilineCodeItem);
 
         // ── Table commands (Pro-gated) ─────────────────────────────────────
-        const proSuffix = this._isProLicenced() ? '' : ' (Pro)';
+        const proSuffix = this._hasProEditor() ? '' : ' (Pro)';
 
         // ── Table ──────────────────────────────────────────────────────────
         const tableItem = new vscode.CompletionItem('Table' + proSuffix, vscode.CompletionItemKind.Event);
@@ -233,6 +234,24 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
         };
         items.push(removeColsLeftItem);
 
+        // ── Card: Entry Date (kanban card files only) ─────────────────────
+        const filePath = document.uri.fsPath.replace(/\\/g, '/');
+        const isKanbanCardFile = /\/kanban\//.test(filePath) && /\/card_[^/]+\.md$/.test(filePath);
+        if (isKanbanCardFile) {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const d = String(today.getDate()).padStart(2, '0');
+            const dateStr = `${y}-${m}-${d}`;
+            const entryItem = new vscode.CompletionItem('Card: Entry Date', vscode.CompletionItemKind.Snippet);
+            entryItem.detail = `Insert ## entry ${dateStr} heading`;
+            entryItem.sortText = 'e-card-entry';
+            entryItem.filterText = '/Card Entry Date';
+            entryItem.insertText = new vscode.SnippetString(`## entry ${dateStr}\n\n$0`);
+            entryItem.range = range;
+            items.push(entryItem);
+        }
+
         if (isTaskLine) {
             // ── Task: Priority 1 ──────────────────────────────────────────
             const taskP1Item = new vscode.CompletionItem('Task: Priority 1', vscode.CompletionItemKind.Event);
@@ -302,14 +321,4 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
 
         return new vscode.CompletionList(items, false);
     }
-}
-
-/**
- * Format a Date as a `[[YYYY_MM_DD]]` wikilink string.
- */
-export function formatWikilinkDate(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `[[${y}_${m}_${d}]]`;
 }

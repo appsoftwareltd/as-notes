@@ -6,9 +6,10 @@ AS Notes Pro lets you store sensitive notes in encrypted markdown files that are
 
 Encrypted notes are a **Pro feature**. To unlock them:
 
-1. Obtain a licence key from [appsoftware.com](https://www.appsoftware.com/contact)
-2. Open VS Code Settings (`Ctrl+,`)
-3. Search for `as-notes.licenceKey` and enter your key
+1. Obtain a licence key from [asnotes.io](https://www.asnotes.io/pricing)
+2. Enter your key using one of these methods:
+   - Run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`) — the quickest way
+   - Or open VS Code Settings (`Ctrl+,`), search for `as-notes.licenceKey`, and paste your key there
 
 When active, the status bar shows **AS Notes (Pro)**.
 

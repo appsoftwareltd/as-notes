@@ -13,6 +13,7 @@ import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
 import { getPathDistance, sanitiseFileName } from './PathUtils.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 import { TaskPanelProvider } from './TaskPanelProvider.js';
+import { SearchPanelProvider } from './SearchPanelProvider.js';
 import { BacklinkPanelProvider } from './BacklinkPanelProvider.js';
 import {
     computeJournalPaths,
@@ -20,8 +21,13 @@ import {
     DEFAULT_TEMPLATE,
     TEMPLATE_FILENAME,
 } from './JournalService.js';
-import { isValidStatus, type LicenceStatus } from './LicenceService.js';
-import { activateWithServer } from './LicenceActivationService.js';
+import {
+    hasProEditorAccess,
+    hasProAiSyncAccess,
+    defaultLicenceState,
+    type LicenceState,
+} from './LicenceService.js';
+import { activateWithServer, validateWithServer, loadCachedLicenceState } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
@@ -29,9 +35,14 @@ import { LogService, NO_OP_LOGGER } from './LogService.js';
 import { findInnermostOpenBracket } from './CompletionUtils.js';
 import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
-import { openDatePicker, insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './DatePickerService.js';
+import { openDatePicker } from './DatePickerService.js';
+import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
-import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, formatOutlinerPaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, getMaxOutlinerIndent } from './OutlinerService.js';
+import { KanbanStore } from './KanbanStore.js';
+import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
+import { KanbanEditorPanel } from './KanbanEditorPanel.js';
+import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -59,6 +70,55 @@ const DEFAULT_IGNORE_CONTENT = [
 /** Disposables registered in full mode — cleared on deactivation or mode transition. */
 let fullModeDisposables: vscode.Disposable[] = [];
 
+/**
+ * Command IDs registered inside `enterFullMode()`. Passive-mode stubs are
+ * registered for each of these in `activate()` so that VS Code never shows
+ * a cryptic "command not found" error when the workspace is not initialised.
+ * The stubs are stored in `fullModeDisposables` and automatically disposed
+ * when `enterFullMode()` calls `disposeFullMode()`.
+ */
+const FULL_MODE_COMMAND_IDS: string[] = [
+    'as-notes.toggleTaskPanel',
+    'as-notes.toggleShowTodoOnly',
+    'as-notes.openDatePicker',
+    'as-notes.insertTaskDueDate',
+    'as-notes.insertTaskCompletionDate',
+    'as-notes.insertTaskHashtag',
+    'as-notes.insertTable',
+    'as-notes.tableAddColumn',
+    'as-notes.tableAddRow',
+    'as-notes.tableFormat',
+    'as-notes.tableRemoveRow',
+    'as-notes.tableRemoveColumn',
+    'as-notes.tableRemoveRowsAbove',
+    'as-notes.tableRemoveRowsBelow',
+    'as-notes.tableRemoveColumnsRight',
+    'as-notes.tableRemoveColumnsLeft',
+    'as-notes.toggleTodo',
+    'as-notes.showBacklinks',
+    'as-notes.navigateToPage',
+    'as-notes.viewBacklinks',
+    'as-notes.viewBacklinksForPage',
+    'as-notes.openDailyJournal',
+    'as-notes.setEncryptionKey',
+    'as-notes.clearEncryptionKey',
+    'as-notes.encryptNotes',
+    'as-notes.decryptNotes',
+    'as-notes.createEncryptedFile',
+    'as-notes.createEncryptedJournalNote',
+    'as-notes.encryptCurrentNote',
+    'as-notes.decryptCurrentNote',
+    'as-notes.navigateToTask',
+    'as-notes.navigateWikilink',
+    'as-notes.openKanbanBoard',
+    'as-notes.newKanbanCard',
+    'as-notes.selectKanbanBoard',
+    'as-notes.switchKanbanBoard',
+    'as-notes.createKanbanBoard',
+    'as-notes.deleteKanbanBoard',
+    'as-notes.renameKanbanBoard',
+];
+
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
 let ignoreService: IgnoreService | undefined;
 
@@ -83,6 +143,16 @@ let completionProvider: WikilinkCompletionProvider | undefined;
 /** Task panel provider instance — alive while in full mode. */
 let taskPanelProvider: TaskPanelProvider | undefined;
 
+/** Search panel provider instance — alive while in full mode. */
+let searchPanelProvider: SearchPanelProvider | undefined;
+
+/** Kanban store instance — alive while in full mode. */
+let kanbanStore: KanbanStore | undefined;
+/** Kanban board config store instance — alive while in full mode. */
+let kanbanBoardConfigStore: KanbanBoardConfigStore | undefined;
+/** Kanban sidebar provider instance — alive while in full mode. */
+let kanbanSidebarProvider: KanbanSidebarProvider | undefined;
+
 /** Backlink panel provider instance — alive while in full mode. */
 let backlinkPanelProvider: BacklinkPanelProvider | undefined;
 
@@ -92,8 +162,8 @@ let logService: LogService = NO_OP_LOGGER;
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
 
-/** Current licence validation result — updated on activation and config change. */
-let licenceStatus: LicenceStatus = 'not-entered';
+/** Current licence state — updated on activation, config change, and periodic validation. */
+let licenceState: LicenceState = defaultLicenceState();
 
 /** True only when running as the official appsoftwareltd.as-notes build. 
  *  This is deliberately a **deterrent, not a lock** - The legal protection is the licence; the ID check is friction on misuse and a clear indication to the user that the version violates licence terms.
@@ -101,13 +171,55 @@ let licenceStatus: LicenceStatus = 'not-entered';
 const OFFICIAL_EXTENSION_ID = 'appsoftwareltd.as-notes';
 let isOfficialBuild = false;
 
+/** Periodic validation timer handle — for cleanup on deactivation. */
+let validationIntervalHandle: ReturnType<typeof setInterval> | undefined;
+
+/** Validation interval: 24 hours. */
+const VALIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Returns true when a valid Pro licence key is configured AND the extension
- * is running as the official published build. Unofficial forks will never
- * pass this check regardless of licence key.
+ * Shows a warning notification with action buttons for managing the licence.
  */
-export function isProLicenced(): boolean {
-    return isOfficialBuild && isValidStatus(licenceStatus);
+async function showLicenceWarning(): Promise<void> {
+    const action = await vscode.window.showWarningMessage(
+        'AS Notes: Your AS Notes licence is not valid or is expired (Pro features have been disabled).',
+        'Manage Licence',
+        'Enter Licence Key',
+    );
+    if (action === 'Manage Licence') {
+        vscode.env.openExternal(vscode.Uri.parse('https://www.asnotes.io/billing'));
+    } else if (action === 'Enter Licence Key') {
+        vscode.commands.executeCommand('as-notes.enterLicenceKey');
+    }
+}
+
+/**
+ * Shows a warning when the licence server could not be reached.
+ */
+async function showServerUnreachableWarning(): Promise<void> {
+    const action = await vscode.window.showWarningMessage(
+        'AS Notes: Could not reach the licence server to validate your key. Please try removing and re-entering your licence key.',
+        'Enter Licence Key',
+    );
+    if (action === 'Enter Licence Key') {
+        vscode.commands.executeCommand('as-notes.enterLicenceKey');
+    }
+}
+
+/**
+ * Returns true when a valid Pro Editor (or higher) licence is active AND the
+ * extension is running as the official published build.
+ */
+export function hasProEditor(): boolean {
+    return isOfficialBuild && hasProEditorAccess(licenceState);
+}
+
+/**
+ * Returns true when a valid Pro AI & Sync licence is active AND the
+ * extension is running as the official published build.
+ */
+export function hasProAiSync(): boolean {
+    return isOfficialBuild && hasProAiSyncAccess(licenceState);
 }
 
 // ── Activation ─────────────────────────────────────────────────────────────
@@ -149,58 +261,192 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         }),
     );
 
-    // Track whether the active cursor is on a bullet line
-    const syncOnBulletLineContext = (editor: vscode.TextEditor | undefined) => {
+    // Track whether the active cursor is on a bullet line or a code fence line
+    const syncOutlinerLineContext = (editor: vscode.TextEditor | undefined) => {
         if (!editor || editor.document.languageId !== 'markdown') {
             vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', false);
+            vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', false);
             return;
         }
-        // True if ANY cursor's active line is a bullet line (consistent with multi-cursor outliner behaviour)
         const onBullet = editor.selections.some(
             sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
         );
+        const onCodeFence = editor.selections.some(
+            sel => {
+                const text = editor.document.lineAt(sel.active.line).text;
+                return isStandaloneCodeFenceOpen(text) || isClosingCodeFenceLine(text);
+            },
+        );
         vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', onBullet);
+        vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', onCodeFence);
     };
 
     context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorSelection((e) => syncOnBulletLineContext(e.textEditor)),
+        vscode.window.onDidChangeTextEditorSelection((e) => syncOutlinerLineContext(e.textEditor)),
     );
     context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor((editor) => syncOnBulletLineContext(editor)),
+        vscode.window.onDidChangeActiveTextEditor((editor) => syncOutlinerLineContext(editor)),
     );
     // Initialise for currently active editor
-    syncOnBulletLineContext(vscode.window.activeTextEditor);
+    syncOutlinerLineContext(vscode.window.activeTextEditor);
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerEnter', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
+
+            // Track which selections triggered code fence skeleton insertion so we
+            // can reposition cursors to the blank content line after the edit.
+            let hasCodeFenceSkeleton = false;
+
             editor.edit(editBuilder => {
                 for (const selection of editor.selections) {
                     const lineText = editor.document.lineAt(selection.active.line).text;
-                    const insertText = getOutlinerEnterInsert(lineText);
-                    // Delete from cursor to end of line, then insert the new bullet prefix.
-                    // This preserves any text before the cursor on the current line.
                     const lineEnd = new vscode.Position(
                         selection.active.line,
                         editor.document.lineAt(selection.active.line).range.end.character,
                     );
+
+                    // 1. Bullet line ending with opening code fence → open code block
+                    if (isCodeFenceOpen(lineText)) {
+                        hasCodeFenceSkeleton = true;
+                        editBuilder.insert(lineEnd, getCodeFenceEnterInsert(lineText));
+                        continue;
+                    }
+
+                    // 2. Bullet line → new bullet at same indentation
+                    const insertText = getOutlinerEnterInsert(lineText);
                     editBuilder.delete(new vscode.Range(selection.active, lineEnd));
                     editBuilder.insert(selection.active, insertText);
                 }
+            }).then(success => {
+                if (!success || !hasCodeFenceSkeleton) { return; }
+                // After code fence skeleton insertion, VS Code places the cursor at
+                // the end of the closing ```. Reposition it to the blank line inside
+                // the fence (one line above the closing ```).
+                const newSelections: vscode.Selection[] = editor.selections.map(sel => {
+                    const closingLine = sel.active.line;
+                    const contentLine = closingLine > 0 ? closingLine - 1 : closingLine;
+                    const contentLineLength = editor.document.lineAt(contentLine).text.length;
+                    const pos = new vscode.Position(contentLine, contentLineLength);
+                    return new vscode.Selection(pos, pos);
+                });
+                editor.selections = newSelections;
+            });
+        }),
+    );
+
+    // Code fence Enter — works in all markdown files regardless of outliner mode.
+    // On standalone opening fences: inserts closing skeleton only when unbalanced.
+    // On closing fences in outliner mode: inserts a new bullet line.
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.codeFenceEnter', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            const allLines = editor.document.getText().split('\n');
+            const outlinerMode = vscode.workspace.getConfiguration('as-notes').get<boolean>('outlinerMode', false);
+            let hasCodeFenceSkeleton = false;
+
+            editor.edit(editBuilder => {
+                for (const selection of editor.selections) {
+                    const lineText = editor.document.lineAt(selection.active.line).text;
+                    const lineEnd = new vscode.Position(
+                        selection.active.line,
+                        editor.document.lineAt(selection.active.line).range.end.character,
+                    );
+
+                    // Closing fence of a bullet code block (checked first to avoid
+                    // misidentifying it as an unbalanced standalone opener)
+                    if (isClosingCodeFenceLine(lineText)) {
+                        const bulletResult = getClosingFenceBulletInsert(allLines, selection.active.line);
+                        if (bulletResult !== null) {
+                            if (outlinerMode) {
+                                editBuilder.insert(lineEnd, bulletResult);
+                            } else {
+                                editBuilder.insert(lineEnd, '\n');
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Standalone fence (opening with language, or bare ```)
+                    if (isStandaloneCodeFenceOpen(lineText)) {
+                        if (isCodeFenceUnbalanced(allLines, selection.active.line)) {
+                            hasCodeFenceSkeleton = true;
+                            editBuilder.insert(lineEnd, getStandaloneCodeFenceEnterInsert(lineText));
+                        } else {
+                            editBuilder.insert(lineEnd, '\n');
+                        }
+                        continue;
+                    }
+                }
+            }).then(success => {
+                if (!success || !hasCodeFenceSkeleton) { return; }
+                const newSelections: vscode.Selection[] = editor.selections.map(sel => {
+                    const closingLine = sel.active.line;
+                    const contentLine = closingLine > 0 ? closingLine - 1 : closingLine;
+                    const contentLineLength = editor.document.lineAt(contentLine).text.length;
+                    const pos = new vscode.Position(contentLine, contentLineLength);
+                    return new vscode.Selection(pos, pos);
+                });
+                editor.selections = newSelections;
             });
         }),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerIndent', () => {
-            vscode.commands.executeCommand('editor.action.indentLines');
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            const allLines = editor.document.getText().split('\n');
+            const tabSize = editor.options.tabSize as number ?? 4;
+
+            // Only indent if every selection's bullet line would stay within
+            // one tab stop of the nearest bullet above it.
+            const allAllowed = editor.selections.every(sel => {
+                const lineText = editor.document.lineAt(sel.active.line).text;
+                const currentIndent = (lineText.match(/^(\s*)/)?.[1]?.length) ?? 0;
+                const maxIndent = getMaxOutlinerIndent(allLines, sel.active.line, tabSize);
+                return currentIndent + tabSize <= maxIndent;
+            });
+
+            if (allAllowed) {
+                vscode.commands.executeCommand('editor.action.indentLines');
+            }
         }),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerOutdent', () => {
             vscode.commands.executeCommand('editor.action.outdentLines');
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerPaste', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            const clipboardText = await vscode.env.clipboard.readText();
+            if (!clipboardText) { return; }
+
+            // Check if any selection is on a bullet line with multi-line clipboard
+            const sel = editor.selection;
+            const lineText = editor.document.lineAt(sel.active.line).text;
+            const result = formatOutlinerPaste(lineText, sel.active.character, clipboardText);
+
+            if (!result) {
+                // Single-line or empty paste: fall through to default paste
+                vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+                return;
+            }
+
+            // Replace the entire line with the formatted multi-line bullets
+            const line = editor.document.lineAt(sel.active.line);
+            editor.edit(editBuilder => {
+                editBuilder.replace(line.range, result.text);
+            });
         }),
     );
 
@@ -214,38 +460,89 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.cleanWorkspace', () => cleanWorkspace()),
     );
-
-    // Validate licence key on activation (checks stored token first, then local rule).
-    // Fire-and-forget: result is stored in licenceStatus; we show a warning if invalid.
-    const rawKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
-    activateWithServer(rawKey, context).then((status) => {
-        licenceStatus = status;
-        if (licenceStatus === 'invalid') {
-            vscode.window.showWarningMessage(
-                'AS Notes: The configured licence key is invalid. Pro features are disabled.',
-            );
+    /** Validate a licence key against the server with appropriate UI feedback. */
+    function validateLicenceKeyWithUI(key: string): void {
+        // Handle empty/invalid keys locally — no server call, no spinner.
+        const trimmed = key.trim();
+        if (!trimmed) {
+            activateWithServer(key, context).then((state) => {
+                licenceState = state;
+                showLicenceWarning();
+                updateFullModeStatusBar();
+            });
+            return;
         }
+
+        // Valid-format key — show progress spinner while contacting server.
+        vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'AS Notes: Validating licence key…' },
+            () => activateWithServer(key, context).then((state) => {
+                const wasValid = hasProEditorAccess(licenceState);
+                licenceState = state;
+                if (licenceState.serverUnreachable) {
+                    showServerUnreachableWarning();
+                } else if (licenceState.status === 'invalid' || licenceState.status === 'not-entered') {
+                    showLicenceWarning();
+                } else if (licenceState.status === 'valid' && !wasValid) {
+                    vscode.window.showInformationMessage('AS Notes: Licence activated successfully \u2714');
+                }
+                updateFullModeStatusBar();
+            }),
+        ).then(undefined, (err) => {
+            console.warn('as-notes: licence validation failed:', err);
+        });
+    }
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.enterLicenceKey', async () => {
+            const currentKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
+            const key = await vscode.window.showInputBox({
+                title: 'AS Notes: Enter Licence Key',
+                prompt: 'Enter your AS Notes Pro licence key (format: ASNO-XXXX-XXXX-XXXX-XXXX)',
+                placeHolder: 'ASNO-XXXX-XXXX-XXXX-XXXX',
+                value: currentKey,
+                ignoreFocusOut: true,
+            });
+            if (key === undefined) { return; } // cancelled
+            if (key === currentKey) {
+                // Same key re-entered — config change won't fire, validate directly.
+                validateLicenceKeyWithUI(key);
+            } else {
+                // Different key — update setting, config change handler will validate.
+                await vscode.workspace.getConfiguration('as-notes').update('licenceKey', key, vscode.ConfigurationTarget.Global);
+            }
+        }),
+    );
+
+    // Restore cached licence state on startup — no server call.
+    // The periodic 24h validation handles server-side checks.
+    loadCachedLicenceState(context).then((state) => {
+        licenceState = state;
         updateFullModeStatusBar();
     }).catch((err) => {
-        console.warn('as-notes: licence activation check failed:', err);
+        console.warn('as-notes: failed to load cached licence state:', err);
     });
+
+    // Periodic background validation (every 24 hours).
+    validationIntervalHandle = setInterval(() => {
+        validateWithServer(context).then((state) => {
+            const wasValid = hasProEditorAccess(licenceState);
+            licenceState = state;
+            if (wasValid && !hasProEditorAccess(licenceState)) {
+                showLicenceWarning();
+            }
+            updateFullModeStatusBar();
+        }).catch((err) => {
+            console.warn('as-notes: periodic licence validation failed:', err);
+        });
+    }, VALIDATION_INTERVAL_MS);
 
     // Re-validate whenever the licence key setting changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (!e.affectsConfiguration('as-notes.licenceKey')) { return; }
             const newKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
-            activateWithServer(newKey, context).then((status) => {
-                licenceStatus = status;
-                if (licenceStatus === 'invalid') {
-                    vscode.window.showWarningMessage(
-                        'AS Notes: The configured licence key is invalid. Pro features are disabled.',
-                    );
-                }
-                updateFullModeStatusBar();
-            }).catch((err) => {
-                console.warn('as-notes: licence re-validation failed:', err);
-            });
+            validateLicenceKeyWithUI(newKey);
         }),
     );
 
@@ -254,6 +551,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     // CRITICAL: This must always be returned, even if enterFullMode() fails,
     // so that VS Code's markdown preview can pick up the wikilink plugin.
     const apiReturn = { extendMarkdownIt: createExtendMarkdownIt() };
+
+    // Register passive-mode stubs for all full-mode commands so that VS Code
+    // never shows "command not found" when the workspace is not initialised.
+    // These are stored in fullModeDisposables and disposed when enterFullMode()
+    // replaces them with real implementations.
+    for (const id of FULL_MODE_COMMAND_IDS) {
+        fullModeDisposables.push(
+            vscode.commands.registerCommand(id, async () => {
+                const action = await vscode.window.showWarningMessage(
+                    'AS Notes: Workspace not initialised. Run "AS Notes: Initialise Workspace" to get started.',
+                    'Initialise',
+                );
+                if (action === 'Initialise') {
+                    vscode.commands.executeCommand('as-notes.initWorkspace');
+                }
+            }),
+        );
+    }
 
     // Check for .asnotes/ in workspace root
     const workspaceRoot = getWorkspaceRoot();
@@ -286,6 +601,10 @@ export function deactivate(): void {
         indexService?.close();
     }
     clearPeriodicScan();
+    if (validationIntervalHandle !== undefined) {
+        clearInterval(validationIntervalHandle);
+        validationIntervalHandle = undefined;
+    }
     disposeFullMode();
 }
 
@@ -316,6 +635,7 @@ function toggleTodoCommand(): void {
         const filename = path.basename(doc.uri.fsPath);
         indexService.indexFileContent(relativePath, filename, doc.getText(), Date.now());
         taskPanelProvider?.refresh();
+        searchPanelProvider?.refresh();
         backlinkPanelProvider?.refresh();
     });
 }
@@ -388,6 +708,122 @@ async function enterFullMode(
         }),
     );
 
+    // Search panel — wikilink/alias search bar above the tasks view.
+    searchPanelProvider = new SearchPanelProvider(context, indexService);
+    fullModeDisposables.push(
+        vscode.window.registerWebviewViewProvider(
+            SearchPanelProvider.VIEW_ID,
+            searchPanelProvider,
+            { webviewOptions: { retainContextWhenHidden: true } },
+        ),
+    );
+
+    // Kanban board — sidebar summary + editor panel for full board.
+    const kanbanRootUri = vscode.Uri.joinPath(workspaceRoot, 'kanban');
+    kanbanStore = new KanbanStore(kanbanRootUri, logService);
+    kanbanBoardConfigStore = new KanbanBoardConfigStore(kanbanRootUri, logService);
+    kanbanSidebarProvider = new KanbanSidebarProvider(context, kanbanStore, kanbanBoardConfigStore);
+
+    fullModeDisposables.push(
+        vscode.window.registerWebviewViewProvider(
+            KanbanSidebarProvider.VIEW_ID,
+            kanbanSidebarProvider,
+            { webviewOptions: { retainContextWhenHidden: true } },
+        ),
+    );
+
+    // Auto-select first board if available
+    const boards = await kanbanBoardConfigStore.listBoards();
+    if (boards.length > 0) {
+        await kanbanStore.selectBoard(boards[0]);
+        await kanbanBoardConfigStore.selectBoard(boards[0]);
+    }
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.openKanbanBoard', () => {
+            KanbanEditorPanel.createOrShow(context.extensionUri, kanbanStore!, kanbanBoardConfigStore!, logService);
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.newKanbanCard', () => {
+            const panel = KanbanEditorPanel.createOrShow(context.extensionUri, kanbanStore!, kanbanBoardConfigStore!, logService);
+            panel.triggerCreateModal();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.switchKanbanBoard', async (slug?: string) => {
+            if (!slug) return;
+            await kanbanStore!.selectBoard(slug);
+            await kanbanBoardConfigStore!.selectBoard(slug);
+            KanbanEditorPanel.createOrShow(context.extensionUri, kanbanStore!, kanbanBoardConfigStore!, logService);
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.selectKanbanBoard', async () => {
+            const boardList = await kanbanBoardConfigStore!.listBoards();
+            if (boardList.length === 0) {
+                const create = await vscode.window.showInformationMessage('No boards found. Create one?', 'Create');
+                if (create === 'Create') { vscode.commands.executeCommand('as-notes.createKanbanBoard'); }
+                return;
+            }
+            const pick = await vscode.window.showQuickPick(boardList, { placeHolder: 'Select a board' });
+            if (pick) {
+                await kanbanStore!.selectBoard(pick);
+                await kanbanBoardConfigStore!.selectBoard(pick);
+                KanbanEditorPanel.currentPanel?.refresh();
+                kanbanSidebarProvider?.refresh();
+            }
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.createKanbanBoard', async () => {
+            const name = await vscode.window.showInputBox({ prompt: 'Board name', placeHolder: 'My Board' });
+            if (!name) return;
+            const slug = await kanbanBoardConfigStore!.createBoard(name);
+            await kanbanStore!.selectBoard(slug);
+            await kanbanBoardConfigStore!.selectBoard(slug);
+            KanbanEditorPanel.currentPanel?.refresh();
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.deleteKanbanBoard', async () => {
+            const currentSlug = kanbanStore!.currentBoard;
+            if (!currentSlug) { vscode.window.showInformationMessage('No board selected.'); return; }
+            const config = kanbanBoardConfigStore!.get();
+            const displayName = config.name || currentSlug;
+            const confirm = await vscode.window.showWarningMessage(`Delete board "${displayName}" and all its cards?`, { modal: true }, 'Delete');
+            if (confirm !== 'Delete') return;
+            await kanbanBoardConfigStore!.deleteBoard(currentSlug);
+            const remaining = await kanbanBoardConfigStore!.listBoards();
+            if (remaining.length > 0) {
+                await kanbanStore!.selectBoard(remaining[0]);
+                await kanbanBoardConfigStore!.selectBoard(remaining[0]);
+            } else {
+                await kanbanStore!.selectBoard('');
+                kanbanBoardConfigStore!.clear();
+            }
+            KanbanEditorPanel.currentPanel?.refresh();
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.renameKanbanBoard', async () => {
+            const currentSlug = kanbanStore!.currentBoard;
+            if (!currentSlug) { vscode.window.showInformationMessage('No board selected.'); return; }
+            const config = kanbanBoardConfigStore!.get();
+            const currentName = config.name || currentSlug.replace(/-/g, ' ');
+            const newName = await vscode.window.showInputBox({ prompt: 'New board name', value: currentName });
+            if (!newName) return;
+            const newSlug = await kanbanBoardConfigStore!.renameBoard(currentSlug, newName);
+            await kanbanStore!.selectBoard(newSlug);
+            await kanbanBoardConfigStore!.selectBoard(newSlug);
+            KanbanEditorPanel.currentPanel?.refresh();
+            kanbanSidebarProvider?.refresh();
+        }),
+    );
+
     // Status bar: show indexing spinner
     statusBarItem.text = '$(sync~spin) AS Notes: Indexing...';
     statusBarItem.tooltip = 'Building the wikilink index';
@@ -427,8 +863,10 @@ async function enterFullMode(
 
     // Refresh task panel now that the index is populated
     taskPanelProvider?.refresh();
+    searchPanelProvider?.refresh();
 
     const fileService = new WikilinkFileService(indexService);
+    searchPanelProvider?.setFileService(fileService);
 
     // Document link provider — Ctrl/Cmd+Click navigation (alias-aware tooltips)
     const linkProvider = new WikilinkDocumentLinkProvider(wikilinkService, fileService, indexService);
@@ -457,7 +895,7 @@ async function enterFullMode(
 
     // Slash command provider — in-editor command menu triggered by /
     fullModeDisposables.push(
-        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, new SlashCommandProvider(() => isProLicenced()), '/'),
+        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, new SlashCommandProvider(() => hasProEditor()), '/'),
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.openDatePicker', () => openDatePicker()),
@@ -480,7 +918,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.insertTable', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -505,7 +943,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableAddColumn', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -538,7 +976,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableAddRow', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -568,7 +1006,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableFormat', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -597,7 +1035,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveRow', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -624,7 +1062,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveColumn', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -651,7 +1089,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveRowsAbove', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -684,7 +1122,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveRowsBelow', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -717,7 +1155,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveColumnsRight', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -750,7 +1188,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.tableRemoveColumnsLeft', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Table commands require a Pro licence.');
                 return;
             }
@@ -890,7 +1328,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.setEncryptionKey', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -912,7 +1350,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.clearEncryptionKey', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -923,7 +1361,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.encryptNotes', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -979,7 +1417,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.decryptNotes', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1034,7 +1472,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.createEncryptedFile', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1059,7 +1497,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.createEncryptedJournalNote', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1090,7 +1528,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.encryptCurrentNote', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1131,7 +1569,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.decryptCurrentNote', async () => {
-            if (!isProLicenced()) {
+            if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
                 return;
             }
@@ -1210,6 +1648,7 @@ async function enterFullMode(
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
             } catch (err) {
                 console.warn('as-notes: failed to index on save:', err);
@@ -1242,6 +1681,7 @@ async function enterFullMode(
                 const filename = path.basename(doc.uri.fsPath);
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 end();
             }, 500);
@@ -1294,6 +1734,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
         }),
     );
@@ -1323,6 +1764,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
         }),
     );
@@ -1359,6 +1801,7 @@ async function enterFullMode(
             if (!safeSaveToFile()) { return; }
             completionProvider?.refresh();
             taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
         }),
     );
@@ -1399,6 +1842,7 @@ async function enterFullMode(
                         }
                         if (!safeSaveToFile()) { return; }
                         taskPanelProvider?.refresh();
+                        searchPanelProvider?.refresh();
                         backlinkPanelProvider?.refresh();
                     } catch {
                         // File may have been closed/deleted
@@ -1424,6 +1868,7 @@ async function enterFullMode(
                 indexService?.saveToFile();
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 updateFullModeStatusBar();
             }
@@ -1466,7 +1911,7 @@ async function enterFullMode(
 function updateFullModeStatusBar(): void {
     if (!indexService?.isOpen) { return; }
     const pageCount = indexService.getAllPages().length;
-    const proLabel = isProLicenced() ? ' (Pro)' : '';
+    const proLabel = hasProEditor() ? ' (Pro)' : '';
     statusBarItem.text = `$(database) AS Notes${proLabel} — ${pageCount} pages`;
     statusBarItem.tooltip = 'Click to rebuild the AS Notes index';
     statusBarItem.command = 'as-notes.rebuildIndex';
@@ -1484,6 +1929,7 @@ function disposeFullMode(): void {
     fullModeDisposables = [];
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', false);
     taskPanelProvider = undefined;
+    searchPanelProvider = undefined;
     backlinkPanelProvider = undefined;
 }
 
@@ -1547,6 +1993,9 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
 
     // Create .asnotes/ directory
     fs.mkdirSync(asnotesDir, { recursive: true });
+
+    // Create kanban/ directory for Kanban boards
+    fs.mkdirSync(path.join(workspaceRoot.fsPath, 'kanban'), { recursive: true });
 
     // Create .gitignore inside .asnotes/ to exclude the DB file
     fs.writeFileSync(path.join(asnotesDir, '.gitignore'), 'index.db\n');
@@ -1646,6 +2095,7 @@ async function rebuildIndex(): Promise<void> {
 
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
 
                 // Update status bar
@@ -1762,6 +2212,7 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
         safeSaveToFile();
         completionProvider?.refresh();
         taskPanelProvider?.refresh();
+        searchPanelProvider?.refresh();
         backlinkPanelProvider?.refresh();
 
         // Update status bar with new page count
@@ -1802,6 +2253,7 @@ function startPeriodicScan(): void {
                 if (!safeSaveToFile()) { return; }
                 completionProvider?.refresh();
                 taskPanelProvider?.refresh();
+                searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
                 updateFullModeStatusBar();
                 logService.info('extension', `periodicScan: changes detected — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted`);

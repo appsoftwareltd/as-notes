@@ -98,6 +98,58 @@ article.markdown-body {
     }
 }
 
+/* ── Task tag badges ───────────────────────────────────────── */
+
+.task-list {
+    list-style: none;
+    padding-left: 1.5em;
+}
+
+.task-list-item {
+    position: relative;
+}
+
+.task-list-item input[type="checkbox"] {
+    margin-right: 0.4em;
+    vertical-align: middle;
+}
+
+.task-tag {
+    display: inline-block;
+    font-size: 0.75em;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.2em 0.5em;
+    border-radius: 0.75em;
+    vertical-align: baseline;
+    margin-right: 0.25em;
+    color: #fff;
+}
+
+.task-tag.priority-1 {
+    background: #d1242f;
+}
+
+.task-tag.priority-2 {
+    background: #bf5815;
+}
+
+.task-tag.priority-3 {
+    background: #0969da;
+}
+
+.task-tag.waiting {
+    background: #8250df;
+}
+
+.task-tag.due-date {
+    background: #9a6700;
+}
+
+.task-tag.completed-date {
+    background: #1a7f37;
+}
+
 /* ── Dark mode ────────────────────────────────────────────── */
 
 @media (prefers-color-scheme: dark) {
@@ -127,5 +179,29 @@ article.markdown-body {
 
     .missing-page {
         color: #6e7681;
+    }
+
+    .task-tag.priority-1 {
+        background: #f85149;
+    }
+
+    .task-tag.priority-2 {
+        background: #d29922;
+    }
+
+    .task-tag.priority-3 {
+        background: #58a6ff;
+    }
+
+    .task-tag.waiting {
+        background: #bc8cff;
+    }
+
+    .task-tag.due-date {
+        background: #d29922;
+    }
+
+    .task-tag.completed-date {
+        background: #3fb950;
     }
 }

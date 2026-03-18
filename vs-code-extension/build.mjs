@@ -85,15 +85,68 @@ const webviewBuildOptions = {
     target: ['es2022'],
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const searchWebviewBuildOptions = {
+    entryPoints: ['./src/webview/search.ts'],
+    bundle: true,
+    outfile: 'dist/webview/search.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
+/** @type {import('esbuild').BuildOptions} */
+const kanbanWebviewBuildOptions = {
+    entryPoints: ['./src/webview/kanban.ts'],
+    bundle: true,
+    outfile: 'dist/webview/kanban.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
+/** @type {import('esbuild').BuildOptions} */
+const kanbanSidebarWebviewBuildOptions = {
+    entryPoints: ['./src/webview/kanban-sidebar.ts'],
+    bundle: true,
+    outfile: 'dist/webview/kanban-sidebar.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
 async function buildCss() {
-    const input = readFileSync('./src/webview/tasks.css', 'utf8');
-    const result = await postcss([tailwindcss]).process(input, {
+    const tasksCss = readFileSync('./src/webview/tasks.css', 'utf8');
+    const tasksResult = await postcss([tailwindcss]).process(tasksCss, {
         from: './src/webview/tasks.css',
         to: './dist/webview/tasks.css',
     });
-    writeFileSync('./dist/webview/tasks.css', result.css);
-    if (result.map) {
-        writeFileSync('./dist/webview/tasks.css.map', result.map.toString());
+    writeFileSync('./dist/webview/tasks.css', tasksResult.css);
+    if (tasksResult.map) {
+        writeFileSync('./dist/webview/tasks.css.map', tasksResult.map.toString());
+    }
+
+    const searchCss = readFileSync('./src/webview/search.css', 'utf8');
+    const searchResult = await postcss([tailwindcss]).process(searchCss, {
+        from: './src/webview/search.css',
+        to: './dist/webview/search.css',
+    });
+    writeFileSync('./dist/webview/search.css', searchResult.css);
+    if (searchResult.map) {
+        writeFileSync('./dist/webview/search.css.map', searchResult.map.toString());
+    }
+
+    const kanbanCss = readFileSync('./src/webview/kanban.css', 'utf8');
+    const kanbanResult = await postcss([tailwindcss]).process(kanbanCss, {
+        from: './src/webview/kanban.css',
+        to: './dist/webview/kanban.css',
+    });
+    writeFileSync('./dist/webview/kanban.css', kanbanResult.css);
+    if (kanbanResult.map) {
+        writeFileSync('./dist/webview/kanban.css.map', kanbanResult.map.toString());
     }
 }
 
@@ -115,12 +168,21 @@ if (isWatch) {
 
     const extCtx = await esbuild.context(buildOptions);
     const webCtx = await esbuild.context(webviewBuildOptions);
+    const searchCtx = await esbuild.context(searchWebviewBuildOptions);
+    const kanbanCtx = await esbuild.context(kanbanWebviewBuildOptions);
+    const kanbanSidebarCtx = await esbuild.context(kanbanSidebarWebviewBuildOptions);
     await extCtx.watch();
     await webCtx.watch();
+    await searchCtx.watch();
+    await kanbanCtx.watch();
+    await kanbanSidebarCtx.watch();
     console.log('Watching for changes...');
 } else {
     await buildCss();
     await esbuild.build(buildOptions);
     await esbuild.build(webviewBuildOptions);
+    await esbuild.build(searchWebviewBuildOptions);
+    await esbuild.build(kanbanWebviewBuildOptions);
+    await esbuild.build(kanbanSidebarWebviewBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }

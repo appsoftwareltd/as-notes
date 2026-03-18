@@ -1,8 +1,8 @@
 {
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
-    "description": "Navigate markdown files using [[wikilinks]]. Highlights links, Ctrl+Click navigation, hover tooltips, auto-create missing pages, rename sync, autocomplete, and alias support.",
-    "version": "2.1.0",
+    "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
+    "version": "2.2.2",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -121,6 +121,34 @@
             {
                 "command": "as-notes.toggleOutlinerMode",
                 "title": "AS Notes: Toggle Outliner Mode"
+            },
+            {
+                "command": "as-notes.openKanbanBoard",
+                "title": "AS Notes: Open Kanban Board"
+            },
+            {
+                "command": "as-notes.newKanbanCard",
+                "title": "AS Notes: New Kanban Card"
+            },
+            {
+                "command": "as-notes.selectKanbanBoard",
+                "title": "AS Notes: Select Kanban Board"
+            },
+            {
+                "command": "as-notes.createKanbanBoard",
+                "title": "AS Notes: Create Kanban Board"
+            },
+            {
+                "command": "as-notes.deleteKanbanBoard",
+                "title": "AS Notes: Delete Kanban Board"
+            },
+            {
+                "command": "as-notes.renameKanbanBoard",
+                "title": "AS Notes: Rename Kanban Board"
+            },
+            {
+                "command": "as-notes.enterLicenceKey",
+                "title": "AS Notes: Enter Licence Key"
             }
         ],
         "keybindings": [
@@ -149,6 +177,11 @@
                 "when": "as-notes.fullMode"
             },
             {
+                "command": "as-notes.codeFenceEnter",
+                "key": "enter",
+                "when": "editorLangId == markdown && as-notes.onCodeFenceLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible"
+            },
+            {
                 "command": "as-notes.outlinerEnter",
                 "key": "enter",
                 "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible"
@@ -162,6 +195,12 @@
                 "command": "as-notes.outlinerOutdent",
                 "key": "shift+tab",
                 "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine"
+            },
+            {
+                "command": "as-notes.outlinerPaste",
+                "key": "ctrl+v",
+                "mac": "cmd+v",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly"
             }
         ],
         "configuration": {
@@ -182,7 +221,7 @@
                     "type": "string",
                     "default": "",
                     "scope": "machine",
-                    "description": "AS Notes Pro licence key. Enter your 24-character licence key to activate Pro features."
+                    "description": "AS Notes Pro licence key (format: ASNO-XXXX-XXXX-XXXX-XXXX). Enter your licence key to activate Pro features. Purchase at https://www.asnotes.io/pricing"
                 },
                 "as-notes.assetPath": {
                     "type": "string",
@@ -214,6 +253,12 @@
                     "default": false,
                     "scope": "window",
                     "description": "Enable Outliner Mode for markdown files. In outliner mode, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents the bullet line, and Shift+Tab outdents it. Only applies to lines beginning with `- `."
+                },
+                "as-notes.kanbanAssetSizeWarningMB": {
+                    "type": "number",
+                    "default": 10,
+                    "minimum": 0,
+                    "description": "Warn when attaching files larger than this size (in MB) to a Kanban card. Set to 0 to disable the warning."
                 }
             }
         },
@@ -232,6 +277,17 @@
         },
         "views": {
             "as-notes-sidebar": [
+                {
+                    "type": "webview",
+                    "id": "as-notes-search",
+                    "name": "Search",
+                    "initialSize": 1
+                },
+                {
+                    "type": "webview",
+                    "id": "as-notes-kanban",
+                    "name": "Kanban"
+                },
                 {
                     "type": "webview",
                     "id": "as-notes-tasks",
@@ -311,6 +367,7 @@
     },
     "dependencies": {
         "ignore": "^7.0.5",
-        "sql.js": "^1.14.0"
+        "sql.js": "^1.14.0",
+        "yaml": "^2.7.1"
     }
 }

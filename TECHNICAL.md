@@ -82,6 +82,12 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Build pipeline](#build-pipeline)
   - [Inline task toggle](#inline-task-toggle)
   - [Sync strategy](#sync-strategy)
+- [Search panel](#search-panel)
+  - [SearchPanelProvider](#searchpanelprovider)
+  - [Search entries](#search-entries)
+  - [Webview (search.ts / search.css)](#webview-searchts--searchcss)
+  - [Build pipeline](#build-pipeline-1)
+  - [Sync strategy](#sync-strategy-1)
 - [Backlinks panel](#backlinks-panel)
   - [BacklinkPanelProvider](#backlinkpanelprovider)
   - [Chain-first grouping](#chain-first-grouping)
@@ -97,6 +103,18 @@ This document explains the internal architecture, algorithms, and design decisio
   - [JournalService](#journalservice)
   - [Command flow](#command-flow)
   - [Template system](#template-system)
+- [Kanban board](#kanban-board)
+  - [File structure](#file-structure)
+  - [KanbanTypes.ts](#kanbantypests)
+  - [KanbanStore.ts](#kanbanStorets)
+  - [KanbanBoardConfigStore.ts](#kanbanboardconfigStorets)
+  - [KanbanEditorPanel.ts](#kanbaneditorpanelts)
+  - [KanbanSidebarProvider.ts](#kanbansidebarproviderts)
+  - [Webview — kanban.ts](#webview--kanbants)
+  - [Webview — kanban-sidebar.ts](#webview--kanban-sidebarts)
+  - [Build pipeline](#build-pipeline-2)
+  - [Extension commands](#extension-commands)
+  - [Activation and board selection](#activation-and-board-selection)
 - [Pro licence](#pro-licence)
   - [LicenceService](#licenceservice)
   - [LicenceActivationService](#licenceactivationservice)
@@ -112,6 +130,22 @@ This document explains the internal architecture, algorithms, and design decisio
 - [File drop & paste](#file-drop--paste)
   - [Workspace configuration](#workspace-configuration)
   - [Legacy cleanup](#legacy-cleanup)
+- [Slash command menu](#slash-command-menu)
+  - [SlashCommandProvider](#slashcommandprovider)
+  - [Date Picker — DatePickerService](#date-picker--datepickerservice)
+  - [Task hashtag insertion — TaskHashtagService](#task-hashtag-insertion--taskhashtagservice)
+  - [Registration](#registration)
+  - [Markdown table commands (Pro)](#markdown-table-commands-pro)
+- [Outliner mode](#outliner-mode)
+  - [OutlinerService](#outlinerservice)
+  - [Context keys](#context-keys)
+  - [Enter — bullet continuation](#enter--bullet-continuation)
+  - [Enter — code fence](#enter--code-fence)
+  - [Enter — code fence completion](#enter--code-fence-completion)
+    - [Fence balance detection](#fence-balance-detection)
+  - [Tab / Shift+Tab — indent and outdent](#tab--shifttab--indent-and-outdent)
+  - [Paste — multi-line bullet conversion](#paste--multi-line-bullet-conversion)
+  - [Todo toggle in outliner mode](#todo-toggle-in-outliner-mode)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
 - [Known limitations and future considerations](#known-limitations-and-future-considerations)
@@ -156,7 +190,7 @@ The extension is built with:
 - **TypeScript 5.7**, strict mode, ES2022 target
 - **esbuild** for bundling via custom `build.mjs` (`src/extension.ts` → `dist/extension.js`, CJS format, `vscode` external). Includes a custom `sqlJsCacheResetPlugin` that patches sql.js at bundle time — see [Manual rebuild](#manual-rebuild)
 - **sql.js ^1.14.0** — WASM SQLite for the persistent index (zero native dependencies, works in VS Code remote/Codespaces)
-- **vitest 3.x** for unit tests (448 tests across 13 test files)
+- **vitest 3.x** for unit tests (503 tests across 14 test files)
 - **VS Code API ^1.85.0** (`DocumentLinkProvider`, `HoverProvider`, `TextEditorDecorationType`, `WorkspaceEdit`)
 
 The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alongside the bundled extension.
@@ -286,11 +320,12 @@ CREATE TABLE tasks (
     line_text TEXT NOT NULL,        -- full original line text
     priority INTEGER,               -- 1/2/3 from #P1/#P2/#P3; NULL = unset
     waiting INTEGER NOT NULL DEFAULT 0,  -- 1 if #W tag present
-    due_date TEXT                   -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    due_date TEXT,                  -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    completion_date TEXT            -- ISO date YYYY-MM-DD from #C-YYYY-MM-DD; NULL = unset
 );
 ```
 
-Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`, `idx_links_outline_parent`.
+Key indexes: `idx_links_source`, `idx_links_page_filename`, `idx_links_page_name`, `idx_pages_path`, `idx_aliases_alias_name`, `idx_aliases_canonical`, `idx_tasks_source`, `idx_tasks_completion_date`, `idx_links_outline_parent`.
 
 ### Content indexing and nesting
 
@@ -401,6 +436,8 @@ When no `.asnotes/` directory is found:
 - Clicking it runs the **AS Notes: Initialise Workspace** command
 - No providers (decorations, links, hover, rename tracking) are registered
 - The only active commands are `initWorkspace` and `rebuildIndex`
+- **Passive-mode stubs** are registered for all full-mode commands (32 command IDs). Each stub shows a warning notification — *“AS Notes: Workspace not initialised. Run ‘AS Notes: Initialise Workspace’ to get started.”* — with an **Initialise** action button that runs `as-notes.initWorkspace`. This prevents VS Code from showing a cryptic “command not found” error when the user triggers a keybinding before the workspace is set up.
+- Stubs are tracked in `fullModeDisposables` and disposed when `enterFullMode()` replaces them with real implementations.
 
 ### Full mode
 
@@ -480,7 +517,7 @@ Every time `IndexService.initDatabase()` opens an existing `.asnotes/index.db` f
 
 ```typescript
 // src/IndexService.ts
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 ```
 
 This integer is incremented whenever the schema changes (new column, new table, dropped index, etc.). Every future change only requires two edits: update `SCHEMA_SQL` and increment `SCHEMA_VERSION`.
@@ -492,7 +529,7 @@ This integer is incremented whenever the schema changes (new column, new table, 
 3. If `storedVersion >= SCHEMA_VERSION`, proceed normally (enable FK enforcement, run `SCHEMA_SQL` with `CREATE TABLE IF NOT EXISTS`). Return `{ schemaReset: false }`.
 4. If the DB file does not exist, create a new in-memory database and stamp `user_version`. Return `{ schemaReset: false }`.
 
-**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 2`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
+**Version 0 (pre-versioning databases):** SQLite initialises `user_version` to `0` by default. Any database created before schema versioning was introduced — i.e. every existing user's `.asnotes/index.db` — will have `user_version = 0`, which is less than `SCHEMA_VERSION = 3`. On first launch after upgrading, the database is automatically reset and a full rebuild is triggered. The user sees a progress notification: `AS Notes: Rebuilding index (schema updated)`.
 
 **Caller contract:** `initDatabase()` returns `{ schemaReset: boolean }`. In `enterFullMode()` in `extension.ts`:
 
@@ -621,6 +658,269 @@ This is implemented via `getPathDistance()` in `PathUtils.ts`.
 notes      ↔ notes      → 0 (same directory)
 notes      ↔ notes/sub  → 1 (one hop down)
 notes/a    ↔ notes/b    → 2 (one up, one down)
+
+## Kanban board
+
+The kanban board feature provides a visual task management UI within VS Code. It consists of a sidebar summary panel and a full-screen editor panel, with all data stored as plain YAML files inside a `kanban/` directory in the workspace root.
+
+### File structure
+
+```
+kanban/
+  <board-slug>/
+    board.yaml                              ← BoardConfig (name, lanes, users, labels)
+    <lane-slug>/
+      card_YYYYMMDD_HHmmssfff_<id>_<slug>.yaml
+    assets/
+      <card-id>/
+        <filename>                          ← attached files
+```
+
+Board slugs and lane slugs are lowercased, with non-alphanumeric characters replaced by hyphens. The `assets/` directory is excluded from lane scanning. The `archive/` lane slug is reserved and excluded from the board config lanes list.
+
+### KanbanTypes.ts
+
+Defines shared types, constants, and pure helper functions used across all kanban modules.
+
+**Types:**
+
+| Type | Description |
+|---|---|
+| `Card` | A kanban card: `id`, `title`, `lane`, `created`, `updated`, `description`, `priority`, `assignee`, `labels`, `dueDate`, `sortOrder`, `entries`, `assets` |
+| `BoardConfig` | Board metadata: `name`, `lanes` (slugs), `users`, `labels` |
+| `CardEntry` | A timestamped log entry: `author?`, `date`, `text` |
+| `AssetMeta` | File attachment metadata: `filename`, `added`, `addedBy?` |
+| `Priority` | `'critical' \| 'high' \| 'medium' \| 'low' \| 'none'` |
+
+**Constants:**
+
+| Constant | Value | Notes |
+|---|---|---|
+| `DEFAULT_LANES` | `['todo', 'doing', 'done']` | Applied when creating a new board |
+| `PROTECTED_LANES` | `['todo', 'done']` | Cannot be removed or renamed |
+| `RESERVED_LANES` | `['archive']` | Excluded from lane scanning and config |
+| `ASSETS_DIR` | `'assets'` | Board-level asset directory name |
+| `IMAGE_EXTENSIONS` | `.png .jpg .jpeg .gif .webp .svg` | Rendered as thumbnails in the webview |
+
+**Helpers:** `slugifyBoard`, `slugifyLane`, `displayBoard`, `displayLane`, `isProtectedLane`, `isReservedLane`, `isImageFile`.
+
+### KanbanStore.ts
+
+Manages the in-memory card cache and YAML persistence for a single active board. Instantiated once in full mode and kept alive until `disposeFullMode()`.
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `selectBoard(slug)` | Sets the active board and calls `reload()` to load cards from disk |
+| `reload()` | Reads all lane directories under the current board, parsing `card_*.yaml` files into `Card` objects |
+| `getAll()` | Returns all in-memory cards as an array |
+| `get(id)` | Returns a single card by ID |
+| `save(card)` | Serialises the card to YAML, writes to `<board>/<lane>/<id>.yaml`, and fires `onDidChange` |
+| `moveCardToLane(id, newLane)` | Writes the card file to the new lane directory, deletes the old file, fires `onDidChange` |
+| `delete(id)` | Deletes the card YAML and its assets directory (`assets/<card-id>/`) recursively |
+| `createCard(title, lane)` | Constructs a new `Card` with a timestamped ID (`card_YYYYMMDD_HHmmssfff_<uuid>_<slug>`) |
+| `addAsset(cardId, sourceUri, addedBy?)` | Copies a file into `assets/<card-id>/`, appends `AssetMeta` to the card, saves |
+| `removeAsset(cardId, filename)` | Deletes the asset file and removes its `AssetMeta` entry from the card |
+| `listBoards()` | Scans `kanban/` for subdirectories and returns their names as slugs |
+
+**Events:** `onDidChange` — fired after any mutation (save, move, delete, reload). Both `KanbanEditorPanel` and `KanbanSidebarProvider` subscribe to resend their respective state.
+
+**Serialisation:** Cards are serialised as YAML using the `yaml` library. The `id` and `lane` fields are not stored in the file — they are derived from the filename and directory path on load. The `slug` field is populated from the filename suffix if absent from the YAML.
+
+### KanbanBoardConfigStore.ts
+
+Manages `board.yaml` for the active board and provides board lifecycle operations (create, rename, delete).
+
+**Key methods:**
+
+| Method | Description |
+|---|---|
+| `selectBoard(slug)` | Sets the active board and loads `board.yaml` into the in-memory `BoardConfig` |
+| `get()` | Returns the current `BoardConfig` |
+| `update(partial)` | Merges partial fields into the config, saves to `board.yaml`, fires `onDidChange` |
+| `createBoard(name)` | Creates the board directory, default lane subdirectories, `assets/` directory, and `board.yaml`; returns the new slug |
+| `renameBoard(oldSlug, newName)` | Renames the board directory via `vscode.workspace.fs.rename`, updates `board.yaml` with the new display name; if only the display name changes (same slug), updates `board.yaml` in place |
+| `deleteBoard(slug)` | Deletes the board directory recursively; clears in-memory state if the deleted board was active |
+| `listBoards()` | Scans `kanban/` for subdirectories |
+| `listBoardsWithNames()` | Reads each board's `board.yaml` to obtain display names; falls back to slug if `board.yaml` is absent |
+| `reconcileWithDirectories(dirs)` | Adds any lane directories not in `board.yaml` (handles boards created externally) |
+| `reconcileMetadata(cards)` | Adds unknown assignees/labels found in card files to the config |
+
+**Events:** `onDidChange` — same subscriber pattern as `KanbanStore`.
+
+### KanbanEditorPanel.ts
+
+A singleton `WebviewPanel` that renders the full board UI. The static `currentPanel` property holds the single active instance.
+
+#### Singleton lifecycle
+
+`KanbanEditorPanel.createOrShow()` either reveals the existing panel or creates a new one in the active editor column. `revive()` is called by VS Code on window reload to restore a serialised panel. On dispose, `currentPanel` is cleared.
+
+A **pending message queue** (`_pendingMessages`) buffers `stateUpdate` and `openCreateModal` messages sent before the webview signals `ready`. On receiving `ready`, the queue is flushed in order.
+
+#### Webview HTML
+
+The panel HTML loads `dist/webview/kanban.js` and `dist/webview/kanban.css` via `webview.asWebviewUri`. The Content Security Policy restricts sources to `${webview.cspSource}` only. The `localResourceRoots` includes both `dist/webview/` and the `kanban/` directory (so asset images can be served via webview URIs).
+
+#### `_sendState()`
+
+Called after every store change event. Sends a `stateUpdate` message with:
+
+```ts
+{
+  type: 'stateUpdate',
+  state: {
+    cards: Card[],           // sorted by sortOrder, then created timestamp
+    config: BoardConfig,
+    boardSlug: string,
+    assetBaseUri: string,    // webview URI for kanban/<board>/assets/
+  }
+}
+```
+
+#### Editor panel message protocol
+
+Messages sent from the webview to the extension:
+
+| Message type | Payload fields | Handler action |
+|---|---|---|
+| `ready` | — | Flush pending-message queue, send current state |
+| `selectBoard` | — | Executes `as-notes.selectKanbanBoard` command |
+| `moveCard` | `cardId`, `lane`, `sortOrder?` | Moves card to new lane (or re-saves if same lane) with updated sort order |
+| `createCard` | `title`, `lane`, `priority?`, `assignee?`, `labels?`, `dueDate?`, `description?` | Creates and saves a new card at the end of the target lane |
+| `deleteCard` | `cardId` | Deletes card and assets |
+| `updateCardMeta` | `cardId`, `priority?`, `assignee?`, `labels?`, `dueDate?`, `description?`, `lane?`, `pendingEntry?`, `pendingEntryAuthor?` | Updates card metadata; auto-saves pending entry text if present; moves to new lane if `lane` changed |
+| `addEntry` | `cardId`, `text`, `author?` | Appends a timestamped entry to the card |
+| `addLane` | — | Prompts for lane name via `showInputBox`, validates against reserved/duplicate names, appends to config |
+| `removeLane` | `laneId` | Rejects protected lanes; confirms if cards present; deletes cards and removes lane from config |
+| `renameLane` | `laneId` | Prompts for new name; renames lane directory and updates config |
+| `moveLane` | `sourceLaneId`, `targetLaneId` | Reorders lanes in config by moving source to target index |
+| `archiveCard` | `cardId` | Moves card to the `archive` lane |
+| `addUser` | `name` | Adds user to config |
+| `addLabel` | `name` | Adds label to config |
+| `addAsset` | `cardId` | Opens a file picker, then calls `_checkSizeAndAddAsset` for each selected file |
+| `removeAsset` | `cardId`, `filename` | Removes asset file and metadata |
+| `openAsset` | `cardId`, `filename` | Opens the asset file in VS Code with `vscode.open` |
+| `openCardFile` | `cardId` | Opens the card's YAML file in the active editor column |
+
+Messages sent from the extension to the webview:
+
+| Message type | Description |
+|---|---|
+| `stateUpdate` | Full board state (see `_sendState()` above) |
+| `openCreateModal` | Instructs the webview to open the create-card modal (sent by `triggerCreateModal()`) |
+
+#### Asset size warning
+
+Before adding an asset, `_checkSizeAndAddAsset()` reads `as-notes.kanbanAssetSizeWarningMB` (default: 10) from workspace configuration. If the file exceeds the threshold, a modal warning is shown. A threshold of `0` disables the check.
+
+### KanbanSidebarProvider.ts
+
+Implements `vscode.WebviewViewProvider` for the `as-notes-kanban` sidebar view. The sidebar is a compact panel showing the current board name, a board-switcher autocomplete, and buttons to open the board, create a card, or manage boards.
+
+#### State shape
+
+`_sendState()` sends:
+
+```ts
+{
+  type: 'stateUpdate',
+  state: {
+    boardSlug: string,
+    boardName: string,
+    laneSummary: { slug: string; display: string; count: number }[],
+    boardCount: number,
+    boardList: { slug: string; name: string }[],  // from listBoardsWithNames()
+  }
+}
+```
+
+`boardList` is used to populate the board-switcher autocomplete with display names (not just slugs).
+
+#### Sidebar message protocol
+
+| Message type | Payload | Action |
+|---|---|---|
+| `ready` | — | Send current state |
+| `openBoard` | — | `as-notes.openKanbanBoard` |
+| `newCard` | — | `as-notes.newKanbanCard` |
+| `switchBoard` | `slug` | `as-notes.switchKanbanBoard` with the slug |
+| `selectBoard` | — | `as-notes.selectKanbanBoard` |
+| `createBoard` | `name` | `as-notes.createKanbanBoard` (name passed as arg) |
+| `deleteBoard` | — | `as-notes.deleteKanbanBoard` |
+| `renameBoard` | `newName` | `as-notes.renameKanbanBoard` (name passed as arg) |
+
+The sidebar uses **inline CSS** (injected directly into the webview HTML string) rather than an external stylesheet, because sidebar webviews do not load external CSS files via `localResourceRoots` as reliably as panel webviews.
+
+### Webview — kanban.ts
+
+The editor panel webview (`src/webview/kanban.ts`). Compiled to `dist/webview/kanban.js` by esbuild.
+
+**State management:** The webview is stateless between messages. On each `stateUpdate`, the handler calls `closeModal()` to dismiss any open card modal, then re-renders the entire board from the received state object. This prevents stale modal state after board switches or external file changes.
+
+**Card rendering:** Each lane column is rendered with its cards sorted by `sortOrder` (falling back to the `created` timestamp). Cards show priority badge, title, assignee, labels, and due date.
+
+**Drag and drop:**
+- Cards are draggable between lanes. On drop, a `moveCard` message is sent with the new lane and an interpolated `sortOrder` (midpoint between neighbours, or ±1 at boundaries).
+- Files can be dropped onto the asset drop zone in the card modal; a `addAsset` message is sent for each dropped file (assets handled via the extension's file picker dialog, not the webview directly — drag events trigger the extension-side file picker).
+
+**Card modal:** Opened by `openCreateModal` (for new cards) or by clicking a card (for editing). The modal contains all card fields with live autocomplete for assignee (from `config.users`) and labels (from `config.labels`). Adding a new assignee/label they didn't previously exist in config sends `addUser`/`addLabel` to persist it.
+
+**Entries:** Displayed in the card modal as a reverse-chronological list. Submitting the entry form sends `addEntry`.
+
+**Asset display:** Asset thumbnails are rendered using the `assetBaseUri` (a webview URI for `kanban/<board>/assets/`) provided in the state. Images are shown inline; other file types show as named links.
+
+### Webview — kanban-sidebar.ts
+
+The sidebar webview (`src/webview/kanban-sidebar.ts`). Compiled to `dist/webview/kanban-sidebar.js`.
+
+**Board header:** Shows the current board display name with **Rename** and **Delete** buttons.
+
+**Board switcher:** A text input with a custom autocomplete dropdown. The dropdown is populated from `state.boardList` (display name + slug). Filtering matches on both display name and slug (case-insensitive). Selecting an entry sends `switchBoard` with the slug.
+
+**New Board button:** A secondary-styled button that sends `createBoard` with the current input text if non-empty, or prompts the extension to open a name input.
+
+### Build pipeline
+
+The kanban webview bundle is built alongside the other webview bundles in `build.mjs`:
+
+```js
+// Kanban editor panel
+{ entryPoint: 'src/webview/kanban.ts', outfile: 'dist/webview/kanban.js' }
+// Kanban sidebar
+{ entryPoint: 'src/webview/kanban-sidebar.ts', outfile: 'dist/webview/kanban-sidebar.js' }
+```
+
+`kanban.css` is processed by Tailwind CSS v4 (the `@tailwindcss/vite`-compatible build pipeline) and output to `dist/webview/kanban.css`. It uses VS Code CSS variables (`--vscode-*`) for theme integration alongside Tailwind utility classes and custom component styles for lanes, cards, modals, and entries.
+
+### Extension commands
+
+| Command ID | Registered | Description |
+|---|---|---|
+| `as-notes.openKanbanBoard` | Full mode | `KanbanEditorPanel.createOrShow()` |
+| `as-notes.newKanbanCard` | Full mode | `createOrShow()` then `triggerCreateModal()` |
+| `as-notes.switchKanbanBoard` | Full mode | Selects board by slug, opens editor automatically |
+| `as-notes.selectKanbanBoard` | Full mode | Quick-pick from board slug list |
+| `as-notes.createKanbanBoard` | Full mode | `showInputBox` → `createBoard()` → select new board |
+| `as-notes.renameKanbanBoard` | Full mode | `showInputBox` → `renameBoard()` → re-select board |
+| `as-notes.deleteKanbanBoard` | Full mode | Confirmation modal → `deleteBoard()` → select next board |
+
+All commands are registered as passive-mode stubs in `FULL_MODE_COMMAND_IDS` and replaced with real implementations when `enterFullMode()` runs.
+
+### Activation and board selection
+
+On `enterFullMode()`, after the stores are constructed:
+
+1. `kanbanBoardConfigStore.listBoards()` is called to discover existing boards.
+2. If any boards exist, the first one is selected in both `kanbanStore` and `kanbanBoardConfigStore`.
+3. This fires `onDidChange` on both stores, which triggers `_sendState()` in the sidebar and (if the editor panel is open) in the editor panel.
+
+The kanban root URI is always `<workspaceRoot>/kanban`. The `kanban/` directory is added to `.gitignore` via the initialisation script, but the directory itself is not created until the first board is created.
+
+### `.gitignore` entry
+
+The kanban data directory is intentionally **not** excluded from git. The initialisation script (`initWorkspace`) adds a comment block to `.gitignore` for the index database and logs, but `kanban/` is left out so that boards and cards are version-controlled by default. Users can add `kanban/` to `.gitignore` manually if they prefer not to commit their boards.
 .          ↔ deep/nested → 2 (two hops down from root)
 ```
 
@@ -1274,7 +1574,7 @@ The `as-notes-tasks` view is declared with `"type": "webview"` inside `"views": 
 - **Unchecked:** `/^\s*[-*]\s+\[ \]\s+(.*)/` — matches `- [ ] task text` and `* [ ] task text`
 - **Done:** `/^\s*[-*]\s+\[(?:x|X)\]\s+(.*)/` — matches `- [x] task text` and `* [X] task text`
 
-The `tasks` table (schema version 2) stores:
+The `tasks` table (schema version 3) stores:
 
 ```sql
 CREATE TABLE tasks (
@@ -1286,7 +1586,8 @@ CREATE TABLE tasks (
     line_text TEXT NOT NULL,     -- full original line text
     priority INTEGER,            -- 1, 2, 3 from #P1/#P2/#P3; NULL = unset
     waiting INTEGER NOT NULL DEFAULT 0,  -- 1 if #W tag present
-    due_date TEXT                -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    due_date TEXT,               -- ISO date YYYY-MM-DD from #D-YYYY-MM-DD; NULL = unset
+    completion_date TEXT          -- ISO date YYYY-MM-DD from #C-YYYY-MM-DD; NULL = unset
 );
 ```
 
@@ -1309,6 +1610,7 @@ static parseTaskMeta(text: string): {
     priority: number | null;   // 1, 2, or 3
     waiting: boolean;
     dueDate: string | null;    // YYYY-MM-DD
+    completionDate: string | null; // YYYY-MM-DD
 }
 ```
 
@@ -1321,6 +1623,7 @@ static parseTaskMeta(text: string): {
 | `#P3` | `priority = 3` (Normal) |
 | `#W` | `waiting = true` |
 | `#D-YYYY-MM-DD` | `dueDate = 'YYYY-MM-DD'` |
+| `#C-YYYY-MM-DD` | `completionDate = 'YYYY-MM-DD'` |
 
 Only the first priority tag wins. Tags are stripped from the displayed `cleanText` so the task description remains readable. `parseTaskMeta` is called inside `indexTasksFromContent()` for every detected task line.
 
@@ -1338,6 +1641,7 @@ interface TaskViewItem {
     priority: number | null;
     waiting: boolean;
     dueDate: string | null;
+    completionDate: string | null;
 }
 ```
 
@@ -1377,7 +1681,7 @@ The browser-side panel lives in `src/webview/tasks.ts` and `src/webview/tasks.cs
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `allTasks` | `TaskViewItem[]` | `[]` | All tasks from last `update` message |
-| `groupBy` | `'page' \| 'priority' \| 'dueDate'` | `'page'` | Active grouping mode |
+| `groupBy` | `'page' \| 'priority' \| 'dueDate' \| 'completionDate'` | `'page'` | Active grouping mode |
 | `showTodoOnly` | `boolean` | `true` | Whether to hide done tasks |
 | `waitingOnly` | `boolean` | `false` | Whether to show only `#W` tasks |
 | `pageFilter` | `string` | `''` | Case-insensitive page name substring filter |
@@ -1396,6 +1700,7 @@ The browser-side panel lives in `src/webview/tasks.ts` and `src/webview/tasks.cs
 | `page` | `renderByPageImpl()` | Groups by page title, sorted alphabetically |
 | `priority` | `renderByPriority()` | Groups P1 → P2 → P3 → No Priority; within each group sorted by due date then page title |
 | `dueDate` | `renderByDueDate()` | Groups Overdue → Today → This Week → Later → No Due Date; within each group sorted by date then page title |
+| `completionDate` | `renderByCompletionDate()` | Groups Completed Today → This Week → Earlier → No Completion Date; within each group sorted by date descending (most recent first) then page title |
 
 **Deferred task hide (1-second grace period):** When TODO ONLY is active and the user clicks the toggle button on an undone task:
 
@@ -1445,6 +1750,55 @@ A `as-notes.toggleTaskFromPanel` command is retained as a compatibility shim (it
 The task panel refreshes whenever the index changes. Rather than maintaining separate task-specific listeners, every existing index trigger (`onDidSaveTextDocument`, `onDidChangeTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`, `rebuildIndex`, periodic scan) calls `taskPanelProvider?.refresh()` alongside `completionProvider?.refresh()`.
 
 `refresh()` calls `_sendState()` which posts a fresh `{ type: 'update', tasks }` message to the webview. The webview's `message` event handler stores the new task array and calls `refreshTaskList()` — the task list is updated in place without rebuilding the toolbar or losing input focus.
+
+---
+
+## Search panel
+
+The search panel provides a wikilink/alias search bar in the AS Notes sidebar, positioned above the Tasks view. It allows users to quickly find and navigate to any indexed page, alias, or forward-referenced (uncreated) page.
+
+### SearchPanelProvider
+
+`SearchPanelProvider` is a `WebviewViewProvider` registered as `as-notes-search`. It follows the same pattern as `TaskPanelProvider`:
+
+- Builds search entries from `IndexService.getAllPages()`, `getAllAliases()`, and `getForwardReferencedPages()`
+- Posts `{ type: 'update', entries: SearchEntry[] }` to the webview on init and every index refresh
+- Handles `{ type: 'navigateTo', pageFileName, pagePath, kind }` messages from the webview
+- For existing pages/aliases: opens the file directly via `vscode.workspace.openTextDocument()`
+- For forward references: delegates to `WikilinkFileService.navigateToFile()` which creates the file
+
+### Search entries
+
+Each entry has a `kind` field:
+
+| Kind | Label | Detail | Behaviour |
+|---|---|---|---|
+| `page` | Filename stem | Directory path | Opens existing file |
+| `alias` | Alias name | `→ canonical stem` | Opens canonical file |
+| `forward` | Page name | *(empty)* | Creates new file, then opens it |
+
+### Webview (search.ts / search.css)
+
+The webview is a separate IIFE bundle (`dist/webview/search.js`) with Tailwind CSS (`dist/webview/search.css`), built through the same PostCSS + Tailwind pipeline as the tasks view.
+
+**UI components:**
+- Search input with magnifying glass icon and "Go To" button
+- Dropdown list with up to 20 filtered results, absolutely positioned to overflow the panel bounds
+- Each dropdown item shows an icon (page/alias/forward), label, detail, and a "New" badge for forward references
+
+**Filtering:** Case-insensitive substring match on the entry label, capped at 20 results. All entries are sent to the webview on refresh — filtering happens entirely client-side with no round-trips.
+
+**Keyboard navigation:** Arrow keys move the active selection, Enter selects and navigates, Escape closes the dropdown.
+
+**Selection model:** Only completed selections (picked from the dropdown) are valid. The "Go To" button is disabled until an entry is selected. Free-text that doesn't match an entry cannot be navigated to.
+
+### Build pipeline
+
+`build.mjs` includes entry points for both `search.ts` → `dist/webview/search.js` (esbuild, IIFE) and `search.css` → `dist/webview/search.css` (PostCSS + Tailwind). Watch mode covers both.
+
+### Sync strategy
+
+The search panel refreshes alongside the task panel — every index trigger calls `searchPanelProvider?.refresh()`. The `setFileService()` method is called after the `WikilinkFileService` is created so that forward-reference navigation works correctly.
 
 ---
 
@@ -1684,24 +2038,55 @@ Detection for the latter two is handled by `isPositionInsideCode()` in `Completi
 | `Table: Remove Row(s) Below` | Replaces `/` with `""` and fires `as-notes.tableRemoveRowsBelow` |
 | `Table: Remove Column(s) Right` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumnsRight` |
 | `Table: Remove Column(s) Left` | Replaces `/` with `""` and fires `as-notes.tableRemoveColumnsLeft` |
+| `Task: Priority 1` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#P1` |
+| `Task: Priority 2` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#P2` |
+| `Task: Priority 3` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#P3` |
+| `Task: Waiting` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskHashtag` with arg `#W` |
+| `Task: Due Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskDueDate` |
+| `Task: Completion Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskCompletionDate` |
 
-Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced.
+Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced. Task commands are only shown when the cursor is on a task line (`- [ ]` or `- [x]`).
 
 The completion range covers only the `/` character.
 
 ### Date Picker — DatePickerService
 
-`src/DatePickerService.ts` — a `showInputBox`-based date entry.
+`src/DatePickerService.ts` — contains `openDatePicker()` (a `showInputBox`-based date entry) and `formatWikilinkDate()` (canonical `[[YYYY_MM_DD]]` formatter).
 
-**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking — e.g. rejects Feb 30), then inserts `[[YYYY_MM_DD]]` at every active cursor position via `insertDateAtCursor()`.
+**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking — e.g. rejects Feb 30), then inserts `[[YYYY_MM_DD]]` at every active cursor position.
 
-**Validation:** `parseInputDate(input)` splits on `-`, validates each component as a number, checks month 1–12, day 1–maxDaysInMonth, and confirms no date overflow (via `Date` constructor round-trip). Returns `null` on any failure.
+**Validation:** `parseInputDate(input)` (in `TaskHashtagService.ts`) splits on `-`, validates each component as a number, checks month 1–12, day 1–maxDaysInMonth, and confirms no date overflow (via `Date` constructor round-trip). Returns `undefined` on any failure.
 
-`formatWikilinkDate(date)` (exported from `SlashCommandProvider.ts`) is the single canonical place that produces the `[[YYYY_MM_DD]]` string.
+`formatWikilinkDate(date)` (exported from `DatePickerService.ts`) is the single canonical place that produces the `[[YYYY_MM_DD]]` string.
+
+### Task hashtag insertion — TaskHashtagService
+
+`src/TaskHashtagService.ts` — contains all task hashtag insertion, toggle, and replacement logic. This module was extracted from `DatePickerService.ts` to separate date-picker concerns from task metadata concerns.
+
+**Exported functions:**
+
+| Function | Purpose |
+|---|---|
+| `insertTagAtTaskStart(editor, tag)` | Insert/toggle/replace a hashtag tag on each cursor's task line. Normalises spacing. |
+| `insertTaskDueDate()` | Opens a date input box, inserts `#D-YYYY-MM-DD` via `insertTagAtTaskStart` |
+| `insertTaskCompletionDate()` | Opens a date input box, inserts `#C-YYYY-MM-DD` via `insertTagAtTaskStart` |
+| `formatInputDate(date)` | Formats a `Date` as `YYYY-MM-DD` for input box pre-fill |
+| `parseInputDate(value)` | Parses `YYYY-MM-DD` string to `Date` with overflow validation |
+| `DATE_PATTERN` | `/^\d{4}-\d{2}-\d{2}$/` regex for date string validation |
+
+**`insertTagAtTaskStart` behaviour:**
+
+- **Priority tags** (`#P1`–`#P9`): same priority issued again → **removed** (toggle off); different priority → **replaced**.
+- **`#W`**: issued again when already present → **removed** (toggle off).
+- **`#D-YYYY-MM-DD`**: any existing `#D-*` tag → **replaced** with the new date.
+- **`#C-YYYY-MM-DD`**: any existing `#C-*` tag → **replaced** with the new date.
+- **Non-task lines**: tag is inserted at the cursor position (no special handling).
+- After the edit the line spacing is normalised (exactly one space between tokens).
+- The cursor is restored to its original text position; if the original position fell inside the leading hashtag block it is moved to the end of the line.
 
 ### Registration
 
-The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, and all ten table commands are registered in `enterFullMode()` in `extension.ts`. Table commands are Pro-gated via `isProLicenced()`.
+The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, all ten table commands, and all task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`) are registered in `enterFullMode()` in `extension.ts`. Table commands are Pro-gated via `isProLicenced()`.
 
 ### Table Service
 
@@ -1970,14 +2355,144 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 
 ---
 
+## Outliner mode
+
+Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a bullet-first outliner. It only affects lines beginning with `- ` (hyphen-space) — all other lines retain normal editor behaviour.
+
+### OutlinerService
+
+`vs-code-extension/src/OutlinerService.ts` contains all pure logic (no VS Code dependencies), making it fully unit-testable. The VS Code wiring lives in `extension.ts`.
+
+**Exports:**
+
+| Function | Purpose |
+|---|---|
+| `isOnBulletLine(lineText)` | Returns `true` for lines matching `/^\s*- /` |
+| `getOutlinerEnterInsert(lineText)` | Returns the `\n{indent}- ` or `\n{indent}- [ ] ` string to insert on Enter |
+| `isCodeFenceOpen(lineText)` | Returns `true` when a bullet line ends with `` ``` `` (optionally + language) |
+| `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
+| `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
+| `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
+| `isClosingCodeFenceLine(lineText)` | Returns `true` for non-bullet bare `` ``` `` lines (no language identifier) |
+| `getClosingFenceBulletInsert(lines, lineIndex)` | Scans upward from closing fence; returns new bullet insert if inside a bullet code block, else `null` |
+| `isCodeFenceUnbalanced(lines, lineIndex)` | Returns `true` when the standalone fence at `lineIndex` has no matching pair at the same indent |
+| `getMaxOutlinerIndent(lines, lineIndex, tabSize)` | Returns the maximum indent allowed for a bullet — at most one tab stop past the nearest bullet above |
+| `formatOutlinerPaste(lineText, cursorChar, clipboardText)` | Formats multi-line clipboard text as indented bullets |
+| `toggleOutlinerTodoLine(lineText)` | 3-state cycle: plain bullet → unchecked → done → plain bullet |
+
+### Context keys
+
+Three context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
+
+- **`as-notes.outlinerMode`** — mirrors the `as-notes.outlinerMode` setting value. Synced on activation and on `onDidChangeConfiguration`.
+- **`as-notes.onBulletLine`** — `true` when any cursor's active line matches `/^\s*- /`. Updated on `onDidChangeTextEditorSelection` and `onDidChangeActiveTextEditor`.
+- **`as-notes.onCodeFenceLine`** — `true` when any cursor's active line is a non-bullet code fence (opening or closing). Updated alongside `onBulletLine`.
+
+This combination allows keybindings to fire only when in outliner mode AND on a relevant line, preserving normal behaviour elsewhere.
+
+### Enter — bullet continuation
+
+Keybinding: `Enter` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible`.
+
+Command `as-notes.outlinerEnter` for each cursor (in priority order):
+1. **Bullet code fence open** — `isCodeFenceOpen` returns `true`: inserts code block skeleton indented +2 past bullet (see below).
+2. **Bullet line** — deletes from cursor to end of line, inserts `getOutlinerEnterInsert(lineText)`. Text after cursor is pushed to the new bullet.
+
+Standalone and closing code fences are handled by the separate `codeFenceEnter` command (see below).
+
+### Enter — code fence
+
+When a bullet line ends with `` ``` `` or `` ```language ``, `isCodeFenceOpen` returns `true` and the command inserts a code block skeleton instead of a new bullet:
+
+```
+- ```javascript     ← original line (unchanged)
+      ← cursor placed here (indent + 2 spaces past the `-`)
+  ```                ← closing fence at same content indent
+```
+
+The content inside the fence is indented 2 spaces past the bullet marker. This offset is hardcoded (not derived from editor tab size) to match standard markdown list continuation indent.
+
+For standalone (non-bullet) opening fences with a language identifier, `isStandaloneCodeFenceOpen` returns `true` and the skeleton is inserted at the same indentation as the opening fence (no +2 offset):
+
+```
+```python              ← original line (unchanged)
+                       ← cursor placed here (same indent)
+```                    ← closing fence at same indent
+```
+
+After the edit, the cursor is repositioned from the end of the closing fence to the blank content line via `editor.selections` assignment in the `.then()` callback.
+
+### Enter — code fence completion
+
+Command `as-notes.codeFenceEnter` handles standalone and closing code fences in **both** outliner and non-outliner modes.
+
+Keybinding: `Enter` when `editorLangId == markdown && as-notes.onCodeFenceLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible`.
+
+For each cursor (in priority order):
+
+1. **Closing fence of a bullet code block** — `isClosingCodeFenceLine` returns `true` and `getClosingFenceBulletInsert` returns a result. In outliner mode, inserts a new bullet at the parent's indentation. Outside outliner mode, inserts a plain newline.
+2. **Unbalanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` and `isCodeFenceUnbalanced` returns `true`: inserts the closing fence skeleton and positions cursor inside.
+3. **Balanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` but `isCodeFenceUnbalanced` returns `false` (the fence already has a matching closer at the same indent): inserts a plain newline.
+
+#### Fence balance detection
+
+`isCodeFenceUnbalanced(lines, lineIndex)` uses a two-phase approach:
+
+**Phase 1 — Language-aware matching (precise).** Language fences (e.g. ` ```javascript `) are unambiguously openers. Walking bottom-to-top at the target's indent level, each bare ` ``` ` is pushed onto a closer stack; each language opener pops the nearest closer to form a pair. If the target participates in a matched pair it is balanced. If it is a language opener with no closer it is unbalanced. This correctly handles a new opening fence typed between two existing balanced code blocks.
+
+**Phase 2 — Surrounding-balanced heuristic (bare fences only).** For bare ` ``` ` fences that were not matched by phase 1, count all standalone fences at the same indent before and after the target. When both counts are even the surrounding context is balanced and the target is the odd one out (unbalanced).
+
+Fences at different indent levels are never paired. Bullet-prefixed fences are excluded.
+
+### Tab / Shift+Tab — indent and outdent
+
+Keybinding: `Tab` / `Shift+Tab` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine`.
+
+`Tab` delegates to `editor.action.indentLines` but only when the resulting indent would not exceed one tab stop past the nearest bullet above. `getMaxOutlinerIndent(lines, lineIndex, tabSize)` scans upward for the closest bullet and returns its indent + tabSize. If no bullet exists above, 0 is returned (root level only). When any selection's line would exceed the maximum, the indent is suppressed entirely.
+
+`Shift+Tab` always delegates to `editor.action.outdentLines` with no guard — reducing indent is always valid.
+
+On non-bullet lines Tab retains normal VS Code behaviour with no extra logic.
+
+### Paste — multi-line bullet conversion
+
+Keybinding: `Ctrl+V` / `Cmd+V` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly`.
+
+Command `as-notes.outlinerPaste`:
+1. Reads clipboard via `vscode.env.clipboard.readText()`.
+2. Calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
+3. If result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
+4. Otherwise, replaces the entire current line with the formatted bullets.
+
+**`formatOutlinerPaste` rules:**
+- CRLF normalised to LF. Empty/whitespace-only lines stripped. Each remaining line trimmed.
+- Plain bullet: each line gets `{indent}- ` prefix.
+- Unchecked todo: each line gets `{indent}- [ ] ` prefix.
+- Done todo: first line keeps `{indent}- [x] `, subsequent lines get `{indent}- [ ] `.
+- Text before cursor on the current line is preserved; text after cursor is appended to the last pasted line.
+- Single-line clipboard text: no conversion (returns `null`).
+
+### Todo toggle in outliner mode
+
+When `as-notes.outlinerMode` is enabled and the line `isOnBulletLine`, the `as-notes.toggleTodo` command uses `toggleOutlinerTodoLine` instead of the default `toggleTodoLine`. The outliner cycle preserves the `- ` prefix:
+
+| State | Default toggle result | Outliner toggle result |
+|---|---|---|
+| `- [x] text` | `text` (no bullet) | `- text` (plain bullet) |
+| `- [ ] text` | `- [x] text` | `- [x] text` (same) |
+| `- text` | `- [ ] text` | `- [ ] text` (same) |
+
+---
+
 ## Extension activation and wiring
 
 `extension.ts` is the entry point. On activation (`onLanguage:markdown`):
 
 1. Creates a status bar item (always visible in both modes)
 2. Registers global commands: `as-notes.initWorkspace`, `as-notes.rebuildIndex`
-3. Checks for `.asnotes/` directory in workspace root
-4. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
+3. Registers passive-mode stubs for all 32 full-mode command IDs (see [Passive mode](#passive-mode))
+4. Checks for `.asnotes/` directory in workspace root
+5. **Full mode** (`.asnotes/` found): calls `enterFullMode()` which:
    - Sets the `as-notes.fullMode` context key (controls view/keybinding `when` clauses)
    - Opens the SQLite database
    - Creates `WikilinkDecorationManager` **before** the scan (wikilinks appear muted grey immediately)
@@ -1986,10 +2501,10 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
    - Calls `decorationManager.setReady()` — wikilinks shift from grey to blue
    - Creates shared `WikilinkFileService`, `IndexService`, `IndexScanner`
    - Registers all providers: `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider` (via `registerWebviewViewProvider`), `BacklinkPanelProvider`
-   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, and all eight encryption commands
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`), and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
-5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared
+5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared. Passive-mode command stubs remain active.
 
 All full-mode registrations are tracked in `fullModeDisposables[]` and pushed to `context.subscriptions`. The `deactivate()` function persists the database and cleans up.
 
@@ -2001,7 +2516,7 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests use vitest and are split across eight test files:
+Tests use vitest and are split across fourteen test files (key files described below):
 
 ### `WikilinkService.test.ts` (23 tests)
 
@@ -2019,7 +2534,7 @@ Tests use vitest and are split across eight test files:
 
 3. **`updateAlias`** (8 tests) — list format replacement, inline array replacement, single value replacement, alias not found, no front matter, no aliases field, preserves other front matter fields, handles missing closing fence.
 
-### `IndexService.test.ts` (120 tests)
+### `IndexService.test.ts` (141 tests)
 
 1. **Title extraction** (8 tests) — heading parsing, fallback to filename stem, various extensions, whitespace trimming.
 
@@ -2053,7 +2568,11 @@ Tests use vitest and are split across eight test files:
 
 16. **Task indexing** (11 tests) — unchecked and done task indexing, re-index replacement, todoOnly filter, pages with tasks grouped by count, task counts, cascade delete on page removal, indented tasks, `*` bullet tasks, non-todo exclusion, empty tasks, `line_text` storage.
 
-17. **`getBacklinksIncludingAliases`** (7 tests) — direct backlinks, alias backlinks, self-link exclusion, empty result, line/column data, ordering by title then line.
+17. **`parseTaskMeta`** (14 tests) — plain text with null metadata, `#P1`/`#P2`/`#P3` priority, `#W` waiting, `#D-YYYY-MM-DD` due date, multiple tags together, first-priority-wins, embedded tags ignored, tags-only empty cleanText, `#C-YYYY-MM-DD` completion date, `#D` + `#C` together, all tags including `#C`, `completionDate` null when absent.
+
+18. **Task metadata indexing** (8 tests) — priority storage from `#P1`, waiting from `#W`, `due_date` from `#D-YYYY-MM-DD`, `completion_date` from `#C-YYYY-MM-DD`, `completionDate` in `getAllTasksForWebview`, null metadata for plain tasks, `getAllTasksForWebview` with page info.
+
+19. **`getBacklinksIncludingAliases`** (7 tests) — direct backlinks, alias backlinks, self-link exclusion, empty result, line/column data, ordering by title then line.
 
 ### `WikilinkFileService.test.ts` (10 tests)
 

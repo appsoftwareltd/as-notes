@@ -7,8 +7,8 @@ docs/
 *.sync
 *.sync-conflict*
 
-# Legacy agents files
+# Agents files
 
 agents/
-
-# Agents files
+AGENTS.md
+.agentkanban/

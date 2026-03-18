@@ -1,58 +1,79 @@
 /**
- * LicenceService — pure logic for AS Notes Pro licence key validation.
+ * LicenceService — pure logic for AS Notes licence key validation and
+ * product-tier helpers.
  *
- * No VS Code imports. All validation rules are encapsulated here so that
- * when real server-side verification is added, this is the only file that
- * needs to change.
+ * No VS Code imports. All format-validation rules are encapsulated here.
+ * The activation service handles server communication; this module only
+ * deals with local format checks, types, and tier logic.
  *
- * Current rule (temporary): a key is valid if it is exactly 24 characters
- * long and contains exactly 12 lowercase and 12 uppercase ASCII letters
- * (no digits, spaces, or symbols).
+ * Licence key format: ASNO-XXXX-XXXX-XXXX-XXXX
+ *   - Prefix: ASNO-
+ *   - 4 segments of 4 hex characters (case-insensitive on input)
  */
+
+// ── Types ──────────────────────────────────────────────────────────────────
 
 export type LicenceStatus = 'valid' | 'invalid' | 'not-entered';
 
+export type LicenceProduct = 'pro_editor' | 'pro_ai_sync';
+
+export interface LicenceState {
+    status: LicenceStatus;
+    product: LicenceProduct | null; // null when status !== 'valid'
+    serverUnreachable?: boolean;    // true when the result is from cache/grace because the server could not be reached
+}
+
+// ── Format validation ──────────────────────────────────────────────────────
+
+const LICENCE_KEY_REGEX = /^ASNO-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/i;
+
 /**
- * Validate a licence key and return its status.
+ * Validate a licence key format and return its status.
  *
  * - `'not-entered'` — key is empty or whitespace only
- * - `'valid'`       — key passes all validation rules
- * - `'invalid'`     — key is present but fails validation
+ * - `'valid'`       — key matches `ASNO-XXXX-XXXX-XXXX-XXXX` (hex segments)
+ * - `'invalid'`     — key is present but fails format validation
+ *
+ * This is a local pre-flight check only — the server is the authority on
+ * whether a key is actually activated and not revoked.
  */
-export function validateLicenceKey(key: string): LicenceStatus {
+export function validateLicenceKeyFormat(key: string): LicenceStatus {
     if (!key || key.trim().length === 0) {
         return 'not-entered';
     }
 
-    if (key.length !== 24) {
-        return 'invalid';
-    }
+    return LICENCE_KEY_REGEX.test(key.trim()) ? 'valid' : 'invalid';
+}
 
-    let lowerCount = 0;
-    let upperCount = 0;
+// ── Tier helpers ───────────────────────────────────────────────────────────
 
-    for (const ch of key) {
-        if (ch >= 'a' && ch <= 'z') {
-            lowerCount++;
-        } else if (ch >= 'A' && ch <= 'Z') {
-            upperCount++;
-        } else {
-            // Non-alpha character present — immediately invalid
-            return 'invalid';
-        }
-    }
-
-    if (lowerCount === 12 && upperCount === 12) {
-        return 'valid';
-    }
-
-    return 'invalid';
+/**
+ * Returns true when the licence state grants Pro Editor access.
+ * Both `pro_editor` and `pro_ai_sync` products include editor features.
+ */
+export function hasProEditorAccess(state: LicenceState): boolean {
+    return state.status === 'valid'
+        && (state.product === 'pro_editor' || state.product === 'pro_ai_sync');
 }
 
 /**
- * Convenience helper — returns true only for the `'valid'` status.
- * Use this at pro feature gates rather than comparing the string directly.
+ * Returns true when the licence state grants Pro AI & Sync access.
+ * Only the `pro_ai_sync` product includes AI and sync features.
  */
-export function isValidStatus(status: LicenceStatus): boolean {
-    return status === 'valid';
+export function hasProAiSyncAccess(state: LicenceState): boolean {
+    return state.status === 'valid' && state.product === 'pro_ai_sync';
+}
+
+/**
+ * Build a default (unactivated) LicenceState.
+ */
+export function defaultLicenceState(): LicenceState {
+    return { status: 'not-entered', product: null };
+}
+
+/**
+ * Build an invalid LicenceState.
+ */
+export function invalidLicenceState(): LicenceState {
+    return { status: 'invalid', product: null };
 }
