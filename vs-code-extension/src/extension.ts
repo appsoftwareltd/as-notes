@@ -32,6 +32,7 @@ import { SlashCommandProvider } from './SlashCommandProvider.js';
 import { openDatePicker, insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './DatePickerService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine } from './OutlinerService.js';
+import { TabColourService } from './TabColourService.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -254,6 +255,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     // CRITICAL: This must always be returned, even if enterFullMode() fails,
     // so that VS Code's markdown preview can pick up the wikilink plugin.
     const apiReturn = { extendMarkdownIt: createExtendMarkdownIt() };
+
+    // ── Tab colour ────────────────────────────────────────────────────────────
+    // Applies `tab.activeBorderTop` colour driven by:
+    //   1. YAML front matter `tab-colour` key (highest priority)
+    //   2. `as-notes.tabColourRules` setting (regex pattern → hex colour)
+    // Runs in both passive and full mode — does not require the index.
+    const tabColourService = new TabColourService();
+
+    // Apply immediately for the editor that is already active on startup
+    tabColourService.applyForEditor(vscode.window.activeTextEditor);
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor((editor) => {
+            tabColourService.applyForEditor(editor);
+        }),
+        // Re-apply when the config setting changes
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('as-notes.tabColourRules')) {
+                tabColourService.applyForEditor(vscode.window.activeTextEditor);
+            }
+        }),
+        // Re-evaluate when the active document is edited (so saving a new
+        // `tab-colour` front matter value takes effect immediately)
+        vscode.workspace.onDidChangeTextDocument((e) => {
+            const active = vscode.window.activeTextEditor;
+            if (active && e.document === active.document) {
+                tabColourService.applyForEditor(active);
+            }
+        }),
+    );
 
     // Check for .asnotes/ in workspace root
     const workspaceRoot = getWorkspaceRoot();

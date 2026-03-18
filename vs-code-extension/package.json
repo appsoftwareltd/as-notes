@@ -214,6 +214,15 @@
                     "default": false,
                     "scope": "window",
                     "description": "Enable Outliner Mode for markdown files. In outliner mode, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents the bullet line, and Shift+Tab outdents it. Only applies to lines beginning with `- `."
+                },
+                "as-notes.tabColourRules": {
+                    "type": "object",
+                    "default": {},
+                    "description": "Map filename regex patterns to editor tab border colours. Each key is a JavaScript regex tested against the workspace-relative file path (e.g. \"journals/.*\"); each value is a hex colour (e.g. #ff6600). Rules are evaluated in the order they appear — the first match wins. A `tab-colour` value in a file's YAML front matter takes priority over these rules.",
+                    "additionalProperties": {
+                        "type": "string",
+                        "description": "Hex colour for the tab border (e.g. #ff6600, #abc, #ff6600aa)."
+                    }
                 }
             }
         },

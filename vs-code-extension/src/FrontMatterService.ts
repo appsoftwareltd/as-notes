@@ -145,6 +145,47 @@ export class FrontMatterService {
     }
 
     /**
+     * Extract a single scalar string value for any given `key` from YAML front
+     * matter.  Handles the simple `key: value` form only — list and inline-array
+     * values are not supported and will return `null`.
+     *
+     * Surrounding single/double quotes are stripped from the returned value.
+     *
+     * Returns `null` if the key is not found or if the file has no front matter.
+     *
+     * Example:
+     * ```yaml
+     * ---
+     * tab-colour: "#ff0000"
+     * ---
+     * ```
+     * `parseScalarString(content, 'tab-colour')` → `'#ff0000'`
+     */
+    parseScalarString(content: string, key: string): string | null {
+        const frontMatter = this.extractFrontMatter(content);
+        if (!frontMatter) {
+            return null;
+        }
+
+        const lines = frontMatter.split(/\r?\n/);
+        // Escape special regex chars in the key so keys like "tab-colour" are safe
+        const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`^${escapedKey}\\s*:\\s*(.*)`);
+
+        for (const line of lines) {
+            const match = line.match(pattern);
+            if (match) {
+                let value = match[1].trim();
+                // Strip surrounding quotes
+                value = value.replace(/^["']|["']$/g, '').trim();
+                return value.length > 0 ? value : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Clean an alias value by stripping accidental wikilink brackets and
      * surrounding quotes.
      *
