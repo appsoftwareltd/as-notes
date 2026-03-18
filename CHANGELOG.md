@@ -4,9 +4,11 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
-## [2.2.1]  - 2026-03-12
+## [2.2.3]  - 2026-03-19
 
-- Kanban boards markdown formatting 
+- Templates
+- Kanban boards markdown formatting
+- Kanban board card conversion from task (markdown todo)
 
 ## [2.2.0]  - 2026-03-12
 

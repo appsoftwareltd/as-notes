@@ -62,7 +62,7 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
 
         // ── Today ─────────────────────────────────────────────────────────
         const todayItem = new vscode.CompletionItem('Today', vscode.CompletionItemKind.Event);
-        todayItem.detail = 'Insert [[YYYY_MM_DD]] for today';
+        todayItem.detail = 'Insert [[YYYY-MM-DD]] for today';
         todayItem.sortText = '0-today';
         todayItem.filterText = '/Today';
         todayItem.insertText = formatWikilinkDate(new Date());
@@ -71,7 +71,7 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
 
         // ── Date Picker ────────────────────────────────────────────────────
         const pickerItem = new vscode.CompletionItem('Date Picker', vscode.CompletionItemKind.Event);
-        pickerItem.detail = 'Pick any date and insert as [[YYYY_MM_DD]]';
+        pickerItem.detail = 'Pick any date and insert as [[YYYY-MM-DD]]';
         pickerItem.sortText = '1-datepicker';
         pickerItem.filterText = '/Date Picker';
         // insertText replaces the `/` with empty — the command will do the insertion
@@ -101,8 +101,22 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
         multilineCodeItem.range = range;
         items.push(multilineCodeItem);
 
-        // ── Table commands (Pro-gated) ─────────────────────────────────────
+        // ── Template (Pro-gated) ───────────────────────────────────────────
         const proSuffix = this._hasProEditor() ? '' : ' (Pro)';
+
+        const templateItem = new vscode.CompletionItem('Template' + proSuffix, vscode.CompletionItemKind.Event);
+        templateItem.detail = 'Insert a note template';
+        templateItem.sortText = '3b-template';
+        templateItem.filterText = '/Template';
+        templateItem.insertText = '';
+        templateItem.range = range;
+        templateItem.command = {
+            command: 'as-notes.insertTemplate',
+            title: 'Insert Template',
+        };
+        items.push(templateItem);
+
+        // ── Table commands (Pro-gated) ─────────────────────────────────────
 
         // ── Table ──────────────────────────────────────────────────────────
         const tableItem = new vscode.CompletionItem('Table' + proSuffix, vscode.CompletionItemKind.Event);

@@ -125,7 +125,7 @@ AS Notes has a built in Kanban board backed by markdown files that can be used a
 
 Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal page.
 
-Journal files are created as `YYYY_MM_DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from a `journal_template.md` template - edit it to add your own sections and prompts. The `YYYY-MM-DD` placeholder in the template is replaced with today's date on creation.
+Journal files are created as `YYYY-MM-DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from the `Journal.md` template in the templates folder (default: `templates/`). Edit `Journal.md` to add your own sections and prompts. All template placeholders are supported -- see [Templates](#templates).
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
@@ -135,10 +135,11 @@ Type `/` in any markdown file to open a quick command menu. The following comman
 
 | Command | Action |
 |---|---|
-| **Today** | Inserts a wikilink for today's date, e.g. `[[2026_03_06]]` |
+| **Today** | Inserts a wikilink for today's date, e.g. `[[2026-03-06]]` |
 | **Date Picker** | Opens a date input box pre-filled with today's date — edit the date or press Enter to insert it as a wikilink |
 | **Code (inline)** | Inserts `` ` `` `` ` `` with the cursor placed between the backticks |
-| **Code (multiline)** | Inserts a fenced code block with the cursor after the opening ` ``` ` — type the language identifier (e.g. `js`) then press Enter |
+| **Code (multiline)** | Inserts a fenced code block with the cursor after the opening ` ``` ` -- type the language identifier (e.g. `js`) then press Enter |
+| **Template** | Opens a quick-pick list of templates from the templates folder and inserts the selected template at the cursor. Supports placeholders (see [Templates](#templates)) |
 | **Table** | Prompts for column and row count, then inserts a formatted markdown table |
 | **Table: Add Column(s)** | Prompts for count, then adds columns after the cursor's current column in the surrounding table |
 | **Table: Add Row(s)** | Prompts for count, then adds rows after the cursor's current row in the surrounding table |
@@ -150,7 +151,7 @@ Type `/` in any markdown file to open a quick command menu. The following comman
 | **Table: Remove Column(s) Right** | Prompts for count, then removes columns to the right of the cursor (clamps to available) |
 | **Table: Remove Column(s) Left** | Prompts for count, then removes columns to the left of the cursor (clamps to available, preserves indent) |
 
-Table commands are labelled **(Pro)** for free users. Pro users see clean names.
+Table commands are labelled **(Pro)** for free users. Template and table commands are Pro features -- free users see them listed with **(Pro)** appended.
 
 #### Task Commands *(task lines only)*
 
@@ -230,9 +231,35 @@ To obtain a licence key, visit [asnotes.io](https://www.asnotes.io/pricing)
 - Run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`) — the quickest way.
 - Or open VS Code Settings (`Ctrl+,`), search for `as-notes.licenceKey`, and paste your key there.
 
+### Templates
+
+Create reusable note templates as markdown files in a dedicated templates folder (default: `templates/`). Insert them anywhere via the `/Template` slash command.
+
+**Setup:** Templates are created automatically when you initialise a workspace. A default `Journal.md` template is included for daily journal entries.
+
+**Creating templates:** Add any `.md` file to the templates folder. Subdirectories are supported -- templates in subfolders appear as `folder/name` in the picker.
+
+**Inserting a template:** Type `/` in any markdown file, select **Template**, then pick from the list. The template content is inserted at the cursor position with all placeholders replaced.
+
+**Placeholders:**
+
+| Placeholder        | Description                                                    | Example                               |
+|--------------------|----------------------------------------------------------------|---------------------------------------|
+| `{{date}}`         | Current date (YYYY-MM-DD)                                      | `2026-03-18`                          |
+| `{{time}}`         | Current time (HH:mm:ss)                                        | `14:30:45`                            |
+| `{{datetime}}`     | Full date and time (YYYY-MM-DD HH:mm:ss)                       | `2026-03-18 14:30:45`                 |
+| `{{filename}}`     | Current file name without extension                            | `My Page`                             |
+| `{{title}}`        | Alias for `{{filename}}`                                       | `My Page`                             |
+| `{{cursor}}`       | Cursor position after insertion                                | *(cursor lands here)*                 |
+| Custom date format | Any combination of `YYYY`, `MM`, `DD`, `HH`, `mm`, `ss` tokens | `{{DD/MM/YYYY}}` becomes `18/03/2026` |
+
+To output a literal `{{date}}` in the template, escape with a backslash: `\{{date}}`.
+
+**Journal template:** The file `Journal.md` in the templates folder is used as the template for new daily journal entries. Edit it to customise future journal pages.
+
 ### Table commands
 
-All table operations in the slash command menu (`/`) are Pro features. Free users see them listed with **(Pro)** appended — they are visible but blocked until a licence is active.
+All table operations in the slash command menu (`/`) are Pro features. Free users see them listed with **(Pro)** appended -- they are visible but blocked until a licence is active.
 
 See [Slash Commands](#slash-commands) for the full list of table commands.
 
@@ -516,12 +543,14 @@ Right-click any wikilink in the editor to open backlinks for that specific page:
 
 Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal. The extension creates a dated markdown file in a dedicated journal folder - one file per day.
 
-- **Filename format:** `YYYY_MM_DD.md` (e.g. `2026_03_02.md`)
+- **Filename format:** `YYYY-MM-DD.md` (e.g. `2026-03-02.md`)
 - **Journal folder:** defaults to `journals/` (configurable via `as-notes.journalFolder`)
-- **Template-based:** new files are created from `journal_template.md`, with `YYYY-MM-DD` replaced by the current date. Edit the template to customise future pages.
-- **Auto-setup:** the journal folder and default template are created on first use
+- **Template-based:** new files are created from `Journal.md` in the templates folder (`templates/` by default). All template placeholders are supported. Edit `Journal.md` to customise future pages.
+- **Auto-setup:** the journal folder and default `Journal.md` template are created on workspace initialisation
 - **Instant indexing:** new journal files are indexed immediately for wikilink completion and backlinks
 - **Idempotent:** pressing the shortcut again on the same day opens the existing file
+
+> **Migrating from an earlier version or another PKMS?** If you have existing journal files in the `YYYY_MM_DD.md` format (e.g. from Logseq), run the command `AS Notes: DANGER (Back up first): Rename 'YYYY_MM_DD.md' journal files to 'YYYY-MM-DD.md' format` from the command palette (`Ctrl+Shift+P`) to batch-rename them.
 
 ### Kanban board
 
@@ -625,6 +654,7 @@ Front-matter holds the structured fields; the Markdown body is the card descript
 |---|---|---|
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 | `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
+| `as-notes.templateFolder` | `templates` | Folder for note templates, relative to workspace root. Templates are markdown files inserted via the `/Template` slash command. |
 | `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Enter via **AS Notes: Enter Licence Key** in the Command Palette or directly in Settings. Scope: machine (not synced). |
 | `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
 

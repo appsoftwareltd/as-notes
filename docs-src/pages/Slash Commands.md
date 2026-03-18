@@ -18,7 +18,7 @@ Slash commands are suppressed inside fenced code blocks, inline code spans, and 
 
 | Command | What it does |
 |---|---|
-| **Today** | Inserts a wikilink for today's date — e.g. `[[2026_03_07]]` |
+| **Today** | Inserts a wikilink for today's date -- e.g. `[[2026-03-07]]` |
 | **Date Picker** | Opens a date input pre-filled with today. Edit the date (YYYY-MM-DD format) and press Enter to insert it as a wikilink |
 
 ### Code

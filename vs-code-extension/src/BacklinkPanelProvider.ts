@@ -284,8 +284,10 @@ export class BacklinkPanelProvider implements vscode.Disposable {
             entry.instances.push(instance);
         }
 
-        // Sort pages: journal (YYYY_MM_DD) descending (latest first), then non-journal alphabetical
-        const journalPattern = /^\d{4}_\d{2}_\d{2}$/;
+        // Sort pages: journal (YYYY-MM-DD) descending (latest first), then non-journal alphabetical.
+        // Matches both hyphens and underscores to support legacy files from earlier versions
+        // of this extension or other PKMS (e.g. Logseq) that use YYYY_MM_DD filenames.
+        const journalPattern = /^\d{4}[-_]\d{2}[-_]\d{2}$/;
         const sortedPages = [...byPage.values()].sort((a, b) => {
             const nameA = (a.page.title || a.page.filename).replace(/\.md$/, '');
             const nameB = (b.page.title || b.page.filename).replace(/\.md$/, '');

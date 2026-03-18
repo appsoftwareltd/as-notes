@@ -1906,7 +1906,7 @@ The webview communicates with the extension via `postMessage`:
 
 The backlinks panel supports two view modes, toggled via a button in the page header:
 
-- **Flat by page** (default, `groupByChain: false`): All backlink instances from all chain groups are flattened and grouped by source page. Pages are sorted in two tiers: journal-format filenames (`YYYY_MM_DD`) appear first in **reverse chronological order** (latest date at top), followed by non-journal pages in standard case-insensitive alphabetical order. Instances within each page are listed under a shared page header (rendered once). This mode gives a timeline-first view — the most recent journal entries are always at the top.
+- **Flat by page** (default, `groupByChain: false`): All backlink instances from all chain groups are flattened and grouped by source page. Pages are sorted in two tiers: journal-format filenames (`YYYY-MM-DD`) appear first in **reverse chronological order** (latest date at top), followed by non-journal pages in standard case-insensitive alphabetical order. Instances within each page are listed under a shared page header (rendered once). This mode gives a timeline-first view — the most recent journal entries are always at the top.
 - **Grouped by chain** (`groupByChain: true`): The current chain-first grouping with collapsible headers showing the pattern. Instances within each group are sorted by source page title.
 
 Both toggles are rendered as **segmented pill controls** with two segments each (e.g. `[Flat | Grouped]`). The active segment is highlighted with `--vscode-textLink-foreground` background and white text; the inactive segment is clickable. This makes the current state and available action immediately clear. Codicon-based icons were removed because the webview's bundled codicon font does not reliably include newer glyphs. The mode is persisted in webview state via `vscode.setState()` alongside scroll position and collapsed groups.
@@ -1960,8 +1960,8 @@ The daily journal provides a shortcut to create or open a dated markdown file. O
 
 `src/JournalService.ts` is a pure-logic module with no VS Code imports, fully testable:
 
-- **`formatJournalFilename(date)`** — returns `YYYY_MM_DD.md` (underscores for filesystem compatibility)
-- **`formatJournalDate(date)`** — returns `YYYY-MM-DD` (hyphens for display in content)
+- **`formatJournalFilename(date)`** -- returns `YYYY-MM-DD.md`
+- **`formatJournalDate(date)`** -- returns `YYYY-MM-DD` (for display in content)
 - **`applyTemplate(templateContent, date)`** — replaces all literal `YYYY-MM-DD` occurrences in the template string with the formatted date
 - **`normaliseJournalFolder(folder)`** — strips leading/trailing slashes and whitespace; returns empty string for blank input (meaning workspace root)
 - **`computeJournalPaths(workspaceRoot, journalFolder, date)`** — returns `{ journalFilePath, templateFilePath, journalFolderPath }` with fully resolved paths
@@ -1986,11 +1986,25 @@ The `as-notes.openDailyJournal` command is registered in `enterFullMode()` (requ
 
 Keybinding: `Ctrl+Alt+J` / `Cmd+Alt+J`, scoped to `as-notes.fullMode`.
 
+### Rename legacy journal files
+
+The `as-notes.renameJournalFiles` command bulk-renames journal files from the legacy `YYYY_MM_DD.md` underscore format to the current `YYYY-MM-DD.md` hyphen format. Registered in `enterFullMode()` (requires full mode). No keybinding -- available via `Ctrl+Shift+P` only.
+
+Flow:
+
+1. Read the `as-notes.journalFolder` setting and compute the journal folder path
+2. Scan the folder for files matching `/^\d{4}_\d{2}_\d{2}\.md$/`
+3. If none found, show an info message and return
+4. Show a modal warning with the file count, requiring the user to click "Rename Files" to proceed
+5. Iterate and rename each file using `vscode.workspace.fs.rename()` (overwrite disabled)
+6. Show a summary with renamed/error counts
+7. If any files were renamed, trigger `as-notes.rebuildIndex` so wikilinks and backlinks reflect the new filenames
+
 ### Template system
 
 The template file (`journal_template.md`) lives inside the journal folder. It is a regular markdown file that the user can freely edit to add sections, prompts, front matter, or any other content.
 
-The only special token is the literal string `YYYY-MM-DD` — every occurrence is replaced with the actual date when a new journal file is created. The filename uses underscores (`YYYY_MM_DD.md`) but the content date uses hyphens (`YYYY-MM-DD`).
+The only special token is the literal string `YYYY-MM-DD` -- every occurrence is replaced with the actual date when a new journal file is created.
 
 The template file is indexed like any other markdown file. If the user deletes it, it is silently recreated with the default content on the next journal creation.
 
@@ -2024,10 +2038,11 @@ Detection for the latter two is handled by `isPositionInsideCode()` in `Completi
 
 | Label | Action |
 |---|---|
-| `Today` | Replaces `/` with `[[YYYY_MM_DD]]` for the current date, inline |
+| `Today` | Replaces `/` with `[[YYYY-MM-DD]]` for the current date, inline |
 | `Date Picker` | Replaces `/` with `""` and fires `as-notes.openDatePicker` |
 | `Code (inline)` | Replaces `/` with a SnippetString `` `$0` `` — cursor lands between the backticks |
-| `Code (multiline)` | Replaces `/` with a SnippetString `` ```$0\n\n``` `` — cursor lands after the opening fence for lang entry |
+| `Code (multiline)` | Replaces `/` with a SnippetString `` ```$0\n\n``` `` -- cursor lands after the opening fence for lang entry |
+| `Template` | Replaces `/` with `""` and fires `as-notes.insertTemplate` |
 | `Table` | Replaces `/` with `""` and fires `as-notes.insertTable` |
 | `Table: Add Column(s)` | Replaces `/` with `""` and fires `as-notes.tableAddColumn` |
 | `Table: Add Row(s)` | Replaces `/` with `""` and fires `as-notes.tableAddRow` |
@@ -2045,19 +2060,19 @@ Detection for the latter two is handled by `isPositionInsideCode()` in `Completi
 | `Task: Due Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskDueDate` |
 | `Task: Completion Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskCompletionDate` |
 
-Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced. Task commands are only shown when the cursor is on a task line (`- [ ]` or `- [x]`).
+Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced. Template also appends ` (Pro)` for free users. Task commands are only shown when the cursor is on a task line (`- [ ]` or `- [x]`).
 
 The completion range covers only the `/` character.
 
 ### Date Picker — DatePickerService
 
-`src/DatePickerService.ts` — contains `openDatePicker()` (a `showInputBox`-based date entry) and `formatWikilinkDate()` (canonical `[[YYYY_MM_DD]]` formatter).
+`src/DatePickerService.ts` -- contains `openDatePicker()` (a `showInputBox`-based date entry) and `formatWikilinkDate()` (canonical `[[YYYY-MM-DD]]` formatter).
 
-**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking — e.g. rejects Feb 30), then inserts `[[YYYY_MM_DD]]` at every active cursor position.
+**Flow:** The `as-notes.openDatePicker` command calls `openDatePicker()` which shows a `vscode.window.showInputBox` pre-filled with today's date in `YYYY-MM-DD` format. The user edits or confirms the date, and on accept the extension validates the format and date validity (including overflow checking -- e.g. rejects Feb 30), then inserts `[[YYYY-MM-DD]]` at every active cursor position.
 
 **Validation:** `parseInputDate(input)` (in `TaskHashtagService.ts`) splits on `-`, validates each component as a number, checks month 1–12, day 1–maxDaysInMonth, and confirms no date overflow (via `Date` constructor round-trip). Returns `undefined` on any failure.
 
-`formatWikilinkDate(date)` (exported from `DatePickerService.ts`) is the single canonical place that produces the `[[YYYY_MM_DD]]` string.
+`formatWikilinkDate(date)` (exported from `DatePickerService.ts`) is the single canonical place that produces the `[[YYYY-MM-DD]]` string.
 
 ### Task hashtag insertion — TaskHashtagService
 
@@ -2086,7 +2101,61 @@ The completion range covers only the `/` character.
 
 ### Registration
 
-The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, all ten table commands, and all task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`) are registered in `enterFullMode()` in `extension.ts`. Table commands are Pro-gated via `isProLicenced()`.
+The `SlashCommandProvider` (constructed with an `isProLicenced` callback), `as-notes.openDatePicker`, `as-notes.insertTemplate`, all ten table commands, and all task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`) are registered in `enterFullMode()` in `extension.ts`. Table and Template commands are Pro-gated via `isProLicenced()`.
+
+### Template Service
+
+`src/TemplateService.ts` — pure-logic service for template placeholder resolution, no VS Code dependencies, fully unit-testable.
+
+**Exported constants:**
+
+| Constant | Value | Purpose |
+|---|---|---|
+| `DEFAULT_JOURNAL_TEMPLATE` | `'# {{date}}\n'` | Written to `templates/Journal.md` on workspace init |
+| `JOURNAL_TEMPLATE_FILENAME` | `'Journal.md'` | Filename for the journal template |
+| `CURSOR_SENTINEL` | `'\0CURSOR\0'` | Internal marker replaced by VS Code `SnippetString` `$0` |
+
+**Exported types:**
+
+```typescript
+interface TemplateContext {
+  now: Date;       // current timestamp for date/time placeholders
+  filename: string; // active editor filename (without extension)
+}
+```
+
+**Exported functions:**
+
+| Function | Purpose |
+|---|---|
+| `normaliseTemplateFolder(raw)` | Trim/strip slashes from the user setting, default to `'templates'` |
+| `computeTemplateFolderPath(workspaceRoot, raw?)` | Join workspace root + normalised folder |
+| `applyTemplatePlaceholders(content, ctx)` | Replace all `{{placeholder}}` tokens in a template string |
+
+**Placeholder engine** (`applyTemplatePlaceholders`):
+
+1. Escaped placeholders (`\{{...}}`) are replaced with a sentinel, restored after all processing.
+2. Named placeholders are resolved via a lookup map:
+   - `{{date}}` — `YYYY-MM-DD`
+   - `{{time}}` — `HH:MM` (24h, zero-padded)
+   - `{{datetime}}` — `YYYY-MM-DD HH:MM`
+   - `{{filename}}` — active file's name without extension
+   - `{{title}}` — same as filename
+   - `{{cursor}}` — replaced with `CURSOR_SENTINEL`
+3. Unrecognised tokens are tested as custom date format strings (containing `YYYY`, `MM`, `DD`, `HH`, or `mm`). Matching tokens are formatted accordingly. Non-matching tokens are left verbatim.
+
+**Command flow** (`insertTemplate` in `extension.ts`):
+
+1. Pro gate check.
+2. Recursively discover all `.md` files under the configured templates directory.
+3. Show a `QuickPick` listing each template (relative path without `.md` extension).
+4. Read the selected template file, apply `applyTemplatePlaceholders()`.
+5. If the result contains `CURSOR_SENTINEL`, split it and insert via `SnippetString` with `$0` at the cursor position.
+6. Otherwise insert as a plain text edit.
+
+**Journal integration:** `openDailyJournal()` reads `templates/Journal.md` via `readTemplateFile()`, which auto-creates the file with `DEFAULT_JOURNAL_TEMPLATE` if missing. The content is processed through `applyTemplatePlaceholders()` and any `CURSOR_SENTINEL` is stripped (journal files are created without interactive cursor placement).
+
+**Workspace init:** `initWorkspace()` creates the templates directory and default `Journal.md` alongside the existing kanban directory.
 
 ### Table Service
 
@@ -2501,7 +2570,7 @@ When `as-notes.outlinerMode` is enabled and the line `isOnBulletLine`, the `as-n
    - Calls `decorationManager.setReady()` — wikilinks shift from grey to blue
    - Creates shared `WikilinkFileService`, `IndexService`, `IndexScanner`
    - Registers all providers: `WikilinkDocumentLinkProvider`, `WikilinkHoverProvider`, `WikilinkRenameTracker`, `TaskPanelProvider` (via `registerWebviewViewProvider`), `BacklinkPanelProvider`
-   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`), and all eight encryption commands
+   - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, `as-notes.renameJournalFiles`, task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`), and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
 5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared. Passive-mode command stubs remain active.
@@ -2604,7 +2673,7 @@ Tests that depend on VS Code APIs (decorations, document links, hover, rename tr
 
 ### `JournalService.test.ts` (22 tests)
 
-1. **Date formatting** (5 tests) — `formatJournalFilename()` produces `YYYY_MM_DD.md` with zero-padding; `formatJournalDate()` produces `YYYY-MM-DD` with zero-padding.
+1. **Date formatting** (5 tests) -- `formatJournalFilename()` produces `YYYY-MM-DD.md` with zero-padding; `formatJournalDate()` produces `YYYY-MM-DD` with zero-padding.
 
 2. **Template substitution** (4 tests) — single placeholder, multiple placeholders, no placeholder (unchanged), default template.
 

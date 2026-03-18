@@ -83,6 +83,10 @@
                 "title": "AS Notes: Open Daily Journal"
             },
             {
+                "command": "as-notes.renameJournalFiles",
+                "title": "AS Notes: DANGER (Back up first): Rename 'YYYY_MM_DD.md' journal files to 'YYYY-MM-DD.md' format"
+            },
+            {
                 "command": "as-notes.setEncryptionKey",
                 "title": "AS Notes: Set Encryption Key"
             },
@@ -149,6 +153,10 @@
             {
                 "command": "as-notes.enterLicenceKey",
                 "title": "AS Notes: Enter Licence Key"
+            },
+            {
+                "command": "as-notes.insertTemplate",
+                "title": "AS Notes: Insert Template"
             }
         ],
         "keybindings": [
@@ -259,6 +267,11 @@
                     "default": 10,
                     "minimum": 0,
                     "description": "Warn when attaching files larger than this size (in MB) to a Kanban card. Set to 0 to disable the warning."
+                },
+                "as-notes.templateFolder": {
+                    "type": "string",
+                    "default": "templates",
+                    "description": "Folder for note templates, relative to workspace root. Templates are markdown files that can be inserted via the /Template slash command."
                 }
             }
         },

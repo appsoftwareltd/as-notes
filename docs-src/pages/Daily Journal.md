@@ -15,10 +15,10 @@ If today's journal file already exists, it opens immediately. If not, a new file
 Journal files are created as:
 
 ```
-journals/YYYY_MM_DD.md
+journals/YYYY-MM-DD.md
 ```
 
-For example, `journals/2026_03_07.md` for 7 March 2026.
+For example, `journals/2026-03-07.md` for 7 March 2026.
 
 The folder name defaults to `journals/` and can be changed in [[Settings]] via `as-notes.journalFolder`. The folder is created automatically on first use.
 
@@ -44,10 +44,10 @@ Edit `journal_template.md` to add your own sections, prompts, or daily structure
 Journal files are indexed immediately when created, so you can link to them using [[Wikilinks]] from other notes straight away:
 
 ```
-Daily notes from [[2026_03_07]] onwards.
+Daily notes from [[2026-03-07]] onwards.
 ```
 
-Because journal filenames follow a consistent `YYYY_MM_DD` pattern, the [[Backlinks]] panel lists journal backlinks in chronological order in flat view.
+Because journal filenames follow a consistent `YYYY-MM-DD` pattern, the [[Backlinks]] panel lists journal backlinks in chronological order in flat view.
 
 ## Inserting Today's Date as a Wikilink
 

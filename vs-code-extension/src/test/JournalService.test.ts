@@ -2,26 +2,24 @@ import { describe, it, expect } from 'vitest';
 import {
     formatJournalFilename,
     formatJournalDate,
-    applyTemplate,
     normaliseJournalFolder,
     computeJournalPaths,
-    DEFAULT_TEMPLATE,
 } from '../JournalService.js';
 
 describe('JournalService', () => {
     // ── Date formatting ────────────────────────────────────────────────────
 
     describe('formatJournalFilename', () => {
-        it('formats a date as YYYY_MM_DD.md', () => {
-            expect(formatJournalFilename(new Date(2026, 2, 2))).toBe('2026_03_02.md');
+        it('formats a date as YYYY-MM-DD.md', () => {
+            expect(formatJournalFilename(new Date(2026, 2, 2))).toBe('2026-03-02.md');
         });
 
         it('zero-pads single-digit month and day', () => {
-            expect(formatJournalFilename(new Date(2025, 0, 5))).toBe('2025_01_05.md');
+            expect(formatJournalFilename(new Date(2025, 0, 5))).toBe('2025-01-05.md');
         });
 
         it('handles double-digit month and day', () => {
-            expect(formatJournalFilename(new Date(2026, 11, 25))).toBe('2026_12_25.md');
+            expect(formatJournalFilename(new Date(2026, 11, 25))).toBe('2026-12-25.md');
         });
     });
 
@@ -32,32 +30,6 @@ describe('JournalService', () => {
 
         it('zero-pads single-digit month and day', () => {
             expect(formatJournalDate(new Date(2025, 0, 5))).toBe('2025-01-05');
-        });
-    });
-
-    // ── Template substitution ──────────────────────────────────────────────
-
-    describe('applyTemplate', () => {
-        it('replaces YYYY-MM-DD with the formatted date', () => {
-            const result = applyTemplate('# YYYY-MM-DD\n', new Date(2026, 2, 2));
-            expect(result).toBe('# 2026-03-02\n');
-        });
-
-        it('replaces multiple occurrences of YYYY-MM-DD', () => {
-            const template = '# YYYY-MM-DD\n\nToday is YYYY-MM-DD.\n';
-            const result = applyTemplate(template, new Date(2026, 2, 2));
-            expect(result).toBe('# 2026-03-02\n\nToday is 2026-03-02.\n');
-        });
-
-        it('returns content unchanged when no placeholder is present', () => {
-            const template = '# My Journal\n\nNo date here.\n';
-            const result = applyTemplate(template, new Date(2026, 2, 2));
-            expect(result).toBe(template);
-        });
-
-        it('works with the default template', () => {
-            const result = applyTemplate(DEFAULT_TEMPLATE, new Date(2026, 2, 2));
-            expect(result).toBe('# 2026-03-02\n');
         });
     });
 
@@ -109,28 +81,25 @@ describe('JournalService', () => {
         it('computes paths with default folder', () => {
             const paths = computeJournalPaths('/workspace', 'journals', date);
             expect(paths.journalFolderPath).toBe('/workspace/journals');
-            expect(paths.journalFilePath).toBe('/workspace/journals/2026_03_02.md');
-            expect(paths.templateFilePath).toBe('/workspace/journals/journal_template.md');
+            expect(paths.journalFilePath).toBe('/workspace/journals/2026-03-02.md');
         });
 
         it('computes paths with custom folder', () => {
             const paths = computeJournalPaths('/workspace', 'my/daily', date);
             expect(paths.journalFolderPath).toBe('/workspace/my/daily');
-            expect(paths.journalFilePath).toBe('/workspace/my/daily/2026_03_02.md');
-            expect(paths.templateFilePath).toBe('/workspace/my/daily/journal_template.md');
+            expect(paths.journalFilePath).toBe('/workspace/my/daily/2026-03-02.md');
         });
 
         it('computes paths when folder is empty (workspace root)', () => {
             const paths = computeJournalPaths('/workspace', '', date);
             expect(paths.journalFolderPath).toBe('/workspace');
-            expect(paths.journalFilePath).toBe('/workspace/2026_03_02.md');
-            expect(paths.templateFilePath).toBe('/workspace/journal_template.md');
+            expect(paths.journalFilePath).toBe('/workspace/2026-03-02.md');
         });
 
         it('normalises folder with extra slashes', () => {
             const paths = computeJournalPaths('/workspace', '/journals/', date);
             expect(paths.journalFolderPath).toBe('/workspace/journals');
-            expect(paths.journalFilePath).toBe('/workspace/journals/2026_03_02.md');
+            expect(paths.journalFilePath).toBe('/workspace/journals/2026-03-02.md');
         });
     });
 });

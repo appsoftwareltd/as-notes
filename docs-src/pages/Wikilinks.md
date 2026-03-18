@@ -27,7 +27,7 @@ Wikilinks resolve globally across your workspace, not just in the current folder
 notes/
   Project Ideas.md
   journal/
-    2026_03_07.md
+    2026-03-07.md
 ```
 
 The link `[[Project Ideas]]` resolves correctly from any file, at any depth.

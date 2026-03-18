@@ -17,10 +17,16 @@ import { SearchPanelProvider } from './SearchPanelProvider.js';
 import { BacklinkPanelProvider } from './BacklinkPanelProvider.js';
 import {
     computeJournalPaths,
-    applyTemplate,
-    DEFAULT_TEMPLATE,
-    TEMPLATE_FILENAME,
+    normaliseJournalFolder,
 } from './JournalService.js';
+import {
+    applyTemplatePlaceholders,
+    computeTemplateFolderPath,
+    DEFAULT_JOURNAL_TEMPLATE,
+    JOURNAL_TEMPLATE_FILENAME,
+    CURSOR_SENTINEL,
+    type TemplateContext,
+} from './TemplateService.js';
 import {
     hasProEditorAccess,
     hasProAiSyncAccess,
@@ -100,6 +106,7 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.viewBacklinks',
     'as-notes.viewBacklinksForPage',
     'as-notes.openDailyJournal',
+    'as-notes.renameJournalFiles',
     'as-notes.setEncryptionKey',
     'as-notes.clearEncryptionKey',
     'as-notes.encryptNotes',
@@ -117,6 +124,7 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.createKanbanBoard',
     'as-notes.deleteKanbanBoard',
     'as-notes.renameKanbanBoard',
+    'as-notes.insertTemplate',
 ];
 
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
@@ -673,6 +681,25 @@ async function enterFullMode(
     logService.info('extension', 'enterFullMode: initialising database');
     const { schemaReset } = await indexService.initDatabase();
 
+    // ── Ensure standard directories exist (migration for existing workspaces) ──
+    const templateFolder = config.get<string>('templateFolder', 'templates');
+    const templateFolderPath = computeTemplateFolderPath(
+        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        templateFolder,
+    );
+    fs.mkdirSync(templateFolderPath, { recursive: true });
+    const journalTemplatePath = path.join(templateFolderPath, JOURNAL_TEMPLATE_FILENAME).replace(/\\/g, '/');
+    if (!fs.existsSync(journalTemplatePath)) {
+        fs.writeFileSync(journalTemplatePath, DEFAULT_JOURNAL_TEMPLATE, 'utf-8');
+    }
+
+    const journalFolder = config.get<string>('journalFolder', 'journals');
+    const normalisedJournal = normaliseJournalFolder(journalFolder);
+    if (normalisedJournal) {
+        const journalFolderPath = path.join(workspaceRoot.fsPath, normalisedJournal);
+        fs.mkdirSync(journalFolderPath, { recursive: true });
+    }
+
     ignoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
     indexScanner = new IndexScanner(indexService, workspaceRoot, ignoreService, logService);
 
@@ -912,6 +939,14 @@ async function enterFullMode(
             if (!editor) { return; }
             insertTagAtTaskStart(editor, tag);
         }),
+    );
+
+    // ── Template command (Pro) ─────────────────────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.insertTemplate', () =>
+            insertTemplate(workspaceRoot),
+        ),
     );
 
     // ── Table commands (Pro) ───────────────────────────────────────────
@@ -1321,6 +1356,13 @@ async function enterFullMode(
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.openDailyJournal', () =>
             openDailyJournal(workspaceRoot),
+        ),
+    );
+
+    // Rename legacy YYYY_MM_DD journal files to YYYY-MM-DD
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.renameJournalFiles', () =>
+            renameJournalFiles(workspaceRoot),
         ),
     );
 
@@ -1997,6 +2039,19 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     // Create kanban/ directory for Kanban boards
     fs.mkdirSync(path.join(workspaceRoot.fsPath, 'kanban'), { recursive: true });
 
+    // Create templates/ directory with default Journal.md template
+    const templateConfig = vscode.workspace.getConfiguration('as-notes');
+    const templateFolder = templateConfig.get<string>('templateFolder', 'templates');
+    const templateFolderPath = computeTemplateFolderPath(
+        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        templateFolder,
+    );
+    fs.mkdirSync(templateFolderPath, { recursive: true });
+    const journalTemplatePath = `${templateFolderPath}/${JOURNAL_TEMPLATE_FILENAME}`;
+    if (!fs.existsSync(journalTemplatePath)) {
+        fs.writeFileSync(journalTemplatePath, DEFAULT_JOURNAL_TEMPLATE, 'utf-8');
+    }
+
     // Create .gitignore inside .asnotes/ to exclude the DB file
     fs.writeFileSync(path.join(asnotesDir, '.gitignore'), 'index.db\n');
 
@@ -2162,11 +2217,140 @@ async function cleanWorkspace(): Promise<void> {
     );
 }
 
+// ── Templates ──────────────────────────────────────────────────────────────
+
+/**
+ * Read the content of a template file from the templates directory.
+ * If the file does not exist and a default is provided, create it with that content.
+ * Returns the template content string, or undefined if not found and no default.
+ */
+async function readTemplateFile(
+    templateFolderPath: string,
+    filename: string,
+    defaultContent?: string,
+): Promise<string | undefined> {
+    const filePath = `${templateFolderPath}/${filename}`;
+    const fileUri = vscode.Uri.file(filePath);
+    try {
+        const bytes = await vscode.workspace.fs.readFile(fileUri);
+        return Buffer.from(bytes).toString('utf-8');
+    } catch {
+        if (defaultContent !== undefined) {
+            const folderUri = vscode.Uri.file(templateFolderPath);
+            await vscode.workspace.fs.createDirectory(folderUri);
+            await vscode.workspace.fs.writeFile(fileUri, Buffer.from(defaultContent, 'utf-8'));
+            return defaultContent;
+        }
+        return undefined;
+    }
+}
+
+/**
+ * Recursively discover all .md files under a directory.
+ * Returns relative paths from the base directory (e.g. "meeting/standup.md").
+ */
+async function discoverTemplates(basePath: string): Promise<string[]> {
+    const baseUri = vscode.Uri.file(basePath);
+    const results: string[] = [];
+
+    async function walk(dirUri: vscode.Uri, prefix: string): Promise<void> {
+        let entries: [string, vscode.FileType][];
+        try {
+            entries = await vscode.workspace.fs.readDirectory(dirUri);
+        } catch {
+            return; // Directory doesn't exist or not readable
+        }
+        for (const [name, type] of entries) {
+            if (type === vscode.FileType.Directory) {
+                const childUri = vscode.Uri.joinPath(dirUri, name);
+                await walk(childUri, prefix ? `${prefix}/${name}` : name);
+            } else if (type === vscode.FileType.File && name.endsWith('.md')) {
+                results.push(prefix ? `${prefix}/${name}` : name);
+            }
+        }
+    }
+
+    await walk(baseUri, '');
+    return results.sort();
+}
+
+async function insertTemplate(workspaceRoot: vscode.Uri): Promise<void> {
+    if (!hasProEditor()) {
+        vscode.window.showWarningMessage('AS Notes: Templates require a Pro licence.');
+        return;
+    }
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showInformationMessage('AS Notes: Open a file to insert a template.');
+        return;
+    }
+
+    const config = vscode.workspace.getConfiguration('as-notes');
+    const templateFolder = config.get<string>('templateFolder', 'templates');
+    const templateFolderPath = computeTemplateFolderPath(
+        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        templateFolder,
+    );
+
+    const templates = await discoverTemplates(templateFolderPath);
+    if (templates.length === 0) {
+        vscode.window.showInformationMessage(
+            `AS Notes: Create templates under ${templateFolder}/ to use this command.`,
+        );
+        return;
+    }
+
+    // Show QuickPick with template names (without .md extension)
+    const items = templates.map((t) => ({
+        label: t.replace(/\.md$/, ''),
+        file: t,
+    }));
+
+    const pick = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select a template to insert',
+    });
+    if (!pick) { return; }
+
+    // Read the selected template
+    const templateUri = vscode.Uri.file(`${templateFolderPath}/${pick.file}`);
+    let templateContent: string;
+    try {
+        const bytes = await vscode.workspace.fs.readFile(templateUri);
+        templateContent = Buffer.from(bytes).toString('utf-8');
+    } catch {
+        vscode.window.showErrorMessage(`AS Notes: Could not read template file: ${pick.file}`);
+        return;
+    }
+
+    // Build template context
+    const currentFilename = path.basename(editor.document.fileName, path.extname(editor.document.fileName));
+    const ctx: TemplateContext = {
+        now: new Date(),
+        filename: currentFilename,
+    };
+
+    const processed = applyTemplatePlaceholders(templateContent, ctx);
+
+    // If the template contains a cursor placeholder, use a snippet for cursor positioning
+    if (processed.includes(CURSOR_SENTINEL)) {
+        const snippetText = processed
+            .replace(/\$/g, '\\$')  // Escape existing $ signs for snippet syntax
+            .replace(CURSOR_SENTINEL, '$0');
+        await editor.insertSnippet(new vscode.SnippetString(snippetText));
+    } else {
+        await editor.edit((editBuilder) => {
+            editBuilder.insert(editor.selection.active, processed);
+        });
+    }
+}
+
 // ── Daily journal ──────────────────────────────────────────────────────────
 
 async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
     const journalFolder = config.get<string>('journalFolder', 'journals');
+    const templateFolder = config.get<string>('templateFolder', 'templates');
 
     const paths = computeJournalPaths(
         workspaceRoot.fsPath.replace(/\\/g, '/'),
@@ -2183,27 +2367,33 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
         await vscode.window.showTextDocument(doc);
         return;
     } catch {
-        // File does not exist — proceed with creation
+        // File does not exist -- proceed with creation
     }
 
     // Ensure the journal folder exists
     const folderUri = vscode.Uri.file(paths.journalFolderPath);
     await vscode.workspace.fs.createDirectory(folderUri);
 
-    // Ensure the template file exists; create with default content if missing
-    const templateUri = vscode.Uri.file(paths.templateFilePath);
-    let templateContent: string;
-    try {
-        const bytes = await vscode.workspace.fs.readFile(templateUri);
-        templateContent = Buffer.from(bytes).toString('utf-8');
-    } catch {
-        // Template doesn't exist — create it with the default
-        templateContent = DEFAULT_TEMPLATE;
-        await vscode.workspace.fs.writeFile(templateUri, Buffer.from(templateContent, 'utf-8'));
-    }
+    // Read Journal.md from the templates directory (create with default if missing)
+    const templateFolderPath = computeTemplateFolderPath(
+        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        templateFolder,
+    );
+    const templateContent = await readTemplateFile(
+        templateFolderPath,
+        JOURNAL_TEMPLATE_FILENAME,
+        DEFAULT_JOURNAL_TEMPLATE,
+    );
 
-    // Apply template and create the journal file
-    const content = applyTemplate(templateContent, new Date());
+    // Build context -- filename is the journal date filename without extension
+    const journalFilenameNoExt = path.basename(paths.journalFilePath, '.md');
+    const ctx: TemplateContext = {
+        now: new Date(),
+        filename: journalFilenameNoExt,
+    };
+
+    // Apply placeholders and strip the cursor sentinel (not useful for auto-created files)
+    const content = applyTemplatePlaceholders(templateContent!, ctx).replace(CURSOR_SENTINEL, '');
     await vscode.workspace.fs.writeFile(journalUri, Buffer.from(content, 'utf-8'));
 
     // Index the new file immediately
@@ -2227,6 +2417,76 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
     const endPos = doc.lineAt(doc.lineCount - 1).range.end;
     editor.selection = new vscode.Selection(endPos, endPos);
     editor.revealRange(new vscode.Range(endPos, endPos));
+}
+
+/**
+ * Rename legacy YYYY_MM_DD.md journal files to YYYY-MM-DD.md format.
+ * Scans the configured journal folder and renames matching files,
+ * then triggers a full index rebuild.
+ */
+async function renameJournalFiles(workspaceRoot: vscode.Uri): Promise<void> {
+    const config = vscode.workspace.getConfiguration('as-notes');
+    const journalFolder = config.get<string>('journalFolder', 'journals');
+    const normalised = normaliseJournalFolder(journalFolder);
+    const base = normalised
+        ? `${workspaceRoot.fsPath.replace(/\\/g, '/')}/${normalised}`
+        : workspaceRoot.fsPath.replace(/\\/g, '/');
+
+    const folderUri = vscode.Uri.file(base);
+
+    // Check the folder exists
+    try {
+        await vscode.workspace.fs.stat(folderUri);
+    } catch {
+        vscode.window.showInformationMessage('AS Notes: Journal folder does not exist. Nothing to rename.');
+        return;
+    }
+
+    // Scan for underscore-format files
+    const pattern = /^\d{4}_\d{2}_\d{2}\.md$/;
+    const entries = await vscode.workspace.fs.readDirectory(folderUri);
+    const toRename = entries
+        .filter(([name, type]) => type === vscode.FileType.File && pattern.test(name))
+        .map(([name]) => name);
+
+    if (toRename.length === 0) {
+        vscode.window.showInformationMessage('AS Notes: No YYYY_MM_DD.md journal files found. Nothing to rename.');
+        return;
+    }
+
+    // Modal confirmation
+    const answer = await vscode.window.showWarningMessage(
+        `AS Notes: This will rename ${toRename.length} journal file(s) from YYYY_MM_DD.md to YYYY-MM-DD.md format. This cannot be undone. Continue?`,
+        { modal: true },
+        'Rename Files',
+    );
+    if (answer !== 'Rename Files') { return; }
+
+    let renamed = 0;
+    let errors = 0;
+
+    for (const oldName of toRename) {
+        const newName = oldName.replace(/_/g, '-');
+        const oldUri = vscode.Uri.joinPath(folderUri, oldName);
+        const newUri = vscode.Uri.joinPath(folderUri, newName);
+        try {
+            await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
+            renamed++;
+        } catch (err) {
+            console.warn(`as-notes: failed to rename ${oldName} to ${newName}:`, err);
+            errors++;
+        }
+    }
+
+    const errMsg = errors > 0 ? ` ${errors} error(s).` : '';
+    vscode.window.showInformationMessage(
+        `AS Notes: Renamed ${renamed} journal file(s).${errMsg}`,
+    );
+
+    // Rebuild index so wikilinks and backlinks reflect the new filenames
+    if (renamed > 0) {
+        await vscode.commands.executeCommand('as-notes.rebuildIndex');
+    }
 }
 
 // ── Periodic scanning ──────────────────────────────────────────────────────

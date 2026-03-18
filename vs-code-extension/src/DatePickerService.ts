@@ -2,18 +2,18 @@ import * as vscode from 'vscode';
 import { DATE_PATTERN, formatInputDate, parseInputDate } from './TaskHashtagService.js';
 
 /**
- * Format a Date as a `[[YYYY_MM_DD]]` wikilink string.
+ * Format a Date as a `[[YYYY-MM-DD]]` wikilink string.
  */
 export function formatWikilinkDate(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
-    return `[[${y}_${m}_${d}]]`;
+    return `[[${y}-${m}-${d}]]`;
 }
 
 /**
  * Open a date picker input box. Pre-filled with today's date in YYYY-MM-DD format.
- * On confirm, inserts `[[YYYY_MM_DD]]` at the active cursor position.
+ * On confirm, inserts `[[YYYY-MM-DD]]` at the active cursor position.
  */
 export async function openDatePicker(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
