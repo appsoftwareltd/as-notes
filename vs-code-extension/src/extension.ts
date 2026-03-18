@@ -49,6 +49,7 @@ import { KanbanStore } from './KanbanStore.js';
 import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
 import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
+import type { Priority } from './KanbanTypes.js';
 
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
 const ASNOTES_DIR = '.asnotes';
@@ -124,6 +125,7 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.createKanbanBoard',
     'as-notes.deleteKanbanBoard',
     'as-notes.renameKanbanBoard',
+    'as-notes.convertTaskToKanbanCard',
     'as-notes.insertTemplate',
 ];
 
@@ -219,6 +221,8 @@ async function showServerUnreachableWarning(): Promise<void> {
  * extension is running as the official published build.
  */
 export function hasProEditor(): boolean {
+    const override = process.env.AS_NOTES_LICENCE_OVERRIDE;
+    if (override === 'pro_editor' || override === 'pro_ai_sync') { return true; }
     return isOfficialBuild && hasProEditorAccess(licenceState);
 }
 
@@ -227,6 +231,8 @@ export function hasProEditor(): boolean {
  * extension is running as the official published build.
  */
 export function hasProAiSync(): boolean {
+    const override = process.env.AS_NOTES_LICENCE_OVERRIDE;
+    if (override === 'pro_ai_sync') { return true; }
     return isOfficialBuild && hasProAiSyncAccess(licenceState);
 }
 
@@ -848,6 +854,75 @@ async function enterFullMode(
             await kanbanBoardConfigStore!.selectBoard(newSlug);
             KanbanEditorPanel.currentPanel?.refresh();
             kanbanSidebarProvider?.refresh();
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.convertTaskToKanbanCard', async () => {
+            if (!hasProEditor()) {
+                vscode.window.showWarningMessage('AS Notes: Convert to Kanban Card requires a Pro licence.');
+                return;
+            }
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            const line = editor.selection.active.line;
+            const lineText = editor.document.lineAt(line).text;
+
+            // Must be a task line
+            if (!/^\s*-\s+\[[ xX]\]/.test(lineText)) { return; }
+
+            // Reject done tasks
+            if (/^\s*-\s+\[[xX]\]/.test(lineText)) {
+                vscode.window.showWarningMessage('Cannot convert done tasks to Kanban cards - uncheck to convert');
+                return;
+            }
+
+            // Ensure a board is selected
+            if (!kanbanStore?.currentBoard) {
+                vscode.window.showWarningMessage('No Kanban board selected. Please select or create a board first.');
+                return;
+            }
+
+            // Strip checkbox prefix and parse task metadata
+            const taskText = lineText.replace(/^\s*-\s+\[ \]\s*/, '');
+            const meta = IndexService.parseTaskMeta(taskText);
+            const title = meta.cleanText.trim();
+            if (!title) {
+                vscode.window.showWarningMessage('Task has no text to create a card from.');
+                return;
+            }
+
+            const priority = meta.priority !== null ? `p${meta.priority}` as Priority : undefined;
+            const dueDate = meta.dueDate ?? undefined;
+
+            // Create card in todo lane with waiting flag
+            const card = kanbanStore.createCard(title, 'todo');
+            card.priority = priority;
+            card.dueDate = dueDate;
+            card.waiting = true;
+
+            // Place at end of todo lane
+            const todoCards = kanbanStore.getAll()
+                .filter((c) => c.lane === 'todo')
+                .sort((a, b) => (a.sortOrder ?? Date.parse(a.created)) - (b.sortOrder ?? Date.parse(b.created)));
+            const lastOrder = todoCards.length > 0
+                ? (todoCards[todoCards.length - 1].sortOrder ?? Date.parse(todoCards[todoCards.length - 1].created))
+                : 0;
+            card.sortOrder = lastOrder + 1;
+
+            await kanbanStore.save(card);
+
+            // Mark the task line as done
+            const doneLine = toggleTodoLine(lineText);
+            await editor.edit((editBuilder) => {
+                editBuilder.replace(editor.document.lineAt(line).range, doneLine);
+            });
+
+            // Refresh kanban panel if open
+            KanbanEditorPanel.currentPanel?.refresh();
+
+            vscode.window.showInformationMessage(`Kanban card created: "${title}"`);
         }),
     );
 

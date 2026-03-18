@@ -331,6 +331,15 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
                 title: 'Insert Task Completion Date',
             };
             items.push(taskCompletionDateItem);
+            // ── Convert to Kanban Card ─────────────────────────────
+            const convertToCardItem = new vscode.CompletionItem('Convert to Kanban Card' + proSuffix, vscode.CompletionItemKind.Event);
+            convertToCardItem.detail = 'Mark task done and create a Kanban card (with Waiting flag)';
+            convertToCardItem.sortText = 'k-convert-to-kanban';
+            convertToCardItem.filterText = '/Convert to Kanban Card';
+            convertToCardItem.insertText = '';
+            convertToCardItem.range = range;
+            convertToCardItem.command = { command: 'as-notes.convertTaskToKanbanCard', title: 'Convert to Kanban Card' };
+            items.push(convertToCardItem);
         }
 
         return new vscode.CompletionList(items, false);

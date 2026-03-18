@@ -316,27 +316,40 @@
         line-height: 1.2;
     }
 
-    .priority-critical {
+    .priority-p1 {
         background: #fecdd3;
         color: #9f1239;
     }
 
-    .priority-high {
+    .priority-p2 {
         background: #fed7aa;
         color: #c2410c;
     }
 
-    .priority-medium {
+    .priority-p3 {
         background: #fef08a;
         color: #a16207;
     }
 
-    .priority-low {
+    .priority-p4 {
         background: #bbf7d0;
         color: #15803d;
     }
 
+    .priority-p5 {
+        background: #bfdbfe;
+        color: #1d4ed8;
+    }
+
     .priority-none {
+        background: rgba(127, 127, 127, 0.15);
+        color: var(--vscode-descriptionForeground);
+    }
+
+    /* ── Waiting Badge ──────────────────────────────── */
+    .waiting-badge {
+        @apply text-xs font-semibold rounded px-1.5 py-0.5 inline-block;
+        line-height: 1.2;
         background: rgba(127, 127, 127, 0.15);
         color: var(--vscode-descriptionForeground);
     }
@@ -424,6 +437,22 @@
     /* ── Form ────────────────────────────────────── */
     .form-row {
         @apply flex flex-col gap-1;
+    }
+
+    .form-row-check {
+        @apply flex flex-row items-center gap-2;
+    }
+
+    .form-check-label {
+        @apply text-xs font-semibold uppercase tracking-wide;
+        color: var(--vscode-descriptionForeground);
+    }
+
+    .form-check {
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+        accent-color: var(--vscode-focusBorder);
     }
 
     .form-label {

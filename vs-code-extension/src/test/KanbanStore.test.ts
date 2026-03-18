@@ -251,7 +251,7 @@ describe('KanbanStore serialise/deserialise round-trip', () => {
             created: '2026-03-12T14:30:45.123Z',
             updated: '2026-03-12T16:00:00.000Z',
             description: 'A detailed description.',
-            priority: 'high' as const,
+            priority: 'p2' as const,
             assignee: 'alice',
             labels: ['backend', 'bug'],
             dueDate: '2026-03-20',
@@ -272,7 +272,7 @@ describe('KanbanStore serialise/deserialise round-trip', () => {
         expect(deserialized).not.toBeNull();
         expect(deserialized!.title).toBe('Full Card');
         expect(deserialized!.description).toBe('A detailed description.');
-        expect(deserialized!.priority).toBe('high');
+        expect(deserialized!.priority).toBe('p2');
         expect(deserialized!.assignee).toBe('alice');
         expect(deserialized!.labels).toEqual(['backend', 'bug']);
         expect(deserialized!.dueDate).toBe('2026-03-20');
