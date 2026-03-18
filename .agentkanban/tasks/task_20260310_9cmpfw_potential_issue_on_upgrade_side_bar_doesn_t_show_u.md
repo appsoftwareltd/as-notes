@@ -1,5 +1,6 @@
 ---
 title: Potential issue on upgrade - Side bar doesn't show up initially
+lane: done
 created: 2026-03-10T17:33:09.006Z
 updated: 2026-03-10T20:18:53.118Z
 description: Not until I attempt toggle taskbar command

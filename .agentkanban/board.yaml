@@ -3,3 +3,5 @@ lanes:
   - doing
   - test
   - done
+labels:
+  - bug

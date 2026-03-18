@@ -1,5 +1,6 @@
 ---
 title: Remove command "Toggle Task at Line"
+lane: done
 created: 2026-03-10T15:09:45.043Z
 updated: 2026-03-10T15:51:32.687Z
 description: It's not working and has low utility

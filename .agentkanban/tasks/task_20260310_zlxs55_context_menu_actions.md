@@ -1,5 +1,6 @@
 ---
 title: Context menu actions
+lane: done
 created: 2026-03-10T15:13:15.463Z
 updated: 2026-03-10T15:51:35.396Z
 description: |-

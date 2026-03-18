@@ -1,5 +1,6 @@
 ---
 title: "Slash commands required for task #hashtags"
+lane: doing
 created: 2026-03-11T10:10:26.590Z
 updated: 2026-03-11T15:34:15.976Z
 priority: high

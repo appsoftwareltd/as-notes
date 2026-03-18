@@ -1,8 +1,14 @@
 # Agent Kanban — Instruction
 
-You are working with the **Agent Kanban** extension. Follow these workspace structure, file format, and workflow rules strictly.
+You are working with the **Agent Kanban** extension.
 
-## Directory Structure
+IMPORTANT: Follow these workspace structure, file format, and workflow rules strictly.
+
+Agent Kanban structures a `plan → todo → implement` workflow where conversation between you (the agent) and the user happens in task files. Use the chat window only for summaries and chain of thought. Planning, decisions, and actions taken go in the task file to maintain a clear record.
+
+IMPORTANT: Always respond in the task file, not the chat window. Stay in the assigned task file until a new one is given.
+
+## Task Directory Structure
 
 ```
 .agentkanban/
@@ -11,101 +17,104 @@ You are working with the **Agent Kanban** extension. Follow these workspace stru
   memory.md           # Persistent memory across tasks (reset via command)
   INSTRUCTION.md      # This file — agent instructions
   tasks/
-    todo/             # Lane directories — one per lane
-      task_<id>_<slug>.md
-      todo_<id>_<slug>.md
-    doing/
-    done/
-    archive/          # Archived tasks (hidden from board)
+    task_<id>_<slug>.md    # Task files (lane stored in frontmatter)
+    todo_<id>_<slug>.md    # TODO files (lane stored in frontmatter)
+    archive/               # Archived tasks (hidden from board)
   logs/               # Diagnostic logs (gitignored)
 ```
 
 ## Task File Format
 
-Stored under `.agentkanban/tasks/<lane>/` as `task_<YYYYMMdd>_<HHmmssfff>_<unique_id>_<slug>.md`. The lane a task belongs to is determined by its directory (e.g. `tasks/doing/`), not by a frontmatter field. Stay working in the given task file until a new one is assigned.
+IMPORTANT: The task lane is managed by the user/extension via frontmatter. You do not change the lane.
 
-Each task is a markdown file with YAML frontmatter:
+Each task is a markdown file with YAML frontmatter. Conversation flows under `### user` and `### agent` headings. The user may add inline comments `[comment: <text>]` on your responses — check for these:
 
 ```markdown
 ---
 title: <Task Title>
+lane: <lane-slug>
 created: <ISO 8601>
 updated: <ISO 8601>
 description: <Brief description>
 ---
 
-IMPORTANT: The task lane is managed by the user / extension (by moving the file between directories). You do not change the lane.
-IMPORTANT: The conversation should happen in the task file. You may use the chat window, but keep it to summary information. Planning and recording of what action was taken goes in the task file.
-
 ## Conversation
 
-[user] 
+### user
 
 <message>
 
-[agent] 
+### agent
 
-<response>
+<response> [comment: <inline comment by the user>]
 
-[user]
+### user
+
+...
 ```
 
 **Rules:**
 
 - Append new entries at the end — never modify or delete existing ones
-- Start each message with `[user]` or `[agent]` on its own line; blank line between messages
-- After your response, you must `[user]` on a new line for the user's next entry
-- Look for and honor inline `[comment] <text>` annotations from the user
-- Ask questions and give the user options if is needed or may improve the final implementation.
-- ALWAYS start and finish conversations in the chat window with `Conversing in file: task_<YYYYMMdd>_<HHmmssfff>_<unique_id>_<slug>.md` (but do not add this text to the conversation markdown - keep it in the chat window)
-- Always re-read this INSTRUCTION.md file at the start of every action.
-- **At the start of each response, confirm which task file you are working in.** If no task file is in context, state this and ask the user to select one with `@kanban /task`.
-- If you cannot find a task file reference in the conversation, search `.agentkanban/tasks/` for files in non-done lanes and ask the user which task to work on.
+- Start each message with `### user` or `### agent` on its own line; blank line between messages
+- After your response, add `### user` on a new line for the user's next entry
+- Honour inline `[comment: <text>]` annotations from the user
+- Ask questions and give options where needed to improve the final outcome
+- Start and finish chat window turns with `Conversing in file: task_<YYYYMMdd>_<unique_id>_<slug>.md` (do not add this to the task markdown)
+- Re-read this INSTRUCTION.md at the start of every action
+- **Confirm which task file you are working in at the start of each response.** If none is in context, ask the user to select one with `@kanban /task`.
+- If no task file reference is found, ask the user to run `@kanban /task` or `/refresh`.
 
-## TODO File Format
+## TODOs
 
-Mirrors the task filename with `todo_` prefix - `todo_<YYYYMMdd>_<HHmmssfff>_<unique_id>_<slug>.md`. **Create it if it doesn't exist.**
+Track implementation progress with `- [ ]` / `- [x]` checkboxes in the corresponding todo file for th task. Mark items as completed during / following implementation. Always add new items and iterations to the bottom of the todos.
 
 ```markdown
----
-task: task_<YYYYMMdd>_<HHmmssfff>_<unique_id>_<slug>
----
 
-## TODO
+# Iteration <iteration number>
 
 - [ ] Uncompleted item
 - [x] Completed item
 ```
 
-**Rules:** Use `- [ ]` / `- [x]` checkboxes. Keep items concise and actionable. Check off items as completed. Group under iteration headings. Append new items at the end; preserve ordering.
-
 ## Memory
 
-`.agentkanban/memory.md` persists across tasks. Read it at the start of each task. Update it with project conventions, key decisions, and useful context for future tasks.
+`.agentkanban/memory.md` persists across tasks. Read it at the start of each task. Update it with project conventions, key decisions, and useful context.
 
 ## Technical Document
 
-Maintain `TECHNICAL.md` at workspace root with implementation details (for agents/LLMs and humans). Update the appropriate section when making changes.
+Maintain `TECHNICAL.md` at workspace root with implementation details for agents and humans. Update the relevant section when making changes.
 
-## Command Rules
-
-A task file name exists in the context — converse and collaborate **only** in that file for this task.
-
-### Flow
+### Workflow
 
 Iterative cycle: **plan** → **todo** → **implement**
 
-Use `@kanban /plan`, `@kanban /todo`, or `@kanban /implement` in chat to refresh context and keep instructions prominent in long conversations. Combine verbs with `#` tags (e.g. `@kanban /todo #implement`). Then type **go** to begin.
+The user sets the working task via `@kanban /task <name>` and uses `@kanban /refresh` to re-inject context in long conversations. The user then types a command verb (`plan`, `todo`, `implement`) to direct the agent.
 
-### Verbs
+In a **worktree workspace**, AGENTS.md permanently contains the task reference — context is always available without `/task` or `/refresh`.
 
-Verbs can be combined (e.g. `@kanban /todo #implement`). Without `implement`, **never write code or create files**.
+IMPORTANT: Do not implement changes unless the `implement` verb is used.
+IMPORTANT: Do not add or commit to version control unless specifically instructed.
 
-#### `plan`
-Discuss, analyse, and plan the task collaboratively. Read the conversation, reason about requirements, explore approaches, record decisions. Append responses using `[agent]` markers. **No code, no files, no TODOs** unless combined with `implement`.
+### Command Verbs
 
-#### `todo`
-Create/update the TODO checklist based on the planning conversation. Read the task conversation for context. Write clear, actionable `- [ ]` items. **No implementation** unless combined with `implement`.
+Command verbs direct the action during each phase. The user may combine verbs (e.g. `todo implement`) to action multiple phases in one turn.
 
-#### `implement`
-Implement per the plan and TODOs. Read both task and todo files. Write clean, robust code. Check off TODO items as completed. Append a summary to the conversation. **Do not deviate** from the agreed plan without noting why.
+Shorthand single-letter aliases are also accepted and may be combined freely (e.g. `ti` or `t i` means `todo implement`, `pti` means `plan todo implement`):
+
+| Verb | Shorthand |
+|------|-----------|
+| `plan` | `p` |
+| `todo` | `t` |
+| `implement` | `i` |
+
+The intent of each verb is:
+
+#### plan
+Discuss, analyse, and plan the task collaboratively. Read the conversation, reason about requirements, explore approaches, record decisions. **No code, no files, no TODOs.**
+
+#### todo
+Create/update the TODO checklist from the planning conversation. Write clear, actionable `- [ ]` items. **No implementation** unless the user explicitly asks.
+
+#### implement
+Implement per the plan and TODOs. Read both task and todo files. Write clean, robust code. Check off items as completed. Append a summary to the conversation. **Do not deviate** from the plan without noting why.
