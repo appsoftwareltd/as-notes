@@ -397,6 +397,7 @@ export class KanbanStore {
         if (card.sortOrder != null) { data.sortOrder = card.sortOrder; }
         if (card.slug) { data.slug = card.slug; }
         if (card.assets?.length) { data.assets = card.assets; }
+        if (card.waiting) { data.waiting = card.waiting; }
         // No entries in frontmatter — they live in the markdown body
         const frontmatter = stringify(data, { lineWidth: 0 });
         return `---\n${frontmatter}---\n${existingBody}`;
@@ -442,6 +443,7 @@ export class KanbanStore {
                 dueDate: (data.dueDate as string) || undefined,
                 sortOrder: typeof data.sortOrder === 'number' ? data.sortOrder : undefined,
                 slug: typeof data.slug === 'string' ? data.slug : undefined,
+                waiting: (data.waiting as boolean) || undefined,
                 parsedEntries: parsedEntries.length > 0 ? parsedEntries : undefined,
                 assets: Array.isArray(data.assets)
                     ? (data.assets as AssetMeta[])

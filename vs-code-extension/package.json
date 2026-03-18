@@ -147,6 +147,10 @@
                 "title": "AS Notes: Rename Kanban Board"
             },
             {
+                "command": "as-notes.convertTaskToKanbanCard",
+                "title": "AS Notes: Convert Task to Kanban Card"
+            },
+            {
                 "command": "as-notes.enterLicenceKey",
                 "title": "AS Notes: Enter Licence Key"
             }

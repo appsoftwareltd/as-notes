@@ -11,7 +11,7 @@ interface AssetMeta { filename: string; added: string; addedBy?: string }
 interface Card {
     id: string; title: string; lane: string; created: string; updated: string;
     description?: string; priority?: Priority; assignee?: string; labels?: string[];
-    dueDate?: string; sortOrder?: number; slug: string;
+    dueDate?: string; sortOrder?: number; slug: string; waiting?: boolean;
     parsedEntries?: CardEntryDisplay[]; assets?: AssetMeta[];
 }
 
@@ -37,7 +37,7 @@ let modalMode: 'create' | 'edit' = 'edit';
 
 interface ModalSnapshot {
     title: string; description: string; lane: string; priority: string;
-    assignee: string; dueDate: string; labels: string[];
+    assignee: string; dueDate: string; labels: string[]; waiting: boolean;
 }
 let modalSnapshot: ModalSnapshot | null = null;
 
@@ -83,7 +83,7 @@ function isProtectedLane(slug: string): boolean {
 }
 
 const PRIORITY_LABELS: Record<string, string> = {
-    critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', none: 'None',
+    p1: 'P1', p2: 'P2', p3: 'P3', p4: 'P4', p5: 'P5', none: 'None',
 };
 
 // ── Message Handling ─────────────────────────────────────────────────────────
@@ -131,6 +131,7 @@ function renderBoard(): void {
     const savedLane = (document.getElementById('modal-lane') as HTMLSelectElement | null)?.value ?? '';
     const savedTitleInput = (document.getElementById('modal-title-input') as HTMLInputElement | null)?.value ?? '';
     const savedDescription = (document.getElementById('modal-description') as HTMLTextAreaElement | null)?.value ?? '';
+    const savedWaiting = (document.getElementById('modal-waiting') as HTMLInputElement | null)?.checked ?? false;
 
     app.innerHTML = buildBoardHtml();
 
@@ -140,7 +141,7 @@ function renderBoard(): void {
             modalLabels = savedLabels;
             document.getElementById('modal-backdrop')?.removeAttribute('hidden');
             configureModalMode();
-            restoreCreateInputs(savedTitleInput, savedDescription, savedLane, savedPriority, savedAssignee, savedDueDate, pendingLabelInput);
+            restoreCreateInputs(savedTitleInput, savedDescription, savedLane, savedPriority, savedAssignee, savedDueDate, pendingLabelInput, savedWaiting);
             renderTags();
         } else if (openModalId) {
             const card = state.cards.find(c => c.id === openModalId);
@@ -151,7 +152,7 @@ function renderBoard(): void {
                 document.getElementById('modal-backdrop')?.removeAttribute('hidden');
                 configureModalMode();
                 populateModal(card);
-                restoreEditInputs(savedAssignee, savedPriority, savedDueDate, savedLane, pendingLabelInput);
+                restoreEditInputs(savedAssignee, savedPriority, savedDueDate, savedLane, pendingLabelInput, savedWaiting);
             } else {
                 modalCardId = null; modalLabels = [];
             }
@@ -159,7 +160,7 @@ function renderBoard(): void {
     }
 }
 
-function restoreCreateInputs(title: string, desc: string, lane: string, priority: string, assignee: string, dueDate: string, labelInput: string): void {
+function restoreCreateInputs(title: string, desc: string, lane: string, priority: string, assignee: string, dueDate: string, labelInput: string, waiting: boolean): void {
     const titleEl = document.getElementById('modal-title-input') as HTMLInputElement | null;
     if (titleEl) titleEl.value = title;
     const descEl = document.getElementById('modal-description') as HTMLTextAreaElement | null;
@@ -174,9 +175,11 @@ function restoreCreateInputs(title: string, desc: string, lane: string, priority
     if (dueDateEl) dueDateEl.value = dueDate;
     const labelInputEl = document.getElementById('modal-label-input') as HTMLInputElement | null;
     if (labelInputEl && labelInput) labelInputEl.value = labelInput;
+    const waitingEl = document.getElementById('modal-waiting') as HTMLInputElement | null;
+    if (waitingEl) waitingEl.checked = waiting;
 }
 
-function restoreEditInputs(assignee: string, priority: string, dueDate: string, lane: string, labelInput: string): void {
+function restoreEditInputs(assignee: string, priority: string, dueDate: string, lane: string, labelInput: string, waiting: boolean): void {
     const assigneeEl = document.getElementById('modal-assignee') as HTMLInputElement | null;
     if (assigneeEl && assignee) assigneeEl.value = assignee;
     const priorityEl = document.getElementById('modal-priority') as HTMLSelectElement | null;
@@ -187,6 +190,8 @@ function restoreEditInputs(assignee: string, priority: string, dueDate: string, 
     if (laneEl && lane) laneEl.value = lane;
     const labelInputEl = document.getElementById('modal-label-input') as HTMLInputElement | null;
     if (labelInputEl && labelInput) labelInputEl.value = labelInput;
+    const waitingEl = document.getElementById('modal-waiting') as HTMLInputElement | null;
+    if (waitingEl) waitingEl.checked = waiting;
 }
 
 function buildBoardHtml(): string {
@@ -228,6 +233,7 @@ function buildCardHtml(card: Card): string {
     const priorityBadge = p
         ? `<span class="priority-badge priority-${esc(p)}">${esc(PRIORITY_LABELS[p] ?? p)}</span>`
         : '<span class="priority-badge priority-none">No Priority</span>';
+    const waitingBadge = card.waiting ? '<span class="waiting-badge">Waiting</span>' : '';
     const hasMeta = card.assignee || card.dueDate || (card.labels && card.labels.length > 0);
     const assetCount = card.assets?.length ?? 0;
     const entryCount = card.parsedEntries?.length ?? 0;
@@ -236,6 +242,7 @@ function buildCardHtml(card: Card): string {
         <div class="card" draggable="true" data-card-id="${esc(card.id)}">
             <div class="card-header">
                 ${priorityBadge}
+                ${waitingBadge}
                 <button class="icon-btn card-delete" data-delete-card-id="${esc(card.id)}" title="Delete card">&times;</button>
             </div>
             <div class="card-title">${esc(card.title)}</div>
@@ -281,10 +288,11 @@ function buildModalHtml(): string {
                         <label class="form-label" for="modal-priority">Priority</label>
                         <select class="form-control" id="modal-priority">
                             <option value="none">None</option>
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="critical">Critical</option>
+                            <option value="p1">P1</option>
+                            <option value="p2">P2</option>
+                            <option value="p3">P3</option>
+                            <option value="p4">P4</option>
+                            <option value="p5">P5</option>
                         </select>
                     </div>
                     <div class="form-row">
@@ -317,6 +325,11 @@ function buildModalHtml(): string {
                             </div>
                             <div class="datepicker-help" id="datepicker-help" hidden></div>
                         </div>
+                    </div>
+
+                    <div class="form-row form-row-check">
+                        <label class="form-check-label" for="modal-waiting">Waiting</label>
+                        <input class="form-check" id="modal-waiting" type="checkbox">
                     </div>
 
                     <!-- Entries section (edit mode only, read-only) -->
@@ -618,6 +631,8 @@ function openCreateModal(): void {
     if (assigneeEl) assigneeEl.value = '';
     const dueDateEl = document.getElementById('modal-duedate') as HTMLInputElement | null;
     if (dueDateEl) dueDateEl.value = '';
+    const waitingEl = document.getElementById('modal-waiting') as HTMLInputElement | null;
+    if (waitingEl) waitingEl.checked = false;
     initAutocomplete('modal-assignee', 'assignee-ac-dropdown', () => state.config.users ?? [], 'select');
     initAutocomplete('modal-label-input', 'label-ac-dropdown', () => state.config.labels ?? [], 'add-tag');
     renderTags();
@@ -666,6 +681,8 @@ function populateModal(card: Card): void {
     if (assigneeEl) assigneeEl.value = card.assignee ?? '';
     const dueDateEl = document.getElementById('modal-duedate') as HTMLInputElement | null;
     if (dueDateEl) dueDateEl.value = card.dueDate ?? '';
+    const waitingEl = document.getElementById('modal-waiting') as HTMLInputElement | null;
+    if (waitingEl) waitingEl.checked = card.waiting ?? false;
     initAutocomplete('modal-assignee', 'assignee-ac-dropdown', () => state.config.users ?? [], 'select');
     initAutocomplete('modal-label-input', 'label-ac-dropdown', () => state.config.labels ?? [], 'add-tag');
     renderTags();
@@ -688,6 +705,7 @@ function captureModalSnapshot(): void {
         assignee: (document.getElementById('modal-assignee') as HTMLInputElement | null)?.value ?? '',
         dueDate: (document.getElementById('modal-duedate') as HTMLInputElement | null)?.value ?? '',
         labels: [...modalLabels],
+        waiting: (document.getElementById('modal-waiting') as HTMLInputElement | null)?.checked ?? false,
     };
 }
 
@@ -699,9 +717,11 @@ function isModalDirty(): boolean {
     const dueDate = (document.getElementById('modal-duedate') as HTMLInputElement | null)?.value ?? '';
     const title = (document.getElementById('modal-title-input') as HTMLInputElement | null)?.value ?? '';
     const description = (document.getElementById('modal-description') as HTMLTextAreaElement | null)?.value ?? '';
+    const waiting = (document.getElementById('modal-waiting') as HTMLInputElement | null)?.checked ?? false;
     return title !== modalSnapshot.title || description !== modalSnapshot.description ||
         lane !== modalSnapshot.lane || priority !== modalSnapshot.priority ||
         assignee !== modalSnapshot.assignee || dueDate !== modalSnapshot.dueDate ||
+        waiting !== (modalSnapshot.waiting ?? false) ||
         JSON.stringify([...modalLabels].sort()) !== JSON.stringify([...modalSnapshot.labels].sort());
 }
 
@@ -720,20 +740,21 @@ function saveModal(): void {
     const labels = modalLabels.length > 0 ? [...modalLabels] : undefined;
     const lane = (document.getElementById('modal-lane') as HTMLSelectElement).value;
 
+    const waiting = (document.getElementById('modal-waiting') as HTMLInputElement | null)?.checked || undefined;
     if (modalMode === 'create') {
         const titleRaw = ((document.getElementById('modal-title-input') as HTMLInputElement).value ?? '').trim();
         if (!titleRaw) { (document.getElementById('modal-title-input') as HTMLInputElement)?.focus(); return; }
         const description = ((document.getElementById('modal-description') as HTMLTextAreaElement).value ?? '').trim();
         vscode.postMessage({
             type: 'createCard', title: titleRaw, description, lane,
-            priority: priority === 'none' ? undefined : priority, assignee, labels, dueDate,
+            priority: priority === 'none' ? undefined : priority, assignee, labels, dueDate, waiting,
         });
     } else {
         if (!modalCardId) return;
         const description = ((document.getElementById('modal-description') as HTMLTextAreaElement).value ?? '').trim();
         vscode.postMessage({
             type: 'updateCardMeta', cardId: modalCardId, lane, description,
-            priority: priority === 'none' ? undefined : priority, assignee, labels, dueDate,
+            priority: priority === 'none' ? undefined : priority, assignee, labels, dueDate, waiting,
         });
     }
 

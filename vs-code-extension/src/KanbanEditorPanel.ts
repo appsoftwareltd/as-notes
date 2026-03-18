@@ -238,6 +238,7 @@ export class KanbanEditorPanel {
                 card.labels = message.labels as string[] | undefined;
                 card.dueDate = message.dueDate as string | undefined;
                 card.description = (message.description ?? '').trim();
+                card.waiting = message.waiting ? true : undefined;
 
                 await this._kanbanStore.save(card);
                 break;
@@ -254,6 +255,7 @@ export class KanbanEditorPanel {
                 card.assignee = message.assignee as string | undefined;
                 card.labels = message.labels as string[] | undefined;
                 card.dueDate = message.dueDate as string | undefined;
+                card.waiting = message.waiting ? true : undefined;
                 if (typeof message.description === 'string') {
                     card.description = message.description.trim();
                 }

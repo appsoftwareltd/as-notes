@@ -1,4 +1,4 @@
-export type Priority = 'critical' | 'high' | 'medium' | 'low' | 'none';
+export type Priority = 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'none';
 
 export interface AssetMeta {
     filename: string;
@@ -29,6 +29,8 @@ export interface Card {
     dueDate?: string;
     sortOrder?: number;
     slug?: string;
+    /** When true, the card is waiting/blocked. Default false. */
+    waiting?: boolean;
     /** Parsed from markdown body — never stored in frontmatter. */
     parsedEntries?: CardEntryDisplay[];
     assets?: AssetMeta[];

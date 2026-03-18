@@ -15,7 +15,8 @@
             "preLaunchTask": "${defaultBuildTask}",
             "env": {
                 "AS_NOTES_DEBUG": "1",
-                "AS_NOTES_LICENCE_SERVER_URL": "http://localhost:5173"
+                // Uncomment to use test licence server
+                // "AS_NOTES_LICENCE_SERVER_URL": "http://localhost:5173"
             }
         }
     ]
