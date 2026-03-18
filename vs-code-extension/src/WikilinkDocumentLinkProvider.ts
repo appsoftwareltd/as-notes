@@ -53,7 +53,7 @@ export class WikilinkDocumentLinkProvider implements vscode.DocumentLinkProvider
                 );
 
                 const wl = segment.wikilink;
-                const targetUri = this.fileService.resolveTargetUri(document.uri, wl.pageFileName);
+                const targetUri = this.fileService.resolveNewFileTargetUri(document.uri, wl.pageFileName);
 
                 const commandUri = vscode.Uri.parse(
                     `command:as-notes.navigateWikilink?${encodeURIComponent(JSON.stringify({

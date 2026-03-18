@@ -44,6 +44,56 @@ export class WikilinkFileService {
     }
 
     /**
+     * Build the URI for a **new** wikilink target file, respecting the
+     * `notesFolder` and `createNotesInCurrentDirectory` settings.
+     *
+     * - If `createNotesInCurrentDirectory` is true AND the source file is
+     *   NOT inside the journal folder: uses the source file's directory.
+     * - Otherwise: uses the configured `notesFolder` (relative to workspace root).
+     *
+     * @param sourceUri - URI of the document containing the wikilink
+     * @param pageFileName - Sanitised page filename (without extension)
+     * @returns URI pointing to `{targetDir}/{pageFileName}.md`
+     */
+    resolveNewFileTargetUri(sourceUri: vscode.Uri, pageFileName: string): vscode.Uri {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!workspaceRoot) {
+            // No workspace — fall back to source directory
+            return this.resolveTargetUri(sourceUri, pageFileName);
+        }
+
+        const config = vscode.workspace.getConfiguration('as-notes');
+        const createInCurrentDir = config.get<boolean>('createNotesInCurrentDirectory', false);
+
+        if (createInCurrentDir && !this.isInsideJournalFolder(sourceUri, workspaceRoot)) {
+            return this.resolveTargetUri(sourceUri, pageFileName);
+        }
+
+        const notesFolder = config.get<string>('notesFolder', 'notes');
+        const normalised = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+        const targetDir = normalised
+            ? path.join(workspaceRoot.fsPath, normalised)
+            : workspaceRoot.fsPath;
+        const targetPath = path.join(targetDir, `${pageFileName}.md`);
+        return vscode.Uri.file(targetPath);
+    }
+
+    /**
+     * Check whether a source URI is inside the configured journal folder.
+     */
+    private isInsideJournalFolder(sourceUri: vscode.Uri, workspaceRoot: vscode.Uri): boolean {
+        const config = vscode.workspace.getConfiguration('as-notes');
+        const journalFolder = config.get<string>('journalFolder', 'journals');
+        const normalised = journalFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+        if (!normalised) {
+            return false;
+        }
+        const journalDir = path.join(workspaceRoot.fsPath, normalised).replace(/\\/g, '/').toLowerCase();
+        const sourceDir = path.dirname(sourceUri.fsPath).replace(/\\/g, '/').toLowerCase();
+        return sourceDir === journalDir || sourceDir.startsWith(journalDir + '/');
+    }
+
+    /**
      * Resolve a wikilink target using the persistent index for global resolution.
      *
      * Resolution order:

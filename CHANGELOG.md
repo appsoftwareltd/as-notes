@@ -6,7 +6,8 @@ All notable changes to AS Notes will be documented here.
 
 ## [2.2.3]  - 2026-03-19
 
-- Templates
+- Templates and template placeholders
+- Modified default note placement behaviour
 - Kanban boards markdown formatting
 - Kanban board card conversion from task (markdown todo)
 

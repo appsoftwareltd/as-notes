@@ -103,6 +103,10 @@
                 "title": "AS Notes: Decrypt All Notes"
             },
             {
+                "command": "as-notes.createNote",
+                "title": "AS Notes: Create Note"
+            },
+            {
                 "command": "as-notes.createEncryptedFile",
                 "title": "AS Notes: Create Encrypted Note"
             },
@@ -276,6 +280,16 @@
                     "type": "string",
                     "default": "templates",
                     "description": "Folder for note templates, relative to workspace root. Templates are markdown files that can be inserted via the /Template slash command."
+                },
+                "as-notes.notesFolder": {
+                    "type": "string",
+                    "default": "notes",
+                    "description": "Folder for new notes, relative to workspace root. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands."
+                },
+                "as-notes.createNotesInCurrentDirectory": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When enabled, new notes created via wikilink navigation are placed in the current editing file's directory instead of the notes folder. Ignored when the source file is in the journal folder."
                 }
             }
         },

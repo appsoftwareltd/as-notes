@@ -706,6 +706,13 @@ async function enterFullMode(
         fs.mkdirSync(journalFolderPath, { recursive: true });
     }
 
+    const notesFolder = config.get<string>('notesFolder', 'notes');
+    const normalisedNotes = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+    if (normalisedNotes) {
+        const notesFolderPath = path.join(workspaceRoot.fsPath, normalisedNotes);
+        fs.mkdirSync(notesFolderPath, { recursive: true });
+    }
+
     ignoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
     indexScanner = new IndexScanner(indexService, workspaceRoot, ignoreService, logService);
 
@@ -1369,7 +1376,7 @@ async function enterFullMode(
 
             if (!wikilink) { return; } // Not on a wikilink — do nothing
 
-            const targetUri = fileService.resolveTargetUri(editor.document.uri, wikilink.pageFileName);
+            const targetUri = fileService.resolveNewFileTargetUri(editor.document.uri, wikilink.pageFileName);
             await fileService.navigateToFile(targetUri, wikilink.pageFileName, editor.document.uri);
         }),
     );
@@ -1588,6 +1595,34 @@ async function enterFullMode(
     );
 
     fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.createNote', async () => {
+            const title = await vscode.window.showInputBox({
+                prompt: 'Note title',
+                placeHolder: 'My note',
+                ignoreFocusOut: true,
+            });
+            if (!title) { return; }
+            const config = vscode.workspace.getConfiguration('as-notes');
+            const notesFolder = config.get<string>('notesFolder', 'notes');
+            const normalised = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+            const folderUri = normalised
+                ? vscode.Uri.joinPath(workspaceRoot, normalised)
+                : workspaceRoot;
+            await vscode.workspace.fs.createDirectory(folderUri);
+            const filename = `${sanitiseFileName(title)}.md`;
+            const fileUri = vscode.Uri.joinPath(folderUri, filename);
+            try {
+                await vscode.workspace.fs.stat(fileUri);
+                // File already exists — just open it
+            } catch {
+                await vscode.workspace.fs.writeFile(fileUri, Buffer.from('', 'utf-8'));
+            }
+            const doc = await vscode.workspace.openTextDocument(fileUri);
+            await vscode.window.showTextDocument(doc);
+        }),
+    );
+
+    fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.createEncryptedFile', async () => {
             if (!hasProEditor()) {
                 vscode.window.showWarningMessage('AS Notes: Encryption commands require a Pro licence.');
@@ -1599,8 +1634,15 @@ async function enterFullMode(
                 ignoreFocusOut: true,
             });
             if (!title) { return; }
+            const config = vscode.workspace.getConfiguration('as-notes');
+            const notesFolder = config.get<string>('notesFolder', 'notes');
+            const normalised = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+            const folderUri = normalised
+                ? vscode.Uri.joinPath(workspaceRoot, normalised)
+                : workspaceRoot;
+            await vscode.workspace.fs.createDirectory(folderUri);
             const filename = `${sanitiseFileName(title)}.enc.md`;
-            const fileUri = vscode.Uri.joinPath(workspaceRoot, filename);
+            const fileUri = vscode.Uri.joinPath(folderUri, filename);
             try {
                 await vscode.workspace.fs.stat(fileUri);
                 // File already exists — just open it
@@ -1750,7 +1792,11 @@ async function enterFullMode(
         }) => {
             const targetUri = vscode.Uri.parse(args.targetUri);
             const sourceUri = vscode.Uri.parse(args.sourceUri);
-            await fileService.navigateToFile(targetUri, args.pageFileName, sourceUri);
+            // Re-resolve the creation target using current settings so that the
+            // correct notes folder is used even if the link provider cached a
+            // stale URI (e.g. when the document was first opened).
+            const creationUri = fileService.resolveNewFileTargetUri(sourceUri, args.pageFileName);
+            await fileService.navigateToFile(creationUri, args.pageFileName, sourceUri);
         }),
     );
 
@@ -2125,6 +2171,14 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     const journalTemplatePath = `${templateFolderPath}/${JOURNAL_TEMPLATE_FILENAME}`;
     if (!fs.existsSync(journalTemplatePath)) {
         fs.writeFileSync(journalTemplatePath, DEFAULT_JOURNAL_TEMPLATE, 'utf-8');
+    }
+
+    // Create notes/ directory for new notes
+    const notesFolder = templateConfig.get<string>('notesFolder', 'notes');
+    const normalisedNotes = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
+    if (normalisedNotes) {
+        const notesFolderPath = path.join(workspaceRoot.fsPath, normalisedNotes);
+        fs.mkdirSync(notesFolderPath, { recursive: true });
     }
 
     // Create .gitignore inside .asnotes/ to exclude the DB file

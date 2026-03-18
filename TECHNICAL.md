@@ -1235,7 +1235,15 @@ The command URI carries:
 {directory of source file}/{pageFileName}.md
 ```
 
-All target files live in the same directory as the file containing the link. There is no support for cross-directory linking — this is intentional to keep the mental model simple (one folder = one wiki).
+This is used by the rename tracker where the file already exists in a known location.
+
+`WikilinkFileService.resolveNewFileTargetUri()` determines where **new** files should be created, respecting user settings:
+
+- By default, new files are created in the configured `notesFolder` (default: `notes/`).
+- When `createNotesInCurrentDirectory` is enabled, new files are placed in the source file's directory -- unless the source file is inside the journal folder, in which case the notes folder is always used.
+- Used by `WikilinkDocumentLinkProvider`, the `navigateToPage` context menu command, and the `navigateWikilink` command.
+
+All target files can live anywhere in the workspace. The index handles global resolution.
 
 ### Case-insensitive matching
 
@@ -1858,7 +1866,7 @@ The `as-notes.navigateToPage` command (registered in `extension.ts`) enables rig
 
 1. Extracts all wikilinks from the current line
 2. Finds the innermost wikilink at the cursor position via `WikilinkService.findInnermostWikilinkAtOffset()`
-3. Resolves the target URI via `WikilinkFileService.resolveTargetUri()`
+3. Resolves the target URI via `WikilinkFileService.resolveNewFileTargetUri()` (respects `notesFolder` and `createNotesInCurrentDirectory` settings)
 4. Calls `WikilinkFileService.navigateToFile()` — which uses index-aware resolution (global filename match, alias support, case-insensitive fallback) and auto-creates the file if it doesn't exist
 
 This provides the same navigation as Ctrl+click (DocumentLink) but via an explicit context menu entry. The command appears in the `editor/context` menu alongside "View Backlinks" when `as-notes.fullMode` is active and the editor language is markdown.
@@ -2646,6 +2654,10 @@ Tests use vitest and are split across fourteen test files (key files described b
 ### `WikilinkFileService.test.ts` (10 tests)
 
 1. **Path distance** (10 tests) — same directory (0), nested subdirectory (1), sibling directories (2), root to deep (3), deep to root (3), divergent paths, case-insensitive comparison, deeply nested to root, same prefix different branch, single segment root.
+
+### `WikilinkFileService.resolveNewFileTargetUri.test.ts` (9 tests)
+
+1. **New file target resolution** (9 tests) — default notesFolder, custom notesFolder, createNotesInCurrentDirectory with non-journal source, journal folder override, nested journal subfolder override, empty notesFolder (workspace root), leading/trailing slash normalisation, explicit false setting, resolveTargetUri unchanged.
 
 ### `WikilinkCompletionProvider.test.ts` (30 tests)
 

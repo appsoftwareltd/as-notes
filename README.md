@@ -264,6 +264,10 @@ All table operations in the slash command menu (`/`) are Pro features. Free user
 
 See [Slash Commands](#slash-commands) for the full list of table commands.
 
+### Create Note
+
+Run **AS Notes: Create Note** from the Command Palette to create a new note. You will be prompted for a title and the file is created in the configured notes folder (default: `notes/`).
+
 ### Encrypted notes
 
 Pro users can store sensitive notes in encrypted files. Any file with the `.enc.md` extension is treated as an encrypted note - it is excluded from the search index and never read as plain text by the extension.
@@ -283,7 +287,7 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 **Commands:**
 - `AS Notes: Set Encryption Key` - save passphrase to OS keychain
 - `AS Notes: Clear Encryption Key` - remove the stored passphrase
-- `AS Notes: Create Encrypted Note` - create a new named `.enc.md` file
+- `AS Notes: Create Encrypted Note` - create a new named `.enc.md` file in the notes folder
 - `AS Notes: Create Encrypted Journal Note` - create today's journal entry as `.enc.md`
 - `AS Notes: Encrypt All Notes` - encrypt all plaintext `.enc.md` files
 - `AS Notes: Decrypt All Notes` - decrypt all encrypted `.enc.md` files
@@ -374,7 +378,9 @@ Nesting works to arbitrary depth. The extension always identifies the innermost 
 
 ### Auto-create missing pages
 
-Navigating to a page that doesn't exist creates it automatically, so you can write forward-references before the target page exists.
+Navigating to a page that doesn't exist creates it automatically in the configured notes folder (default: `notes/`). You can write forward-references before the target page exists.
+
+When `as-notes.createNotesInCurrentDirectory` is enabled, new pages are created in the current editing file's directory instead, unless the source file is in the journal folder (in which case the notes folder is always used).
 
 ### Hover tooltips
 
@@ -656,6 +662,8 @@ Front-matter holds the structured fields; the Markdown body is the card descript
 |---|---|---|
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
 | `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
+| `as-notes.notesFolder` | `notes` | Folder for new notes, relative to workspace root. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands. |
+| `as-notes.createNotesInCurrentDirectory` | `false` | When enabled, new notes created via wikilink navigation are placed in the current editing file's directory instead of the notes folder. Ignored when the source file is in the journal folder. |
 | `as-notes.templateFolder` | `templates` | Folder for note templates, relative to workspace root. Templates are markdown files inserted via the `/Template` slash command. |
 | `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Enter via **AS Notes: Enter Licence Key** in the Command Palette or directly in Settings. Scope: machine (not synced). |
 | `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
