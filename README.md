@@ -14,7 +14,7 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 |--|--|
 |Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
 |Pro Features | [asnotes.io/pricing](https://www.asnotes.io)|
-|Docs | [https://docs.asnotes.appsoftware.com](https://docs.asnotes.appsoftware.com/)|
+|Docs | [docs.asnotes.io](https://docs.asnotes.io)|
 
 ## What is AS Notes?
 
