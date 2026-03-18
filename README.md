@@ -20,7 +20,11 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 
 AS Notes brings [[wikilink]] style note-taking (and much more) directly into VS Code. Capture ideas, link concepts, and stay focused - without ever leaving your editor.
 
-(Click for 1 minute Youtube video demo)
+(1 minute introduction video)
+
+[![AS Notes demo](https://img.youtube.com/vi/bwYopQ1Sc5o/maxresdefault.jpg)](https://www.youtube.com/watch?v=bwYopQ1Sc5o)
+
+(1 minute demo video)
 
 [![AS Notes demo](https://img.youtube.com/vi/liRULtb8Rm8/maxresdefault.jpg)](https://youtu.be/liRULtb8Rm8)
 
@@ -804,8 +808,8 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.2.2"   # change version
-git tag v2.2.2                   # change version
+git commit -m "Release v2.2.3"   # change version
+git tag v2.2.3                   # change version
 git push origin main --tags
 ```
 
