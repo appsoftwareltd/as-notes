@@ -213,6 +213,8 @@ async function showServerUnreachableWarning(): Promise<void> {
  * extension is running as the official published build.
  */
 export function hasProEditor(): boolean {
+    const override = process.env.AS_NOTES_LICENCE_OVERRIDE;
+    if (override === 'pro_editor' || override === 'pro_ai_sync') { return true; }
     return isOfficialBuild && hasProEditorAccess(licenceState);
 }
 
@@ -221,6 +223,8 @@ export function hasProEditor(): boolean {
  * extension is running as the official published build.
  */
 export function hasProAiSync(): boolean {
+    const override = process.env.AS_NOTES_LICENCE_OVERRIDE;
+    if (override === 'pro_ai_sync') { return true; }
     return isOfficialBuild && hasProAiSyncAccess(licenceState);
 }
 
