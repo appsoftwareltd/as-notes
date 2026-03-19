@@ -49,6 +49,7 @@ import { KanbanStore } from './KanbanStore.js';
 import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
 import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
+import { CalendarPanelProvider } from './CalendarPanelProvider.js';
 import type { Priority } from './KanbanTypes.js';
 import { computeNotesRootPaths, toNotesRelativePath, isInsideNotesRoot, type NotesRootPaths } from './NotesRootService.js';
 const ASNOTES_DIR = '.asnotes';
@@ -162,8 +163,11 @@ let kanbanBoardConfigStore: KanbanBoardConfigStore | undefined;
 /** Kanban sidebar provider instance — alive while in full mode. */
 let kanbanSidebarProvider: KanbanSidebarProvider | undefined;
 
-/** Backlink panel provider instance — alive while in full mode. */
+/** Backlink panel provider instance -- alive while in full mode. */
 let backlinkPanelProvider: BacklinkPanelProvider | undefined;
+
+/** Calendar panel provider instance -- alive while in full mode. */
+let calendarPanelProvider: CalendarPanelProvider | undefined;
 
 /** Log service instance — alive while in full mode. */
 let logService: LogService = NO_OP_LOGGER;
@@ -791,6 +795,35 @@ async function enterFullMode(
             searchPanelProvider,
             { webviewOptions: { retainContextWhenHidden: true } },
         ),
+    );
+
+    // Calendar panel -- month calendar for journal navigation.
+    calendarPanelProvider = new CalendarPanelProvider(context);
+    calendarPanelProvider.setNotesRootUri(nrUri);
+    calendarPanelProvider.setJournalFolder(
+        vscode.workspace.getConfiguration('as-notes').get<string>('journalFolder', 'journals'),
+    );
+    fullModeDisposables.push(
+        vscode.window.registerWebviewViewProvider(
+            CalendarPanelProvider.VIEW_ID,
+            calendarPanelProvider,
+            { webviewOptions: { retainContextWhenHidden: true } },
+        ),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleCalendarPanel', () => {
+            vscode.commands.executeCommand('as-notes-calendar.focus');
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.openJournalForDate', (dateStr?: string) => {
+            if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                openDailyJournal(nrUri);
+                return;
+            }
+            const [y, m, d] = dateStr.split('-').map(Number);
+            openDailyJournal(nrUri, new Date(y, m - 1, d));
+        }),
     );
 
     // Kanban board — sidebar summary + editor panel for full board.
@@ -1944,6 +1977,7 @@ async function enterFullMode(
             taskPanelProvider?.refresh();
             searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
+            calendarPanelProvider?.refresh();
         }),
     );
 
@@ -1976,6 +2010,7 @@ async function enterFullMode(
             taskPanelProvider?.refresh();
             searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
+            calendarPanelProvider?.refresh();
         }),
     );
 
@@ -2015,6 +2050,7 @@ async function enterFullMode(
             taskPanelProvider?.refresh();
             searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
+            calendarPanelProvider?.refresh();
         }),
     );
 
@@ -2084,6 +2120,7 @@ async function enterFullMode(
                 taskPanelProvider?.refresh();
                 searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
+                calendarPanelProvider?.refresh();
                 updateFullModeStatusBar();
             }
         }).catch(err => console.warn('as-notes: stale scan after .asnotesignore change failed:', err));
@@ -2382,6 +2419,7 @@ async function rebuildIndex(): Promise<void> {
                 taskPanelProvider?.refresh();
                 searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
+                calendarPanelProvider?.refresh();
 
                 // Update status bar
                 updateFullModeStatusBar();
@@ -2577,7 +2615,7 @@ async function insertTemplate(notesRoot: vscode.Uri): Promise<void> {
 
 // ── Daily journal ──────────────────────────────────────────────────────────
 
-async function openDailyJournal(notesRoot: vscode.Uri): Promise<void> {
+async function openDailyJournal(notesRoot: vscode.Uri, date?: Date): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
     const journalFolder = config.get<string>('journalFolder', 'journals');
     const templateFolder = config.get<string>('templateFolder', 'templates');
@@ -2585,7 +2623,7 @@ async function openDailyJournal(notesRoot: vscode.Uri): Promise<void> {
     const paths = computeJournalPaths(
         notesRoot.fsPath.replace(/\\/g, '/'),
         journalFolder,
-        new Date(),
+        date ?? new Date(),
     );
 
     const journalUri = vscode.Uri.file(paths.journalFilePath);
@@ -2634,6 +2672,7 @@ async function openDailyJournal(notesRoot: vscode.Uri): Promise<void> {
         taskPanelProvider?.refresh();
         searchPanelProvider?.refresh();
         backlinkPanelProvider?.refresh();
+        calendarPanelProvider?.refresh();
 
         // Update status bar with new page count
         updateFullModeStatusBar();
@@ -2747,6 +2786,7 @@ function startPeriodicScan(): void {
                 taskPanelProvider?.refresh();
                 searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
+                calendarPanelProvider?.refresh();
                 updateFullModeStatusBar();
                 logService.info('extension', `periodicScan: changes detected — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted`);
             } else {

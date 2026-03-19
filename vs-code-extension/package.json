@@ -62,6 +62,14 @@
                 "title": "AS Notes: Toggle Task Panel"
             },
             {
+                "command": "as-notes.toggleCalendarPanel",
+                "title": "AS Notes: Toggle Calendar Panel"
+            },
+            {
+                "command": "as-notes.openJournalForDate",
+                "title": "AS Notes: Open Journal for Date"
+            },
+            {
                 "command": "as-notes.showBacklinks",
                 "title": "AS Notes: Show Backlinks",
                 "icon": "$(references)"
@@ -193,6 +201,12 @@
                 "when": "as-notes.fullMode"
             },
             {
+                "command": "as-notes.toggleCalendarPanel",
+                "key": "ctrl+alt+c",
+                "mac": "cmd+alt+c",
+                "when": "as-notes.fullMode"
+            },
+            {
                 "command": "as-notes.codeFenceEnter",
                 "key": "enter",
                 "when": "editorLangId == markdown && as-notes.onCodeFenceLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible"
@@ -319,6 +333,11 @@
                     "id": "as-notes-search",
                     "name": "Search",
                     "initialSize": 1
+                },
+                {
+                    "type": "webview",
+                    "id": "as-notes-calendar",
+                    "name": "Calendar"
                 },
                 {
                     "type": "webview",

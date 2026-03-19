@@ -117,7 +117,7 @@ AS Notes has a built in Kanban board backed by markdown files that can be used a
 
 ### Daily Journal
 
-Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal page.
+Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal page. A **Calendar** panel in the sidebar shows the current month with journal indicators.
 
 Journal files are created as `YYYY-MM-DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from the `Journal.md` template in the templates folder (default: `templates/`). Edit `Journal.md` to add your own sections and prompts. All template placeholders are supported -- see [Templates](#templates).
 
@@ -567,6 +567,20 @@ Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journa
 - **Idempotent:** pressing the shortcut again on the same day opens the existing file
 
 > **Migrating from an earlier version or another PKMS?** If you have existing journal files in the `YYYY_MM_DD.md` format (e.g. from Logseq), run the command `AS Notes: DANGER (Back up first): Rename 'YYYY_MM_DD.md' journal files to 'YYYY-MM-DD.md' format` from the command palette (`Ctrl+Shift+P`) to batch-rename them.
+
+### Calendar
+
+The **Calendar** sidebar panel shows a navigable month grid so you can see at a glance which days have journal entries.
+
+- **Month view** with Monday-start weeks
+- **Today highlight** for quick orientation
+- **Journal dot indicators** on days that have an existing journal file
+- **Click any day** to open (or create) the journal for that date
+- **Navigate months** with prev / next arrows
+- **Keyboard shortcut:** **Ctrl+Alt+C** (Cmd+Alt+C on macOS) to focus the panel
+- **Live sync** - the calendar refreshes automatically when journal files are created, renamed, or deleted
+
+A **Calendar** panel in the sidebar shows the current month with journal indicators. See [Calendar](#calendar) for details.
 
 ### Kanban board
 

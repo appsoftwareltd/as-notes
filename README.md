@@ -131,6 +131,8 @@ Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journa
 
 Journal files are created as `YYYY-MM-DD.md` in a dedicated `journals/` folder (configurable). New pages are generated from the `Journal.md` template in the templates folder (default: `templates/`). Edit `Journal.md` to add your own sections and prompts. All template placeholders are supported -- see [Templates](#templates).
 
+A **Calendar** panel in the sidebar shows the current month with journal indicators. Click any day to open its journal entry. See [Calendar](#calendar) for details.
+
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
 
 ### Slash Commands
@@ -577,6 +579,18 @@ Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journa
 - **Idempotent:** pressing the shortcut again on the same day opens the existing file
 
 > **Migrating from an earlier version or another PKMS?** If you have existing journal files in the `YYYY_MM_DD.md` format (e.g. from Logseq), run the command `AS Notes: DANGER (Back up first): Rename 'YYYY_MM_DD.md' journal files to 'YYYY-MM-DD.md' format` from the command palette (`Ctrl+Shift+P`) to batch-rename them.
+
+### Calendar
+
+The **Calendar** panel appears in the AS Notes sidebar, showing a month grid for quick journal navigation.
+
+- **Month view** - displays the current month on activation, with Monday as the start of the week
+- **Today highlight** - the current day is visually prominent (accent colour circle)
+- **Journal indicators** - days with existing journal files show a small green dot beneath the date
+- **Click to open** - click any day to open (or create) the daily journal for that date, including future dates for pre-planning
+- **Month navigation** - arrow buttons step through months
+- **Keyboard shortcut** - press `Ctrl+Alt+C` (Cmd+Alt+C on macOS) to focus the calendar panel
+- **Live sync** - the dot indicators update automatically when journal files are created, deleted, or renamed
 
 ### Kanban board
 

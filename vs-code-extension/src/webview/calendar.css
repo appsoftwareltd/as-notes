@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@layer base {
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    html,
+    body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    body {
+        font-family: var(--vscode-font-family, system-ui, sans-serif);
+        font-size: var(--vscode-font-size, 13px);
+        color: var(--vscode-foreground);
+        background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+}
+
+@layer components {
+
+    /* ── App shell ───────────────────────────────── */
+    #app {
+        @apply flex flex-col overflow-hidden p-2;
+    }
+
+    /* ── Header (nav + title) ────────────────────── */
+    .cal-header {
+        @apply flex items-center justify-between mb-2;
+    }
+
+    .cal-title {
+        @apply text-sm font-semibold select-none;
+        color: var(--vscode-foreground);
+    }
+
+    .cal-nav {
+        @apply flex items-center justify-center w-6 h-6 rounded cursor-pointer border-0 text-xs;
+        background: transparent;
+        color: var(--vscode-foreground);
+        opacity: 0.7;
+    }
+
+    .cal-nav:hover {
+        opacity: 1;
+        background-color: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+    }
+
+    /* ── Grid ────────────────────────────────────── */
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1px;
+    }
+
+    /* ── Day-of-week headers ─────────────────────── */
+    .cal-dow {
+        @apply text-center text-xs py-1 select-none;
+        color: var(--vscode-descriptionForeground, rgba(128, 128, 128, 0.8));
+        font-weight: 600;
+    }
+
+    /* ── Blank cells (leading) ───────────────────── */
+    .cal-blank {
+        @apply min-h-7;
+    }
+
+    /* ── Day cells ───────────────────────────────── */
+    .cal-day {
+        @apply relative flex flex-col items-center justify-center min-h-7 rounded cursor-pointer border-0 text-xs;
+        background: transparent;
+        color: var(--vscode-foreground);
+    }
+
+    .cal-day:hover {
+        background-color: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+    }
+
+    .cal-day:active {
+        background-color: var(--vscode-list-activeSelectionBackground, rgba(128, 128, 128, 0.2));
+    }
+
+    /* ── Today highlight ─────────────────────────── */
+    .cal-today {
+        background-color: var(--vscode-focusBorder, #007fd4);
+        color: var(--vscode-editor-background, #fff);
+        font-weight: 700;
+        border-radius: 9999px;
+    }
+
+    .cal-today:hover {
+        opacity: 0.9;
+        background-color: var(--vscode-focusBorder, #007fd4);
+    }
+
+    /* ── Day number ──────────────────────────────── */
+    .cal-day-num {
+        @apply leading-none;
+    }
+
+    /* ── Journal dot indicator ────────────────────── */
+    .cal-dot {
+        @apply absolute rounded-full;
+        width: 4px;
+        height: 4px;
+        bottom: 2px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: var(--vscode-charts-green, #4caf50);
+    }
+
+    .cal-today .cal-dot {
+        background-color: var(--vscode-editor-background, #fff);
+    }
+}

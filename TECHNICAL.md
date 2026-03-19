@@ -721,6 +721,36 @@ notes      ↔ notes      → 0 (same directory)
 notes      ↔ notes/sub  → 1 (one hop down)
 notes/a    ↔ notes/b    → 2 (one up, one down)
 
+## Calendar panel
+
+The calendar panel is a sidebar `WebviewViewProvider` (`CalendarPanelProvider.ts`) that shows a navigable month grid. Clicking a day opens (or creates) the daily journal for that date via the `as-notes.openJournalForDate` command.
+
+### Architecture
+
+- **View ID:** `as-notes-calendar`
+- **Webview bundle:** `src/webview/calendar.ts` + `src/webview/calendar.css` (Tailwind, built via PostCSS)
+- **Provider:** `CalendarPanelProvider` follows the same `WebviewViewProvider` pattern as `TaskPanelProvider`
+
+### Journal date scanning
+
+On activation and on `refresh()`, the provider scans the journal folder (configurable via `as-notes.journalFolder`) for files matching the `YYYY-MM-DD.md` pattern using `fs.readdirSync`. The resulting date set is pushed to the webview via `postMessage({ type: 'journalDates', dates })`. The webview caches the full set and renders dot indicators on matching days.
+
+### Messages
+
+| Direction | Type | Payload | Purpose |
+|---|---|---|---|
+| Extension to webview | `journalDates` | `{ dates: string[] }` | Sorted array of `YYYY-MM-DD` strings with existing journal files |
+| Webview to extension | `openJournal` | `{ date: string }` | User clicked a day; extension opens/creates the journal |
+| Webview to extension | `ready` | -- | Webview loaded; triggers initial date push |
+
+### Refresh triggers
+
+`calendarPanelProvider?.refresh()` is called alongside the other panel refreshes in: `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `openDailyJournal`, rebuild index, periodic scan, and `.asnotesignore` change.
+
+### openDailyJournal parameterisation
+
+The `openDailyJournal(notesRoot, date?)` function accepts an optional `Date` parameter. When omitted, it defaults to today (backward compatible). The `as-notes.openJournalForDate` command parses a `YYYY-MM-DD` string into a `Date` and delegates to `openDailyJournal`.
+
 ## Kanban board
 
 The kanban board feature provides a visual task management UI within VS Code. It consists of a sidebar summary panel and a full-screen editor panel, with all data stored as plain YAML files inside a `kanban/` directory in the workspace root.

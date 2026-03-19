@@ -1,0 +1,110 @@
+Debugger listening on ws://127.0.0.1:55057/6938ad53-085f-4b31-a53e-47bb3b0a296f
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55062/c717ac91-d824-4e97-8210-567b67269e6a
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mC:/Users/Gareth/src/as-notes[39m
+
+Debugger listening on ws://127.0.0.1:55064/596b8197-b4d0-4297-88df-6efc4f61109a
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55065/5d5e6c20-e0a2-469c-9dce-8ba5769dc5bb
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55066/d59da9fe-8f93-4482-9cdb-a9c61ebc90d9
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55067/9a7ed7ec-05bd-4a5a-8909-9156cdaeb092
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55068/6872b10d-d2b3-4d71-8b53-77b82714ea32
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55069/c6d2d3c8-1ae9-4a1e-986e-2dff2732b026
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55070/8b42a2c5-be6c-4372-9d0f-ec1cec285355
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55072/4c01b62b-c50f-48bf-acaa-83dbcfc86c14
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55073/8811e447-8ba6-44a4-b2e2-6b93b70c6e38
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55074/de2db32c-1439-421f-a604-0e4eb3096129
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55077/3c4ec5d1-2cb0-48ec-b0aa-44aa3a46a688
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55078/c370f873-73dd-42b9-8ce1-262e52864cf5
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55081/09eed715-ac40-4bdc-a988-97b2450234b4
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55082/46e8690f-f943-4da3-8f74-6f601861472c
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55084/92129f2d-9e97-4e77-bd9b-1b794972b54d
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger attached.
+Debugger attached.
+Debugger attached.
+Debugger attached.
+Debugger attached.
+Debugger attached.
+Debugger attached.
+Debugger attached.
+ [32mÔ£ô[39m vs-code-extension/src/test/LogService.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 248[2mms[22m[39m
+Debugger listening on ws://127.0.0.1:55094/af75a6c9-c11f-4537-a439-1efb06cc2f99
+For help, see: https://nodejs.org/en/docs/inspector
+ [32mÔ£ô[39m vs-code-extension/src/test/GitHookService.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 161[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/WikilinkCompletionProvider.test.ts [2m([22m[2m51 tests[22m[2m)[22m[33m 310[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/TableService.test.ts [2m([22m[2m91 tests[22m[2m)[22m[32m 79[2mms[22m[39m
+Debugger listening on ws://127.0.0.1:55095/d43f3a8c-07db-4dc8-a429-d95351ccfa4e
+For help, see: https://nodejs.org/en/docs/inspector
+ [32mÔ£ô[39m vs-code-extension/src/test/IgnoreService.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 103[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/EncryptionService.test.ts [2m([22m[2m27 tests[22m[2m)[22m[33m 1144[2mms[22m[39m
+Debugger listening on ws://127.0.0.1:55096/1b340f4d-e481-4db9-95da-a27094f5844d
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55097/a75f2c9b-d182-4a01-9b73-51e7629ef9ae
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+Debugger listening on ws://127.0.0.1:55100/518bd210-19aa-47aa-bbb3-c175b0226a49
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger listening on ws://127.0.0.1:55101/c891bd16-3386-42ce-9a41-cd1b6a5345cd
+For help, see: https://nodejs.org/en/docs/inspector
+Debugger attached.
+ [32mÔ£ô[39m vs-code-extension/src/test/LicenceActivationService.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+Debugger attached.
+Debugger attached.
+ [32mÔ£ô[39m vs-code-extension/src/test/OutlinerService.test.ts [2m([22m[2m132 tests[22m[2m)[22m[32m 74[2mms[22m[39m
+Waiting for the debugger to disconnect...
+Debugger attached.
+Debugger attached.
+ [32mÔ£ô[39m vs-code-extension/src/test/LicenceService.test.ts [2m([22m[2m32 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32mÔ£ô[39m common/test/WikilinkService.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 69[2mms[22m[39m
+Debugger listening on ws://127.0.0.1:55107/6bf9a83c-c227-432d-ad12-b08db6c09efb
+For help, see: https://nodejs.org/en/docs/inspector
+ [32mÔ£ô[39m vs-code-extension/src/test/TemplateService.test.ts [2m([22m[2m35 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32mÔ£ô[39m html-conversion/test/FileResolver.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+Debugger listening on ws://127.0.0.1:55108/9af80541-5e10-4b3a-a726-71b7879b7e51
+For help, see: https://nodejs.org/en/docs/inspector
+ [32mÔ£ô[39m html-conversion/test/TaskTagPlugin.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/KanbanStore.test.ts [2m([22m[2m43 tests[22m[2m)[22m[32m 72[2mms[22m[39m
+Debugger attached.
+Debugger attached.
+ [32mÔ£ô[39m vs-code-extension/src/test/IndexService.test.ts [2m([22m[2m141 tests[22m[2m)[22m[33m 2241[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/KanbanTypes.test.ts [2m([22m[2m36 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/NotesRootService.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/JournalService.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/FrontMatterService.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/TodoToggleService.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/WikilinkFileService.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/WikilinkFileService.resolveNewFileTargetUri.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32mÔ£ô[39m vs-code-extension/src/test/WikilinkRenameTracker.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m23 passed[39m[22m[90m (23)[39m
+[2m      Tests [22m [1m[32m830 passed[39m[22m[90m (830)[39m
+[2m   Start at [22m 17:38:59
+[2m   Duration [22m 4.30s[2m (transform 2.09s, setup 0ms, import 4.01s, tests 4.78s, environment 6ms)[22m
+
+Waiting for the debugger to disconnect...
+Waiting for the debugger to disconnect...

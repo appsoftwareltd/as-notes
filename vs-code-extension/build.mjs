@@ -118,6 +118,17 @@ const kanbanSidebarWebviewBuildOptions = {
     target: ['es2022'],
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const calendarWebviewBuildOptions = {
+    entryPoints: ['./src/webview/calendar.ts'],
+    bundle: true,
+    outfile: 'dist/webview/calendar.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
 async function buildCss() {
     const tasksCss = readFileSync('./src/webview/tasks.css', 'utf8');
     const tasksResult = await postcss([tailwindcss]).process(tasksCss, {
@@ -148,6 +159,16 @@ async function buildCss() {
     if (kanbanResult.map) {
         writeFileSync('./dist/webview/kanban.css.map', kanbanResult.map.toString());
     }
+
+    const calendarCss = readFileSync('./src/webview/calendar.css', 'utf8');
+    const calendarResult = await postcss([tailwindcss]).process(calendarCss, {
+        from: './src/webview/calendar.css',
+        to: './dist/webview/calendar.css',
+    });
+    writeFileSync('./dist/webview/calendar.css', calendarResult.css);
+    if (calendarResult.map) {
+        writeFileSync('./dist/webview/calendar.css.map', calendarResult.map.toString());
+    }
 }
 
 if (isWatch) {
@@ -171,11 +192,13 @@ if (isWatch) {
     const searchCtx = await esbuild.context(searchWebviewBuildOptions);
     const kanbanCtx = await esbuild.context(kanbanWebviewBuildOptions);
     const kanbanSidebarCtx = await esbuild.context(kanbanSidebarWebviewBuildOptions);
+    const calendarCtx = await esbuild.context(calendarWebviewBuildOptions);
     await extCtx.watch();
     await webCtx.watch();
     await searchCtx.watch();
     await kanbanCtx.watch();
     await kanbanSidebarCtx.watch();
+    await calendarCtx.watch();
     console.log('Watching for changes...');
 } else {
     await buildCss();
@@ -184,5 +207,6 @@ if (isWatch) {
     await esbuild.build(searchWebviewBuildOptions);
     await esbuild.build(kanbanWebviewBuildOptions);
     await esbuild.build(kanbanSidebarWebviewBuildOptions);
+    await esbuild.build(calendarWebviewBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }
