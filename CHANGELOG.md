@@ -4,6 +4,10 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.2.6] - 2026-03-19
+
+- Bugfix: Non initialised directories showed permanent loading status in the sidebar / icon.
+
 ## [2.2.5] - 2026-03-19
 
 - Calendar in side bar for navigating Journal files
