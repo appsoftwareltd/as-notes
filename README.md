@@ -40,7 +40,7 @@ Many of us spend a lot of time in VS Code and using VS Code as your main notes a
 - Code highlighting 
 - And all of the many features that VS Code has
 
-## Features of AS Notes
+## Features
 
 ### General
 
@@ -824,8 +824,8 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.2.3"   # change version
-git tag v2.2.3                   # change version
+git commit -m "Release v2.2.4"   # change version
+git tag v2.2.4                   # change version
 git push origin main --tags
 ```
 

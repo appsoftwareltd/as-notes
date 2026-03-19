@@ -4,25 +4,29 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
-## [2.2.3]  - 2026-03-19
+## [2.2.4] - 2026-03-19
+
+- Root directory setting so that AS Notes can be nested in project folders without interference
+
+## [2.2.3] - 2026-03-18
 
 - Templates and template placeholders
 - Modified default note placement behaviour
 - Kanban boards markdown formatting
 - Kanban board card conversion from task (markdown todo)
 
-## [2.2.0]  - 2026-03-12
+## [2.2.0] - 2026-03-12
 
 - Added Kanban boards
 - Improved editor fenced codeblock completion behaviours in and out of outliner mode / context 
 
-## [2.1.1]  - 2026-03-11
+## [2.1.1] - 2026-03-11
 
 - Wikilink / alias search section in side bar
 - Slash commands `/` for task #hashtags
 - Rendering of task hashtags in HTML conversion
 
-## [2.1.0]  - 2026-03-10
+## [2.1.0] - 2026-03-10
 
 - Add outliner mode
 
