@@ -254,6 +254,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     extensionContext = context;
     isOfficialBuild = context.extension.id === OFFICIAL_EXTENSION_ID;
 
+    // Start with full mode disabled so the welcome view is shown
+    // until enterFullMode() completes and flips this to true.
+    vscode.commands.executeCommand('setContext', 'as-notes.fullMode', false);
+
+    // Welcome view — empty tree so VS Code renders the viewsWelcome content
+    // instead of a loading spinner when full mode is not active.
+    context.subscriptions.push(
+        vscode.window.registerTreeDataProvider('as-notes-welcome', {
+            getTreeItem: () => new vscode.TreeItem(''),
+            getChildren: () => [],
+        }),
+    );
+
     // Status bar — always present
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
     context.subscriptions.push(statusBarItem);

@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.2.5",
+    "version": "2.2.6",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -329,28 +329,43 @@
         "views": {
             "as-notes-sidebar": [
                 {
+                    "id": "as-notes-welcome",
+                    "name": "Getting Started",
+                    "when": "!as-notes.fullMode"
+                },
+                {
                     "type": "webview",
                     "id": "as-notes-search",
                     "name": "Search",
-                    "initialSize": 1
+                    "initialSize": 1,
+                    "when": "as-notes.fullMode"
                 },
                 {
                     "type": "webview",
                     "id": "as-notes-calendar",
-                    "name": "Calendar"
+                    "name": "Calendar",
+                    "when": "as-notes.fullMode"
                 },
                 {
                     "type": "webview",
                     "id": "as-notes-kanban",
-                    "name": "Kanban"
+                    "name": "Kanban",
+                    "when": "as-notes.fullMode"
                 },
                 {
                     "type": "webview",
                     "id": "as-notes-tasks",
-                    "name": "Tasks"
+                    "name": "Tasks",
+                    "when": "as-notes.fullMode"
                 }
             ]
         },
+        "viewsWelcome": [
+            {
+                "view": "as-notes-welcome",
+                "contents": "AS Notes is not initialised in this workspace.\n[Initialise Workspace](command:as-notes.initWorkspace)\nThis will create a .asnotes folder to enable wikilinks, task management, and more."
+            }
+        ],
         "menus": {
             "editor/title": [
                 {
