@@ -16,9 +16,9 @@
             "env": {
                 "AS_NOTES_DEBUG": "1",
                 // Uncomment to use test licence server
-                // "AS_NOTES_LICENCE_SERVER_URL": "http://localhost:5173"
+                // "AS_NOTES_LICENCE_SERVER_URL": "http://localhost:5173",
                 // Uncomment to simulate licence type
-                "AS_NOTES_LICENCE_OVERRIDE": "pro_editor"
+                // "AS_NOTES_LICENCE_OVERRIDE": "pro_editor"
                 // "AS_NOTES_LICENCE_OVERRIDE": "pro_ai_sync"
             }
         }
