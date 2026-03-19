@@ -505,7 +505,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             () => activateWithServer(key, context).then((state) => {
                 const wasValid = hasProEditorAccess(licenceState);
                 licenceState = state;
-                if (licenceState.serverUnreachable) {
+                if (licenceState.serverUnreachable && licenceState.status !== 'valid') {
                     showServerUnreachableWarning();
                 } else if (licenceState.status === 'invalid' || licenceState.status === 'not-entered') {
                     showLicenceWarning();

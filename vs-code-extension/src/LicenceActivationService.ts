@@ -12,11 +12,13 @@
  *   5. A periodic background validation (POST /api/v1/licence/validate)
  *      runs every 24 hours to detect revocation.
  *
- * ## Grace period
+ * ## Offline fallback
  *
- *   When the server is unreachable, the extension falls back to the
- *   cached token state for up to 7 days from the last successful
- *   validation. After that, pro features are disabled.
+ *   When the server is unreachable, the extension falls back to a
+ *   format-based check: if the licence key matches the ASNO-XXXX format
+ *   regex, Pro Editor access is granted with `serverUnreachable: true`.
+ *   This is a temporary measure until cryptographic offline keys are
+ *   implemented.
  */
 
 import * as vscode from 'vscode';
@@ -36,7 +38,6 @@ const SECRET_LAST_VALIDATED = 'as-notes.lastValidated';
 const SECRET_LICENCE_STATE = 'as-notes.licenceState';
 
 const DEFAULT_BASE_URL = 'https://www.asnotes.io';
-const GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [1_000, 4_000, 16_000];
@@ -95,6 +96,7 @@ async function fetchWithRetry(
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
+                signal: AbortSignal.timeout(10_000),
             });
             // Only retry on 5xx
             if (response.status >= 500 && attempt < MAX_RETRIES) {
@@ -238,8 +240,8 @@ export async function activateWithServer(
         throw new Error(`Unexpected status ${response.status}`);
 
     } catch (err) {
-        // Server unreachable or all retries exhausted — apply grace period
-        return applyGracePeriod(persisted);
+        // Server unreachable or all retries exhausted — fall back to format check
+        return applyFormatFallback(context.secrets, key);
     }
 }
 
@@ -293,29 +295,26 @@ export async function validateWithServer(
         throw new Error(`Unexpected status ${response.status}`);
 
     } catch {
-        // Server unreachable — apply grace period
-        return applyGracePeriod(persisted);
+        // Server unreachable — fall back to format check on persisted key
+        return applyFormatFallback(context.secrets, persisted.key ?? '');
     }
 }
 
-// ── Grace period ───────────────────────────────────────────────────────────
+// ── Offline format fallback ─────────────────────────────────────────────────
 
-function applyGracePeriod(persisted: {
-    token: string | undefined;
-    lastValidated: number | undefined;
-    state: LicenceState | undefined;
-}): LicenceState {
-    if (!persisted.token || !persisted.lastValidated || !persisted.state) {
-        return { ...defaultLicenceState(), serverUnreachable: true };
+/**
+ * When the server is unreachable, grant Pro Editor access if the key
+ * passes the ASNO-XXXX-XXXX-XXXX-XXXX format check. This is a temporary
+ * fallback until cryptographic offline keys are implemented.
+ *
+ * Persists the resulting state to SecretStorage so it survives restarts.
+ */
+async function applyFormatFallback(secrets: vscode.SecretStorage, key: string): Promise<LicenceState> {
+    if (validateLicenceKeyFormat(key) === 'valid') {
+        const state: LicenceState = { status: 'valid', product: 'pro_editor', serverUnreachable: true };
+        await persistLicenceState(secrets, '', key, state);
+        return state;
     }
-
-    const elapsed = Date.now() - persisted.lastValidated;
-    if (elapsed <= GRACE_PERIOD_MS) {
-        // Within grace period — maintain current state
-        return { ...persisted.state, serverUnreachable: true };
-    }
-
-    // Grace period exceeded
     return { ...defaultLicenceState(), serverUnreachable: true };
 }
 

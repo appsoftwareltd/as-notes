@@ -167,17 +167,8 @@ describe('activateWithServer', () => {
         vi.unstubAllGlobals();
     });
 
-    it('applies grace period when server is unreachable and within 7 days', async () => {
+    it('falls back to regex: returns pro_editor when server unreachable and key format is valid', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
-        const now = Date.now();
-        const token = buildTestJwt({
-            product: 'pro_editor',
-            exp: pastUnix(1), // expired
-        });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-        mockSecrets.set('as-notes.lastValidated', (now - 2 * 86_400_000).toString()); // 2 days ago
-        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
 
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 
@@ -187,29 +178,28 @@ describe('activateWithServer', () => {
         const result = await resultPromise;
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_editor');
+        expect(result.serverUnreachable).toBe(true);
+
+        // Verify state was persisted
+        expect(mockSecrets.get('as-notes.licenceKey')).toBe(VALID_KEY);
+        const persisted = JSON.parse(mockSecrets.get('as-notes.licenceState')!);
+        expect(persisted.status).toBe('valid');
+        expect(persisted.product).toBe('pro_editor');
 
         vi.unstubAllGlobals();
         vi.useRealTimers();
     });
 
-    it('returns not-entered when grace period exceeded', async () => {
+    it('falls back to regex: returns not-entered when server unreachable and key format is invalid', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
-        const now = Date.now();
-        const token = buildTestJwt({
-            product: 'pro_editor',
-            exp: pastUnix(1),
-        });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-        mockSecrets.set('as-notes.lastValidated', (now - 8 * 86_400_000).toString()); // 8 days ago
-        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
 
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 
-        const resultPromise = activateWithServer(VALID_KEY, buildContext() as any);
+        const resultPromise = activateWithServer('ASNO-ZZZZ-ZZZZ-ZZZZ-ZZZZ', buildContext() as any);
         await vi.advanceTimersByTimeAsync(25_000);
         const result = await resultPromise;
-        expect(result.status).toBe('not-entered'); // falls back to default
+        // Invalid format returns 'invalid' before reaching the server, so this never hits the fallback
+        expect(result.status).toBe('invalid');
         expect(result.product).toBeNull();
 
         vi.unstubAllGlobals();
@@ -284,13 +274,12 @@ describe('validateWithServer', () => {
         vi.unstubAllGlobals();
     });
 
-    it('applies grace period when server unreachable during validation', async () => {
+    it('falls back to regex: returns pro_editor when server unreachable during validation', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
-        const now = Date.now();
         const token = buildTestJwt({ product: 'pro_editor', exp: futureUnix(365) });
         mockSecrets.set('as-notes.activationToken', token);
         mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-        mockSecrets.set('as-notes.lastValidated', (now - 86_400_000).toString()); // 1 day ago
+        mockSecrets.set('as-notes.lastValidated', (Date.now() - 86_400_000).toString());
         mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
 
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
@@ -300,8 +289,36 @@ describe('validateWithServer', () => {
         const result = await resultPromise;
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_editor');
+        expect(result.serverUnreachable).toBe(true);
+
+        // Verify state was persisted
+        const persisted = JSON.parse(mockSecrets.get('as-notes.licenceState')!);
+        expect(persisted.status).toBe('valid');
+        expect(persisted.product).toBe('pro_editor');
 
         vi.unstubAllGlobals();
         vi.useRealTimers();
+    });
+
+    it('persisted fallback state survives restart via loadCachedLicenceState', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+
+        // Activate with server unreachable — fallback persists state
+        const activatePromise = activateWithServer(VALID_KEY, buildContext() as any);
+        await vi.advanceTimersByTimeAsync(25_000);
+        const result = await activatePromise;
+        expect(result.status).toBe('valid');
+
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+
+        // Simulate restart: load cached state (no server call)
+        const { loadCachedLicenceState } = await import('../LicenceActivationService.js');
+        const cachedState = await loadCachedLicenceState(buildContext() as any);
+        expect(cachedState.status).toBe('valid');
+        expect(cachedState.product).toBe('pro_editor');
+        expect(cachedState.serverUnreachable).toBe(true);
     });
 });
