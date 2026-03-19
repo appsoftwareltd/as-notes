@@ -308,7 +308,7 @@ For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-de
 
 ### Initialise a workspace
 
-AS Notes activates when it finds a `.asnotes/` directory in your workspace root (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** — commands show a friendly notification prompting you to initialise, and the status bar invites you to set up.
+AS Notes activates when it finds a `.asnotes/` directory in your workspace root or configured `rootDirectory` subdirectory (similar to `.git/` or `.obsidian/`). Without it, the extension runs in **passive mode** -- commands show a friendly notification prompting you to initialise, and the status bar invites you to set up.
 
 To initialise:
 
@@ -316,6 +316,21 @@ To initialise:
 2. Run **AS Notes: Initialise Workspace**
 
 This creates the `.asnotes/` directory, builds a SQLite index of all markdown files, and activates all features. The index file (`.asnotes/index.db`) is excluded from git by an auto-generated `.gitignore`.
+
+### Using AS Notes alongside source code
+
+AS Notes works well as a knowledge base inside a software project. You can keep notes, journals, and documentation in a subdirectory (e.g. `docs/` or `notes/`) while the rest of the repository contains source code. When a root directory is configured, all AS Notes features (wikilink highlighting, completions, hover tooltips, slash commands) are scoped to that directory. Markdown files outside it, such as a `README.md` at the workspace root, are completely unaffected.
+
+During initialisation, the **Initialise Workspace** command will ask you to choose a location:
+
+- **Workspace root** - the default, uses the entire workspace
+- **Choose a subdirectory** - opens a folder picker scoped to your workspace
+
+The chosen path is saved as the `as-notes.rootDirectory` workspace setting. When set, all AS Notes data lives inside that directory: `.asnotes/`, `.asnotesignore`, journals, templates, notes, kanban boards, and the index. Scanning, file watching, and indexing are scoped to this directory so files outside it are unaffected.
+
+If `as-notes.rootDirectory` is already configured before you run **Initialise Workspace**, the command uses the configured path directly.
+
+> **Warning:** If you change `rootDirectory` after initialisation, you must manually move the notes directory (including `.asnotes/`) to the new location and reload the window. The extension will show a warning when the setting changes.
 
 ### Rebuild the index
 
@@ -328,11 +343,11 @@ If the extension is in a bad state (e.g. persistent WASM errors after a crash), 
 - Removes the `.asnotes/` directory (index database, logs, git hook config)
 - Releases all in-memory state and switches to passive mode
 
-`.asnotesignore` at the workspace root is intentionally preserved. Run **AS Notes: Initialise Workspace** afterwards to start fresh.
+`.asnotesignore` at the AS Notes root is intentionally preserved. Run **AS Notes: Initialise Workspace** afterwards to start fresh.
 
 ### Excluding files from the index
 
-When AS Notes initialises a workspace it creates a `.asnotesignore` file at the workspace root. This file uses [`.gitignore` pattern syntax](https://git-scm.com/docs/gitignore) and controls which files and directories are excluded from the AS Notes index.
+When AS Notes initialises a workspace it creates a `.asnotesignore` file at the AS Notes root directory. This file uses [`.gitignore` pattern syntax](https://git-scm.com/docs/gitignore) and controls which files and directories are excluded from the AS Notes index.
 
 **Default contents:**
 
@@ -345,7 +360,7 @@ logseq/
 .trash/
 ```
 
-Patterns without a leading `/` match at any depth - `logseq/` excludes `logseq/pages/foo.md` and `vaults/work/logseq/pages/foo.md` equally. Prefix with `/` to anchor a pattern to the workspace root only (e.g. `/logseq/`).
+Patterns without a leading `/` match at any depth - `logseq/` excludes `logseq/pages/foo.md` and `vaults/work/logseq/pages/foo.md` equally. Prefix with `/` to anchor a pattern to the AS Notes root only (e.g. `/logseq/`).
 
 Edit `.asnotesignore` at any time. AS Notes watches the file and automatically re-scans the index when it changes - newly ignored files are removed from the index and un-ignored files are added.
 
@@ -569,7 +584,7 @@ The **AS Notes Kanban** sidebar and editor panel let you manage work visually wi
 
 #### Boards
 
-A workspace can contain any number of named boards, stored as plain files in a `kanban/` directory at the workspace root. Each board has its own lanes and set of cards.
+A workspace can contain any number of named boards, stored as plain files in a `kanban/` directory at the AS Notes root. Each board has its own lanes and set of cards.
 
 - **Create a board** — run **AS Notes: Create Kanban Board** from the Command Palette and enter a name. The first board is selected automatically on activation.
 - **Switch board** — type in the board-switcher field in the sidebar to filter and select from existing boards. The editor panel opens automatically.
@@ -664,11 +679,12 @@ Front-matter holds the structured fields; the Markdown body is the card descript
 
 | Setting | Default | Description |
 |---|---|---|
+| `as-notes.rootDirectory` | *(empty)* | Relative path from the workspace root to the AS Notes root directory (e.g. `docs` or `notes`). Leave empty to use the workspace root. All AS Notes data (`.asnotes/`, journals, templates, notes, kanban, `.asnotesignore`) lives within this directory. See [Using AS Notes in a subdirectory](#using-as-notes-in-a-subdirectory) below. |
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
-| `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to workspace root. |
-| `as-notes.notesFolder` | `notes` | Folder for new notes, relative to workspace root. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands. |
+| `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to the AS Notes root directory. |
+| `as-notes.notesFolder` | `notes` | Folder for new notes, relative to the AS Notes root directory. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands. |
 | `as-notes.createNotesInCurrentDirectory` | `false` | When enabled, new notes created via wikilink navigation are placed in the current editing file's directory instead of the notes folder. Ignored when the source file is in the journal folder. |
-| `as-notes.templateFolder` | `templates` | Folder for note templates, relative to workspace root. Templates are markdown files inserted via the `/Template` slash command. |
+| `as-notes.templateFolder` | `templates` | Folder for note templates, relative to the AS Notes root directory. Templates are markdown files inserted via the `/Template` slash command. |
 | `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Enter via **AS Notes: Enter Licence Key** in the Command Palette or directly in Settings. Scope: machine (not synced). |
 | `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
 
@@ -709,7 +725,7 @@ AS Notes directories can be managed via sync, though Git is recommended as it do
 The backlinks panel shows this message when the current file is not in the AS Notes index. Common causes:
 
 - **VS Code `files.exclude` / `search.exclude` settings** - AS Notes uses `vscode.workspace.findFiles()` to discover markdown files, which respects these VS Code settings. Files in excluded folders (e.g. `logseq/version-files/`) are silently omitted from the scan and will never be indexed. Check **Settings → Files: Exclude** and **Settings → Search: Exclude** if a file you expect to be indexed is missing.
-- **`.asnotesignore` patterns** - Files matching patterns in `.asnotesignore` at the workspace root are excluded from the index. See [Excluding files from the index](#excluding-files-from-the-index) above.
+- **`.asnotesignore` patterns** - Files matching patterns in `.asnotesignore` at the AS Notes root are excluded from the index. See [Excluding files from the index](#excluding-files-from-the-index) above.
 - **File not yet saved** - New unsaved files are not indexed until they are saved to disk for the first time.
 
 To resolve, check your workspace settings and `.asnotesignore` file. If the file should be indexed, ensure it is not matched by any exclusion pattern, then run **AS Notes: Rebuild Index** from the Command Palette.

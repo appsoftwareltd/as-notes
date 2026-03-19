@@ -18,12 +18,17 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
     static readonly VIEW_ID = 'as-notes-tasks';
 
     private _view?: vscode.WebviewView;
+    private _notesRootUri?: vscode.Uri;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
         private readonly _indexService: IndexService,
     ) { }
 
+    /** Set the notes root URI for file navigation. */
+    setNotesRootUri(uri: vscode.Uri): void {
+        this._notesRootUri = uri;
+    }
     // ── WebviewViewProvider ────────────────────────────────────────────────
 
     resolveWebviewView(
@@ -71,11 +76,11 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
                 );
                 break;
             case 'toggleTask': {
-                const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-                if (!workspaceRoot) { break; }
+                const rootUri = this._notesRootUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+                if (!rootUri) { break; }
                 const pagePath = msg.pagePath as string;
                 const line = msg.line as number;
-                const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
+                const fileUri = vscode.Uri.joinPath(rootUri, pagePath);
                 vscode.workspace.openTextDocument(fileUri).then(doc => {
                     const lineText = doc.lineAt(line).text;
                     const toggled = toggleTodoLine(lineText);

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { IndexService, type BacklinkChainGroup, type BacklinkChainInstance, type PageRow } from './IndexService.js';
 import type { LogService } from './LogService.js';
 import * as path from 'path';
+import { toNotesRelativePath } from './NotesRootService.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -214,7 +215,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
     private renderBacklinksForUri(uri: vscode.Uri): void {
         if (!this.panel || !this.indexService.isOpen) { return; }
 
-        const relativePath = vscode.workspace.asRelativePath(uri, false);
+        const relativePath = toNotesRelativePath(this.workspaceRoot.fsPath, uri.fsPath);
         this.logger?.info('BacklinkPanel', `renderBacklinksForUri: looking up path="${relativePath}" from uri="${uri.toString()}"`);
         const page = this.indexService.getPageByPath(relativePath);
 

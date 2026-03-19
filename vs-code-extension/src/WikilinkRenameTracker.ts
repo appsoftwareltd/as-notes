@@ -5,6 +5,7 @@ import type { IndexService, LinkRow } from './IndexService.js';
 import type { IndexScanner } from './IndexScanner.js';
 import { sanitiseFileName } from './PathUtils.js';
 import { FrontMatterService } from './FrontMatterService.js';
+import { toNotesRelativePath } from './NotesRootService.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -54,6 +55,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     private readonly fileService: WikilinkFileService;
     private readonly indexService: IndexService;
     private readonly indexScanner: IndexScanner;
+    private readonly notesRootUri: vscode.Uri | undefined;
     private readonly disposables: vscode.Disposable[] = [];
 
     /** Tracks the wikilink the cursor was inside during the most recent edit. */
@@ -67,11 +69,13 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         fileService: WikilinkFileService,
         indexService: IndexService,
         indexScanner: IndexScanner,
+        notesRootUri?: vscode.Uri,
     ) {
         this.wikilinkService = wikilinkService;
         this.fileService = fileService;
         this.indexService = indexService;
         this.indexScanner = indexScanner;
+        this.notesRootUri = notesRootUri;
 
         this.disposables.push(
             vscode.workspace.onDidChangeTextDocument((e) => this.onDocumentChanged(e)),
@@ -111,7 +115,9 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         const docKey = event.document.uri.toString();
 
         // Only track edits for files the index knows about
-        const relativePath = vscode.workspace.asRelativePath(event.document.uri, false);
+        const relativePath = this.notesRootUri
+            ? toNotesRelativePath(this.notesRootUri.fsPath, event.document.uri.fsPath)
+            : vscode.workspace.asRelativePath(event.document.uri, false);
         const page = this.indexService.getPageByPath(relativePath);
         if (!page) {
             return;
@@ -227,7 +233,9 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             return;
         }
 
-        const relativePath = vscode.workspace.asRelativePath(document.uri, false);
+        const relativePath = this.notesRootUri
+            ? toNotesRelativePath(this.notesRootUri.fsPath, document.uri.fsPath)
+            : vscode.workspace.asRelativePath(document.uri, false);
         const page = this.indexService.getPageByPath(relativePath);
         if (!page) {
             return;
@@ -425,10 +433,10 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         oldAliasName: string,
         newAliasName: string,
     ): Promise<void> {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-        if (!workspaceRoot) { return; }
+        const rootUri = this.notesRootUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!rootUri) { return; }
 
-        const canonicalUri = vscode.Uri.joinPath(workspaceRoot, canonicalPagePath);
+        const canonicalUri = vscode.Uri.joinPath(rootUri, canonicalPagePath);
         try {
             const doc = await vscode.workspace.openTextDocument(canonicalUri);
             const content = doc.getText();
@@ -482,7 +490,9 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             if (!indexedUris.has(fr.newUri.toString())) {
                 try {
                     // Remove the old path from the index
-                    const oldPath = vscode.workspace.asRelativePath(fr.oldUri, false);
+                    const oldPath = this.notesRootUri
+                        ? toNotesRelativePath(this.notesRootUri.fsPath, fr.oldUri.fsPath)
+                        : vscode.workspace.asRelativePath(fr.oldUri, false);
                     this.indexService.removePage(oldPath);
                     // Index at the new path
                     await this.indexScanner.indexFile(fr.newUri);
@@ -509,9 +519,9 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 // Re-index the canonical page so its aliases are re-read from front matter
                 const canonicalPage = this.indexService.getPageById?.(r.canonicalPageId);
                 if (canonicalPage) {
-                    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-                    if (workspaceRoot) {
-                        const canonicalUri = vscode.Uri.joinPath(workspaceRoot, canonicalPage.path);
+                    const rootUri = this.notesRootUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+                    if (rootUri) {
+                        const canonicalUri = vscode.Uri.joinPath(rootUri, canonicalPage.path);
                         if (!indexedUris.has(canonicalUri.toString())) {
                             try {
                                 await this.indexScanner.indexFile(canonicalUri);

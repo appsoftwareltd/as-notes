@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { WikilinkService, type LinkSegment } from 'as-notes-common';
 import { LogService } from './LogService.js';
+import { isInsideNotesRoot } from './NotesRootService.js';
 
 /**
  * Per-line parse cache entry.
@@ -47,9 +49,13 @@ export class WikilinkDecorationManager implements vscode.Disposable {
     private debounceHandle: ReturnType<typeof setTimeout> | undefined;
     private static readonly DEBOUNCE_MS = 50;
 
-    constructor(wikilinkService: WikilinkService, logger: LogService) {
+    /** When set, decorations are only applied to files inside the notes root. */
+    private readonly notesRootFsPath: string | undefined;
+
+    constructor(wikilinkService: WikilinkService, logger: LogService, notesRootFsPath?: string) {
         this.wikilinkService = wikilinkService;
         this.logger = logger;
+        this.notesRootFsPath = notesRootFsPath;
 
         this.defaultDecorationType = this.createDefaultDecoration();
         this.loadingDecorationType = this.createLoadingDecoration();
@@ -169,6 +175,12 @@ export class WikilinkDecorationManager implements vscode.Disposable {
      */
     private rebuildCacheAndDecorate(editor: vscode.TextEditor): void {
         if (!isMarkdownDocument(editor.document)) { return; }
+        if (this.notesRootFsPath && !isInsideNotesRoot(this.notesRootFsPath, editor.document.uri.fsPath)) {
+            // File is outside the notes root — clear any stale decorations.
+            editor.setDecorations(this.defaultDecorationType, []);
+            editor.setDecorations(this.loadingDecorationType, []);
+            return;
+        }
 
         const end = this.logger.time('decor', `rebuildCache (${editor.document.lineCount} lines)`);
 
@@ -199,6 +211,7 @@ export class WikilinkDecorationManager implements vscode.Disposable {
      */
     private applyDecorations(editor: vscode.TextEditor): void {
         if (!isMarkdownDocument(editor.document)) { return; }
+        if (this.notesRootFsPath && !isInsideNotesRoot(this.notesRootFsPath, editor.document.uri.fsPath)) { return; }
 
         const ranges: vscode.Range[] = [];
 

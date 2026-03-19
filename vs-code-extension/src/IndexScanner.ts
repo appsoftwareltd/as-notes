@@ -3,10 +3,14 @@ import * as path from 'path';
 import { IndexService, type ScanSummary } from './IndexService.js';
 import { IgnoreService } from './IgnoreService.js';
 import { LogService, NO_OP_LOGGER } from './LogService.js';
+import { toNotesRelativePath } from './NotesRootService.js';
 
 /**
  * Orchestrates filesystem scanning and delegates to IndexService for DB operations.
  * This is the VS Code-dependent layer; IndexService stays pure for testability.
+ *
+ * The `notesRoot` URI passed to the constructor determines the scanning scope.
+ * All relative paths stored in the index are relative to this root.
  */
 export class IndexScanner {
 
@@ -14,23 +18,28 @@ export class IndexScanner {
 
     constructor(
         private readonly indexService: IndexService,
-        private readonly workspaceRoot: vscode.Uri,
+        private readonly notesRoot: vscode.Uri,
         private readonly ignoreService?: IgnoreService,
         logger?: LogService,
     ) {
         this.logger = logger ?? NO_OP_LOGGER;
     }
 
+    /** Compute a path relative to the notes root. */
+    private relativePath(uri: vscode.Uri): string {
+        return toNotesRelativePath(this.notesRoot.fsPath, uri.fsPath);
+    }
+
     /**
      * Index a single file by URI. Reads content, resolves mtime, and delegates
      * to IndexService.indexFileContent().
      *
-     * `.enc.md` files are silently skipped — they are never indexed.
+     * `.enc.md` files are silently skipped -- they are never indexed.
      */
     async indexFile(uri: vscode.Uri): Promise<void> {
-        // Encrypted files are never indexed — their content is ciphertext.
+        // Encrypted files are never indexed -- their content is ciphertext.
         if (uri.fsPath.toLowerCase().endsWith('.enc.md')) { return; }
-        const relativePath = vscode.workspace.asRelativePath(uri, false);
+        const relativePath = this.relativePath(uri);
         // Ignored files are silently skipped.
         if (this.ignoreService?.isIgnored(relativePath)) { return; }
         const filename = path.basename(uri.fsPath);
@@ -54,13 +63,13 @@ export class IndexScanner {
         progress?: vscode.Progress<{ message?: string; increment?: number }>,
         token?: vscode.CancellationToken,
     ): Promise<{ filesIndexed: number; linksFound: number }> {
-        const pattern = '**/*.{md,markdown}';
+        const pattern = new vscode.RelativePattern(this.notesRoot, '**/*.{md,markdown}');
         const allFiles = await vscode.workspace.findFiles(pattern);
-        // Never index encrypted files — their content is ciphertext, not markdown.
+        // Never index encrypted files -- their content is ciphertext, not markdown.
         // Also filter out any file matching an .asnotesignore pattern.
         const files = allFiles.filter(u => {
             if (u.fsPath.toLowerCase().endsWith('.enc.md')) { return false; }
-            const rel = vscode.workspace.asRelativePath(u, false);
+            const rel = this.relativePath(u);
             if (this.ignoreService?.isIgnored(rel)) { return false; }
             return true;
         });
@@ -79,7 +88,7 @@ export class IndexScanner {
         for (const fileUri of files) {
             if (token?.isCancellationRequested) { break; }
 
-            const relativePath = vscode.workspace.asRelativePath(fileUri, false);
+            const relativePath = this.relativePath(fileUri);
             scannedPaths.add(relativePath);
 
             try {
@@ -127,13 +136,13 @@ export class IndexScanner {
         progress?: vscode.Progress<{ message?: string; increment?: number }>,
         token?: vscode.CancellationToken,
     ): Promise<ScanSummary> {
-        const pattern = '**/*.{md,markdown}';
+        const pattern = new vscode.RelativePattern(this.notesRoot, '**/*.{md,markdown}');
         const allFiles = await vscode.workspace.findFiles(pattern);
-        // Never index encrypted files — their content is ciphertext, not markdown.
+        // Never index encrypted files -- their content is ciphertext, not markdown.
         // Also filter out any file matching an .asnotesignore pattern.
         const files = allFiles.filter(u => {
             if (u.fsPath.toLowerCase().endsWith('.enc.md')) { return false; }
-            const rel = vscode.workspace.asRelativePath(u, false);
+            const rel = this.relativePath(u);
             if (this.ignoreService?.isIgnored(rel)) { return false; }
             return true;
         });
@@ -158,7 +167,7 @@ export class IndexScanner {
         for (const fileUri of files) {
             if (token?.isCancellationRequested) { break; }
 
-            const relativePath = vscode.workspace.asRelativePath(fileUri, false);
+            const relativePath = this.relativePath(fileUri);
             scannedPaths.add(relativePath);
 
             try {

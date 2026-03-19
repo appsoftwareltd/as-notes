@@ -13,26 +13,26 @@ import * as vscode from 'vscode';
  * so that VS Code's built-in markdown drop/paste places files in the
  * folder specified by `as-notes.assetPath`.
  *
+ * When `as-notes.rootDirectory` is set, the asset destination is prefixed
+ * with the root directory so that assets land inside the notes root.
+ *
  * Also cleans up legacy overrides (`markdown.editor.drop.enabled`,
  * `markdown.editor.filePaste.enabled`) that may have been written by
  * earlier versions of the extension.
  */
 export async function applyAssetPathSettings(): Promise<void> {
-    const assetPath = vscode.workspace
-        .getConfiguration('as-notes')
-        .get<string>('assetPath', 'assets/images');
+    const config = vscode.workspace.getConfiguration('as-notes');
+    const assetPath = config.get<string>('assetPath', 'assets/images');
+    const rootDirectory = config.get<string>('rootDirectory', '').trim().replace(/^[/\\]+|[/\\]+$/g, '');
 
     const target = vscode.ConfigurationTarget.Workspace;
 
-    // Set the built-in markdown copy destination to our configured asset folder.
-    // The glob key **/*.md means this applies to drops/pastes into any .md file.
-    // ${fileName} is replaced by VS Code with the original filename of the
-    // dropped/pasted file (preserving extension).
-    // Leading "/" makes the destination relative to the workspace root rather
-    // than relative to the document being edited.
+    // Build the destination path. The leading "/" makes it workspace-root-relative.
+    // When rootDirectory is set, prefix the asset path so files land inside the notes root.
+    const destBase = rootDirectory ? `/${rootDirectory}/${assetPath}` : `/${assetPath}`;
     const mdConfig = vscode.workspace.getConfiguration('markdown');
     const destination: Record<string, string> = {
-        '**/*.md': `/${assetPath}/\${fileName}`,
+        '**/*.md': `${destBase}/\${fileName}`,
     };
     await mdConfig.update('copyFiles.destination', destination, target);
 

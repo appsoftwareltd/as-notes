@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import type { IndexService, PageRow } from './IndexService.js';
 import { getPathDistance } from './PathUtils.js';
+import { toNotesRelativePath } from './NotesRootService.js';
 
 /**
  * Handles file resolution, existence checking, and creation for wikilink targets.
@@ -18,9 +19,11 @@ import { getPathDistance } from './PathUtils.js';
 export class WikilinkFileService {
 
     private indexService?: IndexService;
+    private readonly notesRootUri?: vscode.Uri;
 
-    constructor(indexService?: IndexService) {
+    constructor(indexService?: IndexService, notesRootUri?: vscode.Uri) {
         this.indexService = indexService;
+        this.notesRootUri = notesRootUri;
     }
 
     /**
@@ -56,24 +59,24 @@ export class WikilinkFileService {
      * @returns URI pointing to `{targetDir}/{pageFileName}.md`
      */
     resolveNewFileTargetUri(sourceUri: vscode.Uri, pageFileName: string): vscode.Uri {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-        if (!workspaceRoot) {
-            // No workspace — fall back to source directory
+        const rootUri = this.notesRootUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!rootUri) {
+            // No workspace -- fall back to source directory
             return this.resolveTargetUri(sourceUri, pageFileName);
         }
 
         const config = vscode.workspace.getConfiguration('as-notes');
         const createInCurrentDir = config.get<boolean>('createNotesInCurrentDirectory', false);
 
-        if (createInCurrentDir && !this.isInsideJournalFolder(sourceUri, workspaceRoot)) {
+        if (createInCurrentDir && !this.isInsideJournalFolder(sourceUri, rootUri)) {
             return this.resolveTargetUri(sourceUri, pageFileName);
         }
 
         const notesFolder = config.get<string>('notesFolder', 'notes');
         const normalised = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
         const targetDir = normalised
-            ? path.join(workspaceRoot.fsPath, normalised)
-            : workspaceRoot.fsPath;
+            ? path.join(rootUri.fsPath, normalised)
+            : rootUri.fsPath;
         const targetPath = path.join(targetDir, `${pageFileName}.md`);
         return vscode.Uri.file(targetPath);
     }
@@ -124,7 +127,9 @@ export class WikilinkFileService {
         }
         if (directMatches.length > 1) {
             // Disambiguate: same-directory preference, then closest folder
-            const sourcePath = vscode.workspace.asRelativePath(sourceUri, false);
+            const sourcePath = this.notesRootUri
+                ? toNotesRelativePath(this.notesRootUri.fsPath, sourceUri.fsPath)
+                : vscode.workspace.asRelativePath(sourceUri, false);
             const best = this.pickClosest(sourcePath, directMatches);
             return { page: best, viaAlias: false };
         }
@@ -153,9 +158,9 @@ export class WikilinkFileService {
         // Try index-based resolution first
         const indexResult = this.resolveViaIndex(sourceUri, pageFileName);
         if (indexResult) {
-            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-            if (workspaceRoot) {
-                const resolvedUri = vscode.Uri.joinPath(workspaceRoot, indexResult.page.path);
+            const rootUri = this.notesRootUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+            if (rootUri) {
+                const resolvedUri = vscode.Uri.joinPath(rootUri, indexResult.page.path);
                 return { uri: resolvedUri, viaAlias: indexResult.viaAlias };
             }
         }

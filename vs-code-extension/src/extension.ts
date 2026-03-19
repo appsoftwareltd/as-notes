@@ -50,8 +50,7 @@ import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
 import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
 import type { Priority } from './KanbanTypes.js';
-
-const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: 'markdown' };
+import { computeNotesRootPaths, toNotesRelativePath, isInsideNotesRoot, type NotesRootPaths } from './NotesRootService.js';
 const ASNOTES_DIR = '.asnotes';
 const INDEX_DB = 'index.db';
 const IGNORE_FILE = '.asnotesignore';
@@ -168,6 +167,15 @@ let backlinkPanelProvider: BacklinkPanelProvider | undefined;
 
 /** Log service instance — alive while in full mode. */
 let logService: LogService = NO_OP_LOGGER;
+
+/**
+ * Resolved AS Notes root paths — set during activation / initialisation.
+ * When `as-notes.rootDirectory` is empty this equals the workspace root.
+ */
+let notesRootPaths: NotesRootPaths | undefined;
+
+/** AS Notes root as a VS Code URI — derived from notesRootPaths.root. */
+let notesRootUri: vscode.Uri | undefined;
 
 /** Stored extension context — needed for mode transitions. */
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -584,15 +592,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         );
     }
 
-    // Check for .asnotes/ in workspace root
+    // Check for .asnotes/ — either at the configured rootDirectory or workspace root
     const workspaceRoot = getWorkspaceRoot();
     if (!workspaceRoot) {
         setPassiveMode('No workspace folder open');
         return apiReturn;
     }
 
-    const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
-    if (fs.existsSync(asnotesDir)) {
+    // Resolve the AS Notes root from the rootDirectory setting
+    const rootDirSetting = vscode.workspace.getConfiguration('as-notes').get<string>('rootDirectory', '');
+    notesRootPaths = computeNotesRootPaths(workspaceRoot.fsPath, rootDirSetting);
+    notesRootUri = vscode.Uri.file(notesRootPaths.root);
+
+    if (fs.existsSync(notesRootPaths.asnotesDir)) {
+        // Validate that the configured root directory actually exists
+        if (rootDirSetting.trim() && !fs.existsSync(notesRootPaths.root)) {
+            setPassiveMode('Configured root directory does not exist');
+            return apiReturn;
+        }
         // Fire-and-forget: don't block activation on full mode setup.
         // VS Code's markdown preview awaits activate() before calling
         // extendMarkdownIt — if we block here on DB init + stale scan,
@@ -645,7 +662,9 @@ function toggleTodoCommand(): void {
         if (!success || !indexService?.isOpen) { return; }
         // Re-index from the live buffer so the tasks table is updated immediately
         const doc = editor.document;
-        const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+        const relativePath = notesRootPaths
+            ? toNotesRelativePath(notesRootPaths.root, doc.uri.fsPath)
+            : vscode.workspace.asRelativePath(doc.uri, false);
         const filename = path.basename(doc.uri.fsPath);
         indexService.indexFileContent(relativePath, filename, doc.getText(), Date.now());
         taskPanelProvider?.refresh();
@@ -672,25 +691,33 @@ async function enterFullMode(
 ): Promise<void> {
     disposeFullMode(); // Clean up any previous full-mode state
 
+    // Ensure notes root paths are resolved
+    if (!notesRootPaths || !notesRootUri) {
+        const rootDirSetting = vscode.workspace.getConfiguration('as-notes').get<string>('rootDirectory', '');
+        notesRootPaths = computeNotesRootPaths(workspaceRoot.fsPath, rootDirSetting);
+        notesRootUri = vscode.Uri.file(notesRootPaths.root);
+    }
+
+    const nrp = notesRootPaths;
+    const nrUri = notesRootUri;
+
     // Create LogService — enabled by setting or env var, requires reload to change.
     const config = vscode.workspace.getConfiguration('as-notes');
     const loggingEnabled = config.get<boolean>('enableLogging', false)
         || process.env.AS_NOTES_DEBUG === '1';
-    const logDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR, 'logs');
-    logService = new LogService(logDir, { enabled: loggingEnabled });
+    logService = new LogService(nrp.logDir, { enabled: loggingEnabled });
     if (logService.isEnabled) {
         logService.info('extension', 'Logging activated');
     }
 
-    const dbPath = path.join(workspaceRoot.fsPath, ASNOTES_DIR, INDEX_DB);
-    indexService = new IndexService(dbPath, logService);
+    indexService = new IndexService(nrp.databasePath, logService);
     logService.info('extension', 'enterFullMode: initialising database');
     const { schemaReset } = await indexService.initDatabase();
 
     // ── Ensure standard directories exist (migration for existing workspaces) ──
     const templateFolder = config.get<string>('templateFolder', 'templates');
     const templateFolderPath = computeTemplateFolderPath(
-        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        nrp.rootUri,
         templateFolder,
     );
     fs.mkdirSync(templateFolderPath, { recursive: true });
@@ -702,19 +729,19 @@ async function enterFullMode(
     const journalFolder = config.get<string>('journalFolder', 'journals');
     const normalisedJournal = normaliseJournalFolder(journalFolder);
     if (normalisedJournal) {
-        const journalFolderPath = path.join(workspaceRoot.fsPath, normalisedJournal);
+        const journalFolderPath = path.join(nrp.root, normalisedJournal);
         fs.mkdirSync(journalFolderPath, { recursive: true });
     }
 
     const notesFolder = config.get<string>('notesFolder', 'notes');
     const normalisedNotes = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
     if (normalisedNotes) {
-        const notesFolderPath = path.join(workspaceRoot.fsPath, normalisedNotes);
+        const notesFolderPath = path.join(nrp.root, normalisedNotes);
         fs.mkdirSync(notesFolderPath, { recursive: true });
     }
 
-    ignoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE));
-    indexScanner = new IndexScanner(indexService, workspaceRoot, ignoreService, logService);
+    ignoreService = new IgnoreService(nrp.ignoreFilePath);
+    indexScanner = new IndexScanner(indexService, nrUri, ignoreService, logService);
 
     // Shared services — WikilinkService is index-independent, so create early
     const wikilinkService = new WikilinkService();
@@ -722,13 +749,20 @@ async function enterFullMode(
     // Decoration manager — created before scan so wikilinks are visually
     // marked (muted grey) immediately, then switch to blue once the index
     // is ready and setReady() is called.
-    const decorationManager = new WikilinkDecorationManager(wikilinkService, logService);
+    // Scoped document selector: when a rootDirectory is configured, language
+    // providers only activate for markdown files inside the notes root.
+    const markdownSelector: vscode.DocumentSelector = nrUri
+        ? { language: 'markdown', pattern: new vscode.RelativePattern(nrUri, '**') }
+        : { language: 'markdown' };
+
+    const decorationManager = new WikilinkDecorationManager(wikilinkService, logService, nrp?.root);
     fullModeDisposables.push(decorationManager);
 
     // Task panel — registered early so the sidebar is visible immediately,
     // even during a long schema-reset rebuild. The provider handles an empty
     // index gracefully (returns []); refresh() is called after scan completes.
     taskPanelProvider = new TaskPanelProvider(context, indexService);
+    taskPanelProvider.setNotesRootUri(nrUri);
     fullModeDisposables.push(
         vscode.window.registerWebviewViewProvider(
             TaskPanelProvider.VIEW_ID,
@@ -750,6 +784,7 @@ async function enterFullMode(
 
     // Search panel — wikilink/alias search bar above the tasks view.
     searchPanelProvider = new SearchPanelProvider(context, indexService);
+    searchPanelProvider.setNotesRootUri(nrUri);
     fullModeDisposables.push(
         vscode.window.registerWebviewViewProvider(
             SearchPanelProvider.VIEW_ID,
@@ -759,7 +794,7 @@ async function enterFullMode(
     );
 
     // Kanban board — sidebar summary + editor panel for full board.
-    const kanbanRootUri = vscode.Uri.joinPath(workspaceRoot, 'kanban');
+    const kanbanRootUri = vscode.Uri.joinPath(nrUri, 'kanban');
     kanbanStore = new KanbanStore(kanbanRootUri, logService);
     kanbanBoardConfigStore = new KanbanBoardConfigStore(kanbanRootUri, logService);
     kanbanSidebarProvider = new KanbanSidebarProvider(context, kanbanStore, kanbanBoardConfigStore);
@@ -974,24 +1009,24 @@ async function enterFullMode(
     taskPanelProvider?.refresh();
     searchPanelProvider?.refresh();
 
-    const fileService = new WikilinkFileService(indexService);
+    const fileService = new WikilinkFileService(indexService, nrUri);
     searchPanelProvider?.setFileService(fileService);
 
     // Document link provider — Ctrl/Cmd+Click navigation (alias-aware tooltips)
     const linkProvider = new WikilinkDocumentLinkProvider(wikilinkService, fileService, indexService);
     fullModeDisposables.push(
-        vscode.languages.registerDocumentLinkProvider(MARKDOWN_SELECTOR, linkProvider),
+        vscode.languages.registerDocumentLinkProvider(markdownSelector, linkProvider),
     );
 
     // Hover provider — tooltip with target filename, existence, and back-link count
     const hoverProvider = new WikilinkHoverProvider(wikilinkService, fileService, indexService);
     fullModeDisposables.push(
-        vscode.languages.registerHoverProvider(MARKDOWN_SELECTOR, hoverProvider),
+        vscode.languages.registerHoverProvider(markdownSelector, hoverProvider),
     );
 
     // Rename tracker — backed by index for pre-edit state comparison
     const renameTracker = new WikilinkRenameTracker(
-        wikilinkService, fileService, indexService, indexScanner,
+        wikilinkService, fileService, indexService, indexScanner, nrUri,
     );
     fullModeDisposables.push(renameTracker);
 
@@ -999,12 +1034,12 @@ async function enterFullMode(
     completionProvider = new WikilinkCompletionProvider(indexService, logService);
     completionProvider.refresh(); // Warm the cache so first [[ is instant
     fullModeDisposables.push(
-        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, completionProvider, '['),
+        vscode.languages.registerCompletionItemProvider(markdownSelector, completionProvider, '['),
     );
 
     // Slash command provider — in-editor command menu triggered by /
     fullModeDisposables.push(
-        vscode.languages.registerCompletionItemProvider(MARKDOWN_SELECTOR, new SlashCommandProvider(() => hasProEditor()), '/'),
+        vscode.languages.registerCompletionItemProvider(markdownSelector, new SlashCommandProvider(() => hasProEditor()), '/'),
     );
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.openDatePicker', () => openDatePicker()),
@@ -1027,7 +1062,7 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.insertTemplate', () =>
-            insertTemplate(workspaceRoot),
+            insertTemplate(nrUri),
         ),
     );
 
@@ -1350,7 +1385,7 @@ async function enterFullMode(
     vscode.commands.executeCommand('setContext', 'as-notes.fullMode', true);
 
     // Backlink panel
-    backlinkPanelProvider = new BacklinkPanelProvider(indexService, workspaceRoot, logService);
+    backlinkPanelProvider = new BacklinkPanelProvider(indexService, nrUri, logService);
     fullModeDisposables.push(backlinkPanelProvider);
 
     fullModeDisposables.push(
@@ -1437,14 +1472,14 @@ async function enterFullMode(
     // Daily journal command
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.openDailyJournal', () =>
-            openDailyJournal(workspaceRoot),
+            openDailyJournal(nrUri),
         ),
     );
 
     // Rename legacy YYYY_MM_DD journal files to YYYY-MM-DD
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.renameJournalFiles', () =>
-            renameJournalFiles(workspaceRoot),
+            renameJournalFiles(nrUri),
         ),
     );
 
@@ -1496,7 +1531,10 @@ async function enterFullMode(
                 );
                 return;
             }
-            const files = await vscode.workspace.findFiles('**/*.enc.md');
+            const encPattern = nrUri
+                ? new vscode.RelativePattern(nrUri, '**/*.enc.md')
+                : '**/*.enc.md';
+            const files = await vscode.workspace.findFiles(encPattern);
             let encrypted = 0;
             let skipped = 0;
             let errors = 0;
@@ -1552,7 +1590,10 @@ async function enterFullMode(
                 );
                 return;
             }
-            const files = await vscode.workspace.findFiles('**/*.enc.md');
+            const encPattern = nrUri
+                ? new vscode.RelativePattern(nrUri, '**/*.enc.md')
+                : '**/*.enc.md';
+            const files = await vscode.workspace.findFiles(encPattern);
             let decrypted = 0;
             let skipped = 0;
             let errors = 0;
@@ -1606,8 +1647,8 @@ async function enterFullMode(
             const notesFolder = config.get<string>('notesFolder', 'notes');
             const normalised = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
             const folderUri = normalised
-                ? vscode.Uri.joinPath(workspaceRoot, normalised)
-                : workspaceRoot;
+                ? vscode.Uri.joinPath(nrUri, normalised)
+                : nrUri;
             await vscode.workspace.fs.createDirectory(folderUri);
             const filename = `${sanitiseFileName(title)}.md`;
             const fileUri = vscode.Uri.joinPath(folderUri, filename);
@@ -1638,8 +1679,8 @@ async function enterFullMode(
             const notesFolder = config.get<string>('notesFolder', 'notes');
             const normalised = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
             const folderUri = normalised
-                ? vscode.Uri.joinPath(workspaceRoot, normalised)
-                : workspaceRoot;
+                ? vscode.Uri.joinPath(nrUri, normalised)
+                : nrUri;
             await vscode.workspace.fs.createDirectory(folderUri);
             const filename = `${sanitiseFileName(title)}.enc.md`;
             const fileUri = vscode.Uri.joinPath(folderUri, filename);
@@ -1663,7 +1704,7 @@ async function enterFullMode(
             const config = vscode.workspace.getConfiguration('as-notes');
             const journalFolder = config.get<string>('journalFolder', 'journals');
             const paths = computeJournalPaths(
-                workspaceRoot.fsPath.replace(/\\/g, '/'),
+                nrp.rootUri,
                 journalFolder,
                 new Date(),
             );
@@ -1771,9 +1812,8 @@ async function enterFullMode(
 
     fullModeDisposables.push(
         vscode.commands.registerCommand('as-notes.navigateToTask', async (pagePath: string, line: number) => {
-            const workspaceRoot = getWorkspaceRoot();
-            if (!workspaceRoot) { return; }
-            const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
+            if (!notesRootUri) { return; }
+            const fileUri = vscode.Uri.joinPath(notesRootUri, pagePath);
             const doc = await vscode.workspace.openTextDocument(fileUri);
             const editor = await vscode.window.showTextDocument(doc);
             const position = new vscode.Position(line, 0);
@@ -1806,6 +1846,7 @@ async function enterFullMode(
     fullModeDisposables.push(
         vscode.workspace.onDidSaveTextDocument(async (doc) => {
             if (!isMarkdown(doc)) { return; }
+            if (nrp && !isInsideNotesRoot(nrp.root, doc.uri.fsPath)) { return; }
             try {
                 await indexScanner!.indexFile(doc.uri);
                 if (!safeSaveToFile()) { return; }
@@ -1829,6 +1870,7 @@ async function enterFullMode(
     fullModeDisposables.push(
         vscode.workspace.onDidChangeTextDocument((e) => {
             if (!isMarkdown(e.document)) { return; }
+            if (nrp && !isInsideNotesRoot(nrp.root, e.document.uri.fsPath)) { return; }
             if (completionDebounceHandle !== undefined) {
                 clearTimeout(completionDebounceHandle);
             }
@@ -1840,7 +1882,9 @@ async function enterFullMode(
                 // refreshIndexAfterRename will re-index the file once the rename completes.
                 if (renameTracker.hasPendingEdit(doc.uri.toString())) { return; }
                 const end = logService.time('debounce', 'indexFileContent + refresh');
-                const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+                const relativePath = notesRootPaths
+                    ? toNotesRelativePath(notesRootPaths.root, doc.uri.fsPath)
+                    : vscode.workspace.asRelativePath(doc.uri, false);
                 const filename = path.basename(doc.uri.fsPath);
                 indexService!.indexFileContent(relativePath, filename, doc.getText(), Date.now());
                 taskPanelProvider?.refresh();
@@ -1858,6 +1902,7 @@ async function enterFullMode(
     fullModeDisposables.push(
         vscode.workspace.onDidChangeTextDocument((e) => {
             if (!isMarkdown(e.document)) { return; }
+            if (nrp && !isInsideNotesRoot(nrp.root, e.document.uri.fsPath)) { return; }
             const editor = vscode.window.activeTextEditor;
             if (!editor || editor.document !== e.document) { return; }
 
@@ -1886,7 +1931,7 @@ async function enterFullMode(
     fullModeDisposables.push(
         vscode.workspace.onDidCreateFiles(async (e) => {
             for (const fileUri of e.files) {
-                if (isMarkdownUri(fileUri)) {
+                if (isMarkdownUri(fileUri) && (!nrp || isInsideNotesRoot(nrp.root, fileUri.fsPath))) {
                     try {
                         await indexScanner!.indexFile(fileUri);
                     } catch (err) {
@@ -1907,8 +1952,10 @@ async function enterFullMode(
         vscode.workspace.onDidDeleteFiles(async (e) => {
             let hasFolderDelete = false;
             for (const fileUri of e.files) {
-                if (isMarkdownUri(fileUri)) {
-                    const relativePath = vscode.workspace.asRelativePath(fileUri, false);
+                if (isMarkdownUri(fileUri) && (!nrp || isInsideNotesRoot(nrp.root, fileUri.fsPath))) {
+                    const relativePath = notesRootPaths
+                        ? toNotesRelativePath(notesRootPaths.root, fileUri.fsPath)
+                        : vscode.workspace.asRelativePath(fileUri, false);
                     indexService!.removePage(relativePath);
                 } else {
                     // A folder (or other non-markdown item) was deleted — individual
@@ -1937,14 +1984,16 @@ async function enterFullMode(
         vscode.workspace.onDidRenameFiles(async (e) => {
             let hasFolderRename = false;
             for (const { oldUri, newUri } of e.files) {
-                if (isMarkdownUri(oldUri)) {
-                    const oldPath = vscode.workspace.asRelativePath(oldUri, false);
+                if (isMarkdownUri(oldUri) && (!nrp || isInsideNotesRoot(nrp.root, oldUri.fsPath))) {
+                    const oldPath = notesRootPaths
+                        ? toNotesRelativePath(notesRootPaths.root, oldUri.fsPath)
+                        : vscode.workspace.asRelativePath(oldUri, false);
                     indexService!.removePage(oldPath);
                 } else {
                     // A folder was renamed/moved — individual file URIs are not surfaced.
                     hasFolderRename = true;
                 }
-                if (isMarkdownUri(newUri)) {
+                if (isMarkdownUri(newUri) && (!nrp || isInsideNotesRoot(nrp.root, newUri.fsPath))) {
                     try {
                         await indexScanner!.indexFile(newUri);
                     } catch (err) {
@@ -1986,7 +2035,7 @@ async function enterFullMode(
             const uriToReindex = previousEditorUri;
             previousEditorUri = editor?.document.uri;
 
-            if (uriToReindex && isMarkdownUri(uriToReindex)) {
+            if (uriToReindex && isMarkdownUri(uriToReindex) && (!nrp || isInsideNotesRoot(nrp.root, uriToReindex.fsPath))) {
                 // Defer off the UI thread so the new editor paints first.
                 setTimeout(async () => {
                     try {
@@ -1994,7 +2043,9 @@ async function enterFullMode(
                             d => d.uri.toString() === uriToReindex.toString(),
                         );
                         if (doc) {
-                            const relativePath = vscode.workspace.asRelativePath(doc.uri, false);
+                            const relativePath = notesRootPaths
+                                ? toNotesRelativePath(notesRootPaths.root, doc.uri.fsPath)
+                                : vscode.workspace.asRelativePath(doc.uri, false);
                             const filename = path.basename(doc.uri.fsPath);
                             const content = doc.getText();
                             const stat = await vscode.workspace.fs.stat(doc.uri);
@@ -2022,7 +2073,7 @@ async function enterFullMode(
     // so newly ignored files are removed from the index and un-ignored files
     // are picked up.
     const ignoreFileWatcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(workspaceRoot, IGNORE_FILE),
+        new vscode.RelativePattern(nrUri, IGNORE_FILE),
     );
     const onIgnoreFileChange = (): void => {
         ignoreService?.reload();
@@ -2053,6 +2104,16 @@ async function enterFullMode(
                 applyAssetPathSettings().catch(err =>
                     console.warn('as-notes: failed to apply asset path settings on config change:', err),
                 );
+            }
+            if (e.affectsConfiguration('as-notes.rootDirectory')) {
+                vscode.window.showWarningMessage(
+                    'AS Notes: The root directory setting has changed. Reload the window to apply the new root.',
+                    'Reload Window',
+                ).then(action => {
+                    if (action === 'Reload Window') {
+                        vscode.commands.executeCommand('workbench.action.reloadWindow');
+                    }
+                });
             }
         }),
     );
@@ -2123,10 +2184,8 @@ function exitFullMode(): void {
  * Returns true if the save succeeded, false if we exited full mode.
  */
 function safeSaveToFile(): boolean {
-    const workspaceRoot = getWorkspaceRoot();
-    if (!workspaceRoot) { return false; }
-    const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
-    if (!fs.existsSync(asnotesDir)) {
+    if (!notesRootPaths) { return false; }
+    if (!fs.existsSync(notesRootPaths.asnotesDir)) {
         exitFullMode();
         return false;
     }
@@ -2143,30 +2202,73 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
         return;
     }
 
-    const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
-
-    if (fs.existsSync(asnotesDir)) {
+    // Check if already initialised at the configured (or default) root
+    const currentRootDir = vscode.workspace.getConfiguration('as-notes').get<string>('rootDirectory', '');
+    const currentNrp = computeNotesRootPaths(workspaceRoot.fsPath, currentRootDir);
+    if (fs.existsSync(currentNrp.asnotesDir)) {
         vscode.window.showInformationMessage('AS Notes: Workspace is already initialised.');
-        // Ensure we're in full mode
         if (!indexService?.isOpen) {
             await enterFullMode(context, workspaceRoot);
         }
         return;
     }
 
+    // Directory picker: let the user choose where to place the notes root
+    const WORKSPACE_ROOT_LABEL = '$(folder) Workspace root';
+    const CHOOSE_SUBFOLDER_LABEL = '$(folder-opened) Choose a subfolder...';
+    const pick = await vscode.window.showQuickPick(
+        [
+            { label: WORKSPACE_ROOT_LABEL, description: workspaceRoot.fsPath },
+            { label: CHOOSE_SUBFOLDER_LABEL, description: 'Select an existing subfolder as the notes root' },
+        ],
+        { placeHolder: 'Where should AS Notes store its data?' },
+    );
+    if (!pick) { return; }
+
+    let chosenRootDir = '';
+    if (pick.label === CHOOSE_SUBFOLDER_LABEL) {
+        const folders = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            defaultUri: workspaceRoot,
+            openLabel: 'Select Notes Root',
+        });
+        if (!folders || folders.length === 0) { return; }
+        const chosen = folders[0];
+        // Ensure chosen folder is inside the workspace root
+        const chosenNorm = chosen.fsPath.replace(/\\/g, '/').toLowerCase();
+        const wsNorm = workspaceRoot.fsPath.replace(/\\/g, '/').toLowerCase();
+        if (!chosenNorm.startsWith(wsNorm + '/') && chosenNorm !== wsNorm) {
+            vscode.window.showErrorMessage('AS Notes: The selected folder must be inside the workspace root.');
+            return;
+        }
+        if (chosenNorm !== wsNorm) {
+            chosenRootDir = chosen.fsPath.replace(/\\/g, '/').slice(wsNorm.length + 1);
+        }
+    }
+
+    // Save rootDirectory setting if a subfolder was chosen
+    if (chosenRootDir) {
+        await vscode.workspace.getConfiguration('as-notes').update('rootDirectory', chosenRootDir, vscode.ConfigurationTarget.Workspace);
+    }
+
+    // Compute paths for the chosen root
+    const nrp = computeNotesRootPaths(workspaceRoot.fsPath, chosenRootDir);
+    const nrUri = vscode.Uri.file(nrp.root);
+    notesRootPaths = nrp;
+    notesRootUri = nrUri;
+
     // Create .asnotes/ directory
-    fs.mkdirSync(asnotesDir, { recursive: true });
+    fs.mkdirSync(nrp.asnotesDir, { recursive: true });
 
     // Create kanban/ directory for Kanban boards
-    fs.mkdirSync(path.join(workspaceRoot.fsPath, 'kanban'), { recursive: true });
+    fs.mkdirSync(path.join(nrp.root, 'kanban'), { recursive: true });
 
     // Create templates/ directory with default Journal.md template
     const templateConfig = vscode.workspace.getConfiguration('as-notes');
     const templateFolder = templateConfig.get<string>('templateFolder', 'templates');
-    const templateFolderPath = computeTemplateFolderPath(
-        workspaceRoot.fsPath.replace(/\\/g, '/'),
-        templateFolder,
-    );
+    const templateFolderPath = computeTemplateFolderPath(nrp.rootUri, templateFolder);
     fs.mkdirSync(templateFolderPath, { recursive: true });
     const journalTemplatePath = `${templateFolderPath}/${JOURNAL_TEMPLATE_FILENAME}`;
     if (!fs.existsSync(journalTemplatePath)) {
@@ -2177,15 +2279,15 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     const notesFolder = templateConfig.get<string>('notesFolder', 'notes');
     const normalisedNotes = notesFolder.trim().replace(/^[/\\]+|[/\\]+$/g, '');
     if (normalisedNotes) {
-        const notesFolderPath = path.join(workspaceRoot.fsPath, normalisedNotes);
+        const notesFolderPath = path.join(nrp.root, normalisedNotes);
         fs.mkdirSync(notesFolderPath, { recursive: true });
     }
 
     // Create .gitignore inside .asnotes/ to exclude the DB file
-    fs.writeFileSync(path.join(asnotesDir, '.gitignore'), 'index.db\n');
+    fs.writeFileSync(path.join(nrp.asnotesDir, '.gitignore'), 'index.db\n');
 
-    // Create .asnotesignore at workspace root if it doesn't already exist.
-    ensureIgnoreFile(workspaceRoot.fsPath);
+    // Create .asnotesignore at notes root if it doesn't already exist.
+    ensureIgnoreFile(nrp.root);
 
     // Install git pre-commit hook to guard against committing unencrypted .enc.md files
     ensurePreCommitHook(workspaceRoot.fsPath);
@@ -2197,8 +2299,7 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
     const loggingEnabled = config.get<boolean>('enableLogging', false)
         || process.env.AS_NOTES_DEBUG === '1';
-    const logDir = path.join(asnotesDir, 'logs');
-    logService = new LogService(logDir, { enabled: loggingEnabled });
+    logService = new LogService(nrp.logDir, { enabled: loggingEnabled });
     if (logService.isEnabled) {
         logService.info('extension', 'initWorkspace: logging activated');
     }
@@ -2211,12 +2312,12 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
             cancellable: false,
         },
         async (progress) => {
-            const dbPath = path.join(asnotesDir, INDEX_DB);
             logService.info('extension', 'initWorkspace: initialising database');
-            indexService = new IndexService(dbPath, logService);
+            indexService = new IndexService(nrp.databasePath, logService);
             await indexService.initDatabase();
 
-            const initIgnoreService = new IgnoreService(path.join(workspaceRoot.fsPath, IGNORE_FILE)); indexScanner = new IndexScanner(indexService, workspaceRoot, initIgnoreService, logService);
+            const initIgnoreService = new IgnoreService(nrp.ignoreFilePath);
+            indexScanner = new IndexScanner(indexService, nrUri, initIgnoreService, logService);
 
             const result = await indexScanner.fullScan(progress);
             indexService.saveToFile();
@@ -2240,9 +2341,9 @@ async function rebuildIndex(): Promise<void> {
 
     // Ensure git pre-commit hook and .asnotesignore are present (idempotent)
     const root = getWorkspaceRoot();
-    if (root) {
+    if (root && notesRootPaths) {
         ensurePreCommitHook(root.fsPath);
-        ensureIgnoreFile(root.fsPath);
+        ensureIgnoreFile(notesRootPaths.root);
         ignoreService?.reload();
     }
 
@@ -2313,7 +2414,7 @@ async function cleanWorkspace(): Promise<void> {
         return;
     }
 
-    const asnotesDir = path.join(workspaceRoot.fsPath, ASNOTES_DIR);
+    const asnotesDir = notesRootPaths?.asnotesDir ?? path.join(workspaceRoot.fsPath, ASNOTES_DIR);
     if (!fs.existsSync(asnotesDir)) {
         vscode.window.showInformationMessage('AS Notes: Workspace is already clean (no .asnotes/ directory).');
         return;
@@ -2403,7 +2504,7 @@ async function discoverTemplates(basePath: string): Promise<string[]> {
     return results.sort();
 }
 
-async function insertTemplate(workspaceRoot: vscode.Uri): Promise<void> {
+async function insertTemplate(notesRoot: vscode.Uri): Promise<void> {
     if (!hasProEditor()) {
         vscode.window.showWarningMessage('AS Notes: Templates require a Pro licence.');
         return;
@@ -2418,7 +2519,7 @@ async function insertTemplate(workspaceRoot: vscode.Uri): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
     const templateFolder = config.get<string>('templateFolder', 'templates');
     const templateFolderPath = computeTemplateFolderPath(
-        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        notesRoot.fsPath.replace(/\\/g, '/'),
         templateFolder,
     );
 
@@ -2476,13 +2577,13 @@ async function insertTemplate(workspaceRoot: vscode.Uri): Promise<void> {
 
 // ── Daily journal ──────────────────────────────────────────────────────────
 
-async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
+async function openDailyJournal(notesRoot: vscode.Uri): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
     const journalFolder = config.get<string>('journalFolder', 'journals');
     const templateFolder = config.get<string>('templateFolder', 'templates');
 
     const paths = computeJournalPaths(
-        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        notesRoot.fsPath.replace(/\\/g, '/'),
         journalFolder,
         new Date(),
     );
@@ -2505,7 +2606,7 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
 
     // Read Journal.md from the templates directory (create with default if missing)
     const templateFolderPath = computeTemplateFolderPath(
-        workspaceRoot.fsPath.replace(/\\/g, '/'),
+        notesRoot.fsPath.replace(/\\/g, '/'),
         templateFolder,
     );
     const templateContent = await readTemplateFile(
@@ -2553,13 +2654,13 @@ async function openDailyJournal(workspaceRoot: vscode.Uri): Promise<void> {
  * Scans the configured journal folder and renames matching files,
  * then triggers a full index rebuild.
  */
-async function renameJournalFiles(workspaceRoot: vscode.Uri): Promise<void> {
+async function renameJournalFiles(notesRoot: vscode.Uri): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
     const journalFolder = config.get<string>('journalFolder', 'journals');
     const normalised = normaliseJournalFolder(journalFolder);
     const base = normalised
-        ? `${workspaceRoot.fsPath.replace(/\\/g, '/')}/${normalised}`
-        : workspaceRoot.fsPath.replace(/\\/g, '/');
+        ? `${notesRoot.fsPath.replace(/\\/g, '/')}/${normalised}`
+        : notesRoot.fsPath.replace(/\\/g, '/');
 
     const folderUri = vscode.Uri.file(base);
 
@@ -2633,7 +2734,9 @@ function startPeriodicScan(): void {
             const root = getWorkspaceRoot();
             if (root) {
                 ensurePreCommitHook(root.fsPath);
-                ensureIgnoreFile(root.fsPath);
+            }
+            if (notesRootPaths) {
+                ensureIgnoreFile(notesRootPaths.root);
                 ignoreService?.reload();
             }
 
@@ -2669,8 +2772,8 @@ function clearPeriodicScan(): void {
  * does not already exist. Existence is enforced; content is never overwritten.
  * Safe to call on every rebuild / periodic scan tick.
  */
-function ensureIgnoreFile(workspaceRootFsPath: string): void {
-    const ignoreFilePath = path.join(workspaceRootFsPath, IGNORE_FILE);
+function ensureIgnoreFile(notesRootFsPath: string): void {
+    const ignoreFilePath = path.join(notesRootFsPath, IGNORE_FILE);
     if (!fs.existsSync(ignoreFilePath)) {
         fs.writeFileSync(ignoreFilePath, DEFAULT_IGNORE_CONTENT, 'utf-8');
     }
@@ -2761,13 +2864,18 @@ function getSourcePathFromEnv(env: Record<string, any>): string | undefined {
 
     // vscode.Uri object (standard VS Code ≥1.72)
     if (typeof doc === 'object' && 'fsPath' in doc) {
-        return vscode.workspace.asRelativePath(doc as vscode.Uri, false);
+        return notesRootPaths
+            ? toNotesRelativePath(notesRootPaths.root, (doc as vscode.Uri).fsPath)
+            : vscode.workspace.asRelativePath(doc as vscode.Uri, false);
     }
 
     // URI string fallback
     if (typeof doc === 'string') {
         try {
-            return vscode.workspace.asRelativePath(vscode.Uri.parse(doc), false);
+            const parsed = vscode.Uri.parse(doc);
+            return notesRootPaths
+                ? toNotesRelativePath(notesRootPaths.root, parsed.fsPath)
+                : vscode.workspace.asRelativePath(parsed, false);
         } catch {
             return undefined;
         }

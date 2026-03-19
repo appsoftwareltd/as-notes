@@ -222,6 +222,12 @@
         "configuration": {
             "title": "AS Notes",
             "properties": {
+                "as-notes.rootDirectory": {
+                    "type": "string",
+                    "default": "",
+                    "scope": "resource",
+                    "description": "Subdirectory for AS Notes within the workspace (e.g. 'docs' or 'notes'). When empty, the workspace root is used. All AS Notes data (.asnotes, journals, templates, etc.) lives within this directory. Configure this per workspace, not globally. Warning: if you change this after initialisation, you must manually move your notes directory to the new location."
+                },
                 "as-notes.periodicScanInterval": {
                     "type": "number",
                     "default": 300,
@@ -231,7 +237,7 @@
                 "as-notes.journalFolder": {
                     "type": "string",
                     "default": "journals",
-                    "description": "Folder for daily journal files, relative to workspace root."
+                    "description": "Folder for daily journal files, relative to the AS Notes root directory."
                 },
                 "as-notes.licenceKey": {
                     "type": "string",
@@ -242,7 +248,7 @@
                 "as-notes.assetPath": {
                     "type": "string",
                     "default": "assets/images",
-                    "description": "Workspace-relative folder where dropped or pasted files are saved by VS Code's built-in markdown editor. AS Notes configures the built-in markdown.copyFiles.destination setting to use this path."
+                    "description": "Folder where dropped or pasted files are saved by VS Code's built-in markdown editor, relative to the AS Notes root directory. AS Notes configures the built-in markdown.copyFiles.destination setting to use this path."
                 },
                 "as-notes.enableLogging": {
                     "type": "boolean",
@@ -279,12 +285,12 @@
                 "as-notes.templateFolder": {
                     "type": "string",
                     "default": "templates",
-                    "description": "Folder for note templates, relative to workspace root. Templates are markdown files that can be inserted via the /Template slash command."
+                    "description": "Folder for note templates, relative to the AS Notes root directory. Templates are markdown files that can be inserted via the /Template slash command."
                 },
                 "as-notes.notesFolder": {
                     "type": "string",
                     "default": "notes",
-                    "description": "Folder for new notes, relative to workspace root. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands."
+                    "description": "Folder for new notes, relative to the AS Notes root directory. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands."
                 },
                 "as-notes.createNotesInCurrentDirectory": {
                     "type": "boolean",

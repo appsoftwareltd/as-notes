@@ -426,7 +426,7 @@ This allows users to "uninitialise" a workspace by simply deleting the `.asnotes
 
 ## Activation model
 
-The extension uses a `.asnotes/` directory in the workspace root as a project marker (analogous to `.git/` or `.obsidian/`). Its presence determines the operating mode.
+The extension uses a `.asnotes/` directory in the workspace root (or a configured `rootDirectory` subdirectory) as a project marker (analogous to `.git/` or `.obsidian/`). Its presence determines the operating mode.
 
 ### Passive mode
 
@@ -558,9 +558,71 @@ The **AS Notes: Clean Workspace** command (`as-notes.cleanWorkspace`) performs a
 3. `fs.rmSync(.asnotes/, { recursive: true, force: true })` — deletes the entire `.asnotes/` directory tree (index database, logs, git hook config).
 4. Shows an informational message directing the user to run **Initialise Workspace** to start fresh.
 
-`.asnotesignore` at the workspace root is intentionally preserved — it is a user-editable, version-controlled configuration file.
+`.asnotesignore` at the AS Notes root is intentionally preserved -- it is a user-editable, version-controlled configuration file.
 
 If the `.asnotes/` directory does not exist, the command shows an informational message and returns early. If the directory deletion fails (e.g. file lock on Windows), an error message is displayed.
+
+---
+
+## Root directory (subdirectory mode)
+
+### Setting: `as-notes.rootDirectory`
+
+The `as-notes.rootDirectory` setting allows AS Notes to operate in a subdirectory of the workspace rather than the workspace root. When empty (default), behaviour is identical to previous versions (full backward compatibility). When set to a relative path like `docs` or `notes/wiki`, all AS Notes data lives under that directory.
+
+The setting is declared with `"scope": "resource"` in the extension manifest. This means VS Code resolves it per workspace folder rather than globally. The value is inherently workspace-specific (a relative path within that workspace), so it should always be set in Workspace settings, never in User settings. The `resource` scope ensures the setting appears in the correct section of the Settings UI and is stored in `.vscode/settings.json`.
+
+### NotesRootService
+
+`NotesRootService.ts` is a pure-logic module (no VS Code imports) that centralises all path computation related to the notes root:
+
+| Export | Purpose |
+|---|---|
+| `normaliseRootDirectory(dir)` | Strips leading/trailing slashes, normalises separators |
+| `computeNotesRoot(workspaceRoot, rootDirectory)` | Returns the absolute notes root path |
+| `computeNotesRootPaths(workspaceRoot, rootDirectory)` | Returns a `NotesRootPaths` object with all well-known paths (`root`, `rootUri`, `asnotesDir`, `databasePath`, `logDir`, `ignoreFilePath`) |
+| `toNotesRelativePath(notesRoot, absolutePath)` | Computes a notes-root-relative path (replacing `vscode.workspace.asRelativePath()` for index lookups) |
+| `isInsideNotesRoot(notesRoot, absolutePath)` | Checks whether a path is inside the notes root |
+
+### Architecture pattern
+
+- **Single source of truth:** Module-level `notesRootPaths: NotesRootPaths` and `notesRootUri: vscode.Uri` in `extension.ts`, computed once during activation from the workspace root and `rootDirectory` setting.
+- **Service injection:** Services receive the notes root via constructor parameter (`WikilinkFileService`, `WikilinkRenameTracker`, `BacklinkPanelProvider`) or setter method (`SearchPanelProvider.setNotesRootUri()`, `TaskPanelProvider.setNotesRootUri()`).
+- **Scoped scanning:** `IndexScanner` uses `vscode.RelativePattern(notesRoot, '**/*.{md,markdown}')` to limit `findFiles()` to the notes root. The same pattern scopes encrypted file scanning.
+- **Notes-root-relative paths:** All paths stored in the index (the `pages.path` column) are relative to the notes root, not the workspace root. The `toNotesRelativePath()` function replaces `workspace.asRelativePath()` throughout event handlers, rename tracking, and backlink resolution.
+- **Fallback safety:** Where `notesRootPaths` may be null (e.g. before activation completes or during teardown), code falls back to `vscode.workspace.asRelativePath()` or `workspaceFolders[0]`.
+
+### Initialisation flow
+
+When **Initialise Workspace** runs and `rootDirectory` is not yet configured:
+
+1. A `QuickPick` offers "Workspace root" or "Choose subdirectory..."
+2. If "Choose subdirectory..." is selected, `showOpenDialog` opens a folder picker scoped to the workspace
+3. The chosen relative path is saved to `as-notes.rootDirectory` as a workspace-scoped setting
+4. `.asnotes/`, `.asnotesignore`, and configured folders are created at the chosen root
+5. The extension enters full mode with scanning scoped to the chosen root
+
+### Configuration change handling
+
+When `as-notes.rootDirectory` changes after activation, the extension shows a warning: "AS Notes root directory changed. Reload the window for changes to take effect.", with a "Reload Window" action. The extension does not auto-migrate data.
+
+### Feature scoping to the notes root
+
+When `rootDirectory` is configured, AS Notes features are completely invisible for markdown files outside the notes root. A `README.md` at the workspace root will have no wikilink highlighting, no hover tooltips, no completions, and no slash commands.
+
+**Language providers:** The `DocumentSelector` used for all `register*Provider` calls includes a `RelativePattern` when `rootDirectory` is set:
+
+```typescript
+const markdownSelector = nrUri
+    ? { language: 'markdown', pattern: new RelativePattern(nrUri, '**') }
+    : { language: 'markdown' };
+```
+
+VS Code only invokes the provider when both the language and the pattern match. When `rootDirectory` is empty, no pattern is applied (all markdown files match, same as before).
+
+**WikilinkDecorationManager:** Receives `notesRootFsPath` and guards `rebuildCacheAndDecorate()` and `applyDecorations()` with `isInsideNotesRoot()`. Files outside the root get stale decorations cleared.
+
+**Event handlers:** All seven event handlers in `extension.ts` (`onDidSaveTextDocument`, `onDidChangeTextDocument` x2, `onDidCreateFiles`, `onDidDeleteFiles`, `onDidRenameFiles`, `onDidChangeActiveTextEditor`) include an early `isInsideNotesRoot()` bail-out. When `notesRootPaths` is null (backward compat), the guard is skipped.
 
 ---
 

@@ -27,11 +27,17 @@ export class SearchPanelProvider implements vscode.WebviewViewProvider {
 
     private _view?: vscode.WebviewView;
     private _fileService?: { navigateToFile(targetUri: vscode.Uri, pageFileName: string, sourceUri?: vscode.Uri): Promise<void> };
+    private _notesRootUri?: vscode.Uri;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
         private readonly _indexService: IndexService,
     ) { }
+
+    /** Set the notes root URI for file navigation. */
+    setNotesRootUri(uri: vscode.Uri): void {
+        this._notesRootUri = uri;
+    }
 
     /** Inject the file service once it's available (after index is ready). */
     setFileService(fileService: { navigateToFile(targetUri: vscode.Uri, pageFileName: string, sourceUri?: vscode.Uri): Promise<void> }): void {
@@ -124,18 +130,18 @@ export class SearchPanelProvider implements vscode.WebviewViewProvider {
         const pagePath = msg.pagePath as string;
         const kind = msg.kind as string;
 
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-        if (!workspaceRoot) { return; }
+        const rootUri = this._notesRootUri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!rootUri) { return; }
 
         if (kind === 'forward' || !pagePath) {
-            // Forward reference — create file via navigateToFile
+            // Forward reference -- create file via navigateToFile
             if (this._fileService) {
-                const targetUri = vscode.Uri.joinPath(workspaceRoot, `${pageFileName}.md`);
+                const targetUri = vscode.Uri.joinPath(rootUri, `${pageFileName}.md`);
                 await this._fileService.navigateToFile(targetUri, pageFileName);
             }
         } else {
-            // Existing page or alias — open the file directly
-            const fileUri = vscode.Uri.joinPath(workspaceRoot, pagePath);
+            // Existing page or alias -- open the file directly
+            const fileUri = vscode.Uri.joinPath(rootUri, pagePath);
             const document = await vscode.workspace.openTextDocument(fileUri);
             await vscode.window.showTextDocument(document);
         }
