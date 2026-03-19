@@ -4,6 +4,8 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+- Calendar in side bar for navigating Journal files
+
 ## [2.2.4] - 2026-03-19
 
 - Root directory setting so that AS Notes can be nested in project folders without interference
