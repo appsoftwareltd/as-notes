@@ -488,16 +488,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     );
     /** Validate a licence key with appropriate UI feedback. */
     function validateLicenceKeyWithUI(key: string): void {
-        activateLicenceKey(key, context).then((state) => {
-            const wasValid = hasProEditorAccess(licenceState);
+        const activation = activateLicenceKey(key, context);
+
+        // Only show a progress spinner if the server check takes a while.
+        // Fast paths (ECONNREFUSED, local-only) resolve in <500ms and skip the spinner.
+        const progressTimer = setTimeout(() => {
+            vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: 'AS Notes: Verifying licence key...' },
+                () => activation,
+            );
+        }, 500);
+
+        activation.then((state) => {
+            clearTimeout(progressTimer);
+
             licenceState = state;
             if (licenceState.status === 'invalid' || licenceState.status === 'not-entered') {
                 showLicenceWarning();
-            } else if (licenceState.status === 'valid' && !wasValid) {
-                vscode.window.showInformationMessage('AS Notes: Licence activated successfully \u2714');
+            } else if (licenceState.status === 'valid') {
+
+                // Show licence activated regardless of whether licence was valid before or
+                // if product has changed - the user should always see confirmation
+                //
+                // const previousProduct = licenceState.product;
+                // const wasValid = hasProEditorAccess(licenceState);
+                // ...
+                // ... && (!wasValid || licenceState.product !== previousProduct)
+
+                const tierLabel = licenceState.product === 'pro_ai_sync' ? 'Pro AI & Sync' : 'Pro Editor';
+                vscode.window.showInformationMessage(`AS Notes: Licence activated - ${tierLabel} \u2714`);
             }
             updateFullModeStatusBar();
         }).catch((err) => {
+            clearTimeout(progressTimer);
             console.warn('as-notes: licence validation failed:', err);
         });
     }

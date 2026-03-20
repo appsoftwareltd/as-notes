@@ -88,9 +88,8 @@ describe('activateLicenceKey', () => {
         expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
     });
 
-    it('returns valid pro_editor on successful verification', async () => {
+    it('returns valid pro_editor when server confirms (200)', async () => {
         mockVerifyResult.mockReturnValue(validResult('pro_editor'));
-        // Stub fetch so background notification doesn't fail
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
         const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
@@ -98,13 +97,42 @@ describe('activateLicenceKey', () => {
         expect(result.product).toBe('pro_editor');
     });
 
-    it('returns valid pro_ai_sync on successful verification', async () => {
+    it('returns valid pro_ai_sync when server confirms (200)', async () => {
         mockVerifyResult.mockReturnValue(validResult('pro_ai_sync'));
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
         const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_ai_sync');
+    });
+
+    it('returns invalid when server reports 403 (revoked)', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
+        expect(result.status).toBe('invalid');
+        expect(result.product).toBeNull();
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
+        expect(mockSecrets.has('as-notes.licenceState')).toBe(false);
+    });
+
+    it('returns invalid when server reports 404 (not found)', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
+        expect(result.status).toBe('invalid');
+        expect(result.product).toBeNull();
+    });
+
+    it('returns valid when server returns 500 (optimistic)', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
+        expect(result.status).toBe('valid');
+        expect(result.product).toBe('pro_editor');
     });
 
     it('persists state to SecretStorage on success', async () => {
@@ -126,7 +154,7 @@ describe('activateLicenceKey', () => {
         expect(result).not.toHaveProperty('serverUnreachable');
     });
 
-    it('returns valid even when server notification fails (non-blocking)', async () => {
+    it('returns valid when server is unreachable (offline-first)', async () => {
         mockVerifyResult.mockReturnValue(validResult('pro_editor'));
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 

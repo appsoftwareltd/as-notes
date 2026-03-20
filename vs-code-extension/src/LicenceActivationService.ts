@@ -146,11 +146,17 @@ export async function loadCachedLicenceState(
 }
 
 /**
- * Activate a licence key: verify cryptographically, persist state, and
- * fire a background server notification.
+ * Activate a licence key: verify cryptographically, check the server for
+ * revocation (with a short timeout), persist state, and return the result.
  *
- * Returns the resulting LicenceState immediately after local verification.
- * The server POST happens in the background and does not block the result.
+ * Flow:
+ *   1. Verify Ed25519 signature locally (instant, offline).
+ *   2. If valid, POST to the server with a 3-second timeout.
+ *   3. If the server responds 403/404 (revoked/unknown), return invalid.
+ *   4. If the server confirms (200) or is unreachable/errors, return valid.
+ *
+ * This ensures that revoked keys are caught immediately when online, while
+ * offline activation still works via the cryptographic signature alone.
  */
 export async function activateLicenceKey(
     key: string,
@@ -171,15 +177,17 @@ export async function activateLicenceKey(
         return invalidLicenceState();
     }
 
+    // Check with the server (short timeout -- don't block the user long).
+    const revoked = await checkServerRevocationStatus(trimmed, context);
+    if (revoked) {
+        await clearPersistedState(context.secrets);
+        return invalidLicenceState();
+    }
+
     // Build and persist valid state.
     const product = result.product as LicenceProduct;
     const state: LicenceState = { status: 'valid', product };
     await persistLicenceState(context.secrets, trimmed, state);
-
-    // Background server notification (non-blocking).
-    notifyServer(trimmed, context).catch(() => {
-        // Silently ignore -- server activation is best-effort.
-    });
 
     return state;
 }
@@ -235,26 +243,44 @@ export async function checkServerForRevocation(
     }
 }
 
-// ── Background server notification ─────────────────────────────────────────
+// ── Server revocation check at activation ──────────────────────────────────
 
-async function notifyServer(
+/**
+ * POST to the server to check whether a key has been revoked.
+ * Returns true if the server explicitly reports the key as revoked (403/404).
+ * Returns false (not revoked) if the server confirms (200), is unreachable,
+ * times out, or returns any other error -- offline-first, optimistic.
+ *
+ * Uses a short 3-second timeout so the user isn't blocked long.
+ */
+async function checkServerRevocationStatus(
     key: string,
     context: vscode.ExtensionContext,
-): Promise<void> {
-    const baseUrl = getBaseUrl();
-    const response = await fetch(`${baseUrl}/api/v1/licence/activate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            licenceKey: key,
-            deviceId: vscode.env.machineId,
-            deviceInfo: `VS Code ${vscode.version} / ${getOsPlatformLabel()}`,
-        }),
-        signal: AbortSignal.timeout(10_000),
-    });
+): Promise<boolean> {
+    try {
+        const baseUrl = getBaseUrl();
+        const response = await fetch(`${baseUrl}/api/v1/licence/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                licenceKey: key,
+                deviceId: vscode.env.machineId,
+                deviceInfo: `VS Code ${vscode.version} / ${getOsPlatformLabel()}`,
+            }),
+            signal: AbortSignal.timeout(3_000),
+        });
 
-    if (response.ok) {
+        // Record successful server contact.
         await context.secrets.store(SECRET_LAST_SERVER_CHECK, Date.now().toString());
+
+        if (response.status === 403 || response.status === 404) {
+            return true; // revoked
+        }
+
+        return false; // confirmed or unknown error -- not revoked
+    } catch {
+        // Unreachable / timeout -- not revoked (optimistic).
+        return false;
     }
 }
 
