@@ -1,29 +1,28 @@
 /**
- * LicenceActivationService — handles licence activation and periodic
- * validation against the AS Notes licence server at asnotes.io.
+ * LicenceActivationService -- handles licence activation using Ed25519
+ * cryptographic offline verification, with background server notification
+ * for tracking and revocation.
  *
  * ## Flow
  *
- *   1. User enters licence key (ASNO-XXXX-XXXX-XXXX-XXXX) in settings.
- *   2. Extension calls POST /api/v1/licence/activate → server returns JWT.
- *   3. JWT is stored in VS Code's SecretStorage (OS keychain, encrypted).
- *   4. On subsequent startups, if the cached JWT is not expired the
- *      extension uses it directly. If expired, it re-activates.
- *   5. A periodic background validation (POST /api/v1/licence/validate)
- *      runs every 24 hours to detect revocation.
+ *   1. User enters licence key (ASNO-XXXX-XXXX-...-XXXX).
+ *   2. Extension verifies the Ed25519 signature locally (instant, offline).
+ *   3. On success, state is persisted to SecretStorage and the user gets
+ *      immediate access to Pro features.
+ *   4. A background POST to the server records the activation for analytics
+ *      and revocation tracking. Failure is non-blocking.
+ *   5. A periodic background check (every 7 days) POSTs to the server to
+ *      detect revocation.
  *
- * ## Offline fallback
+ * ## Migration
  *
- *   When the server is unreachable, the extension falls back to a
- *   format-based check: if the licence key matches the ASNO-XXXX format
- *   regex, Pro Editor access is granted with `serverUnreachable: true`.
- *   This is a temporary measure until cryptographic offline keys are
- *   implemented.
+ *   Old SecretStorage keys (activationToken, lastValidated) are cleaned
+ *   up on first launch after upgrade via `migrateOldSecrets()`.
  */
 
 import * as vscode from 'vscode';
+import { verifyLicenceKey, type VerifyResult } from './SignedLicenceService.js';
 import {
-    validateLicenceKeyFormat,
     defaultLicenceState,
     invalidLicenceState,
     type LicenceState,
@@ -32,15 +31,17 @@ import {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const SECRET_TOKEN = 'as-notes.activationToken';
 const SECRET_LICENCE_KEY = 'as-notes.licenceKey';
-const SECRET_LAST_VALIDATED = 'as-notes.lastValidated';
 const SECRET_LICENCE_STATE = 'as-notes.licenceState';
+const SECRET_LAST_SERVER_CHECK = 'as-notes.lastServerCheck';
+
+/** Legacy keys from the JWT-based system -- cleaned up on migration. */
+const LEGACY_SECRET_KEYS = [
+    'as-notes.activationToken',
+    'as-notes.lastValidated',
+];
 
 const DEFAULT_BASE_URL = 'https://www.asnotes.io';
-
-const MAX_RETRIES = 3;
-const RETRY_DELAYS_MS = [1_000, 4_000, 16_000];
 
 // ── Base URL resolution ────────────────────────────────────────────────────
 
@@ -48,123 +49,94 @@ function getBaseUrl(): string {
     return process.env.AS_NOTES_LICENCE_SERVER_URL || DEFAULT_BASE_URL;
 }
 
-// ── JWT helpers (decode only — no signature verification) ──────────────────
-
-interface JwtPayload {
-    sub?: string;
-    licenceKey?: string;
-    product?: string;
-    iat?: number;
-    exp?: number;
-}
-
-function decodeJwtPayload(token: string): JwtPayload | null {
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) { return null; }
-        const payload = Buffer.from(parts[1], 'base64url').toString('utf-8');
-        return JSON.parse(payload) as JwtPayload;
-    } catch {
-        return null;
-    }
-}
-
-function isTokenExpired(token: string): boolean {
-    const payload = decodeJwtPayload(token);
-    if (!payload?.exp) { return true; }
-    return Date.now() >= payload.exp * 1000;
-}
-
-function extractProduct(token: string): LicenceProduct | null {
-    const payload = decodeJwtPayload(token);
-    if (payload?.product === 'pro_editor' || payload?.product === 'pro_ai_sync') {
-        return payload.product;
-    }
-    return null;
-}
-
-// ── HTTP helpers ───────────────────────────────────────────────────────────
-
-async function fetchWithRetry(
-    url: string,
-    body: Record<string, string>,
-): Promise<Response> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-                signal: AbortSignal.timeout(10_000),
-            });
-            // Only retry on 5xx
-            if (response.status >= 500 && attempt < MAX_RETRIES) {
-                lastError = new Error(`Server error ${response.status}`);
-                await delay(RETRY_DELAYS_MS[attempt]);
-                continue;
-            }
-            return response;
-        } catch (err) {
-            lastError = err;
-            if (attempt < MAX_RETRIES) {
-                await delay(RETRY_DELAYS_MS[attempt]);
-            }
-        }
-    }
-    throw lastError;
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 // ── Persisted state helpers ────────────────────────────────────────────────
 
 async function persistLicenceState(
     secrets: vscode.SecretStorage,
-    token: string,
     key: string,
     state: LicenceState,
 ): Promise<void> {
-    await secrets.store(SECRET_TOKEN, token);
     await secrets.store(SECRET_LICENCE_KEY, key);
-    await secrets.store(SECRET_LAST_VALIDATED, Date.now().toString());
     await secrets.store(SECRET_LICENCE_STATE, JSON.stringify(state));
 }
 
 async function clearPersistedState(secrets: vscode.SecretStorage): Promise<void> {
-    await secrets.delete(SECRET_TOKEN);
     await secrets.delete(SECRET_LICENCE_KEY);
-    await secrets.delete(SECRET_LAST_VALIDATED);
     await secrets.delete(SECRET_LICENCE_STATE);
+    await secrets.delete(SECRET_LAST_SERVER_CHECK);
 }
 
 async function loadPersistedState(secrets: vscode.SecretStorage): Promise<{
-    token: string | undefined;
     key: string | undefined;
-    lastValidated: number | undefined;
     state: LicenceState | undefined;
+    lastServerCheck: number | undefined;
 }> {
-    const token = await secrets.get(SECRET_TOKEN);
     const key = await secrets.get(SECRET_LICENCE_KEY);
-    const lastValidatedStr = await secrets.get(SECRET_LAST_VALIDATED);
     const stateStr = await secrets.get(SECRET_LICENCE_STATE);
+    const lastCheckStr = await secrets.get(SECRET_LAST_SERVER_CHECK);
 
     return {
-        token,
         key,
-        lastValidated: lastValidatedStr ? parseInt(lastValidatedStr, 10) : undefined,
         state: stateStr ? JSON.parse(stateStr) as LicenceState : undefined,
+        lastServerCheck: lastCheckStr ? parseInt(lastCheckStr, 10) : undefined,
     };
+}
+
+// ── Migration ──────────────────────────────────────────────────────────────
+
+/**
+ * Remove legacy SecretStorage keys from the JWT-based system.
+ * Safe to call multiple times -- deleting a non-existent key is a no-op.
+ */
+export async function migrateOldSecrets(
+    secrets: vscode.SecretStorage,
+): Promise<void> {
+    for (const key of LEGACY_SECRET_KEYS) {
+        await secrets.delete(key);
+    }
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Load the cached licence state from SecretStorage without contacting the server.
- * Used on startup to restore the previous licence state immediately.
- * Returns defaultLicenceState() if nothing is cached.
+ * Verify the licence key from VS Code settings on startup.
+ *
+ * Reads `as-notes.licenceKey` from configuration, verifies it
+ * cryptographically (instant, offline), persists the result to
+ * SecretStorage, and returns the derived LicenceState.
+ *
+ * This replaces `loadCachedLicenceState` -- instead of trusting a cached
+ * SecretStorage value, the extension always re-derives state from the
+ * canonical settings key. This eliminates race conditions with
+ * SecretStorage async IPC and ensures old-format keys are immediately
+ * rejected after upgrade.
+ */
+export async function verifyLicenceFromSettings(
+    context: vscode.ExtensionContext,
+): Promise<LicenceState> {
+    const key = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '').trim();
+
+    if (!key) {
+        await clearPersistedState(context.secrets);
+        return defaultLicenceState();
+    }
+
+    const result = verifyLicenceKey(key);
+    if (!result.valid) {
+        await clearPersistedState(context.secrets);
+        return invalidLicenceState();
+    }
+
+    const product = result.product as LicenceProduct;
+    const state: LicenceState = { status: 'valid', product };
+    await persistLicenceState(context.secrets, key, state);
+    return state;
+}
+
+/**
+ * Load the cached licence state from SecretStorage without any verification.
+ * Used by periodic revocation checks. Returns defaultLicenceState() if
+ * nothing is cached.
  */
 export async function loadCachedLicenceState(
     context: vscode.ExtensionContext,
@@ -174,148 +146,116 @@ export async function loadCachedLicenceState(
 }
 
 /**
- * Activate a licence key against the server and return the resulting
- * LicenceState. Stores the JWT and metadata in SecretStorage.
+ * Activate a licence key: verify cryptographically, persist state, and
+ * fire a background server notification.
  *
- * Safe to call repeatedly — uses cached token when available and valid.
+ * Returns the resulting LicenceState immediately after local verification.
+ * The server POST happens in the background and does not block the result.
  */
-export async function activateWithServer(
+export async function activateLicenceKey(
     key: string,
     context: vscode.ExtensionContext,
 ): Promise<LicenceState> {
-    // Not entered — clear persisted state.
-    const formatStatus = validateLicenceKeyFormat(key);
-    if (formatStatus === 'not-entered') {
+    const trimmed = key.trim();
+
+    // Not entered -- clear persisted state.
+    if (!trimmed) {
         await clearPersistedState(context.secrets);
         return defaultLicenceState();
     }
 
-    // Format invalid — clear and return immediately.
-    if (formatStatus === 'invalid') {
+    // Verify the key cryptographically (offline, instant).
+    const result = verifyLicenceKey(trimmed);
+    if (!result.valid) {
         await clearPersistedState(context.secrets);
         return invalidLicenceState();
     }
 
-    // Key format is valid — check cached token.
-    const persisted = await loadPersistedState(context.secrets);
+    // Build and persist valid state.
+    const product = result.product as LicenceProduct;
+    const state: LicenceState = { status: 'valid', product };
+    await persistLicenceState(context.secrets, trimmed, state);
 
-    // If we have a cached token for this exact key and it's not expired, reuse it.
-    if (persisted.token && persisted.key === key && !isTokenExpired(persisted.token) && persisted.state) {
-        return persisted.state;
-    }
+    // Background server notification (non-blocking).
+    notifyServer(trimmed, context).catch(() => {
+        // Silently ignore -- server activation is best-effort.
+    });
 
-    // Need to activate (or re-activate) with the server.
-    try {
-        const baseUrl = getBaseUrl();
-        const response = await fetchWithRetry(`${baseUrl}/api/v1/licence/activate`, {
-            licenceKey: key,
-            deviceId: vscode.env.machineId,
-            deviceInfo: `VS Code ${vscode.version} / ${getOsPlatformLabel()}`,
-        });
-
-        if (response.ok) {
-            const data = await response.json() as { token: string; expiresAt: string };
-            const product = extractProduct(data.token);
-            const state: LicenceState = {
-                status: 'valid',
-                product,
-            };
-            await persistLicenceState(context.secrets, data.token, key, state);
-            return state;
-        }
-
-        // Handle specific error statuses per spec
-        if (response.status === 403 || response.status === 404) {
-            await clearPersistedState(context.secrets);
-            return invalidLicenceState();
-        }
-
-        // 400 = extension bug, log and return invalid
-        if (response.status === 400) {
-            console.warn('as-notes: licence activation returned 400 (bad request) — possible extension bug');
-            return invalidLicenceState();
-        }
-
-        // Other errors — fall through to grace period
-        throw new Error(`Unexpected status ${response.status}`);
-
-    } catch (err) {
-        // Server unreachable or all retries exhausted — fall back to format check
-        return applyFormatFallback(context.secrets, key);
-    }
+    return state;
 }
 
 /**
- * Validate the current licence key against the server (lightweight check).
- * Returns the updated LicenceState. Call this periodically (every 24h).
+ * Periodic server check for revocation. Call this every 7 days.
+ *
+ * If the server reports the key as revoked, clears state and returns
+ * an invalid LicenceState. If the server is unreachable, returns the
+ * current cached state unchanged (optimistic).
  */
-export async function validateWithServer(
+export async function checkServerForRevocation(
     context: vscode.ExtensionContext,
 ): Promise<LicenceState> {
     const persisted = await loadPersistedState(context.secrets);
 
-    if (!persisted.key || !persisted.token) {
-        return defaultLicenceState();
+    if (!persisted.key || !persisted.state || persisted.state.status !== 'valid') {
+        return persisted.state ?? defaultLicenceState();
     }
 
     try {
         const baseUrl = getBaseUrl();
-        const response = await fetchWithRetry(`${baseUrl}/api/v1/licence/validate`, {
-            licenceKey: persisted.key,
+        const response = await fetch(`${baseUrl}/api/v1/licence/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                licenceKey: persisted.key,
+                deviceId: vscode.env.machineId,
+                deviceInfo: `VS Code ${vscode.version} / ${getOsPlatformLabel()}`,
+            }),
+            signal: AbortSignal.timeout(10_000),
         });
 
+        // Record successful server contact.
+        await context.secrets.store(SECRET_LAST_SERVER_CHECK, Date.now().toString());
+
         if (response.ok) {
-            const data = await response.json() as {
-                valid: boolean;
-                product: string;
-                revoked: boolean;
-                issuedAt: string;
-            };
-
-            if (data.revoked || !data.valid) {
-                await clearPersistedState(context.secrets);
-                return invalidLicenceState();
-            }
-
-            // Update last validated timestamp
-            const product = (data.product === 'pro_editor' || data.product === 'pro_ai_sync')
-                ? data.product as LicenceProduct
-                : null;
-            const state: LicenceState = { status: 'valid', product };
-            await context.secrets.store(SECRET_LAST_VALIDATED, Date.now().toString());
-            await context.secrets.store(SECRET_LICENCE_STATE, JSON.stringify(state));
-            return state;
+            // Server confirmed -- keep current state.
+            return persisted.state;
         }
 
         if (response.status === 403 || response.status === 404) {
+            // Revoked or not found -- invalidate.
             await clearPersistedState(context.secrets);
             return invalidLicenceState();
         }
 
-        throw new Error(`Unexpected status ${response.status}`);
-
+        // Other errors -- keep current state (optimistic).
+        return persisted.state;
     } catch {
-        // Server unreachable — fall back to format check on persisted key
-        return applyFormatFallback(context.secrets, persisted.key ?? '');
+        // Server unreachable -- keep current state (optimistic).
+        return persisted.state;
     }
 }
 
-// ── Offline format fallback ─────────────────────────────────────────────────
+// ── Background server notification ─────────────────────────────────────────
 
-/**
- * When the server is unreachable, grant Pro Editor access if the key
- * passes the ASNO-XXXX-XXXX-XXXX-XXXX format check. This is a temporary
- * fallback until cryptographic offline keys are implemented.
- *
- * Persists the resulting state to SecretStorage so it survives restarts.
- */
-async function applyFormatFallback(secrets: vscode.SecretStorage, key: string): Promise<LicenceState> {
-    if (validateLicenceKeyFormat(key) === 'valid') {
-        const state: LicenceState = { status: 'valid', product: 'pro_editor', serverUnreachable: true };
-        await persistLicenceState(secrets, '', key, state);
-        return state;
+async function notifyServer(
+    key: string,
+    context: vscode.ExtensionContext,
+): Promise<void> {
+    const baseUrl = getBaseUrl();
+    const response = await fetch(`${baseUrl}/api/v1/licence/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            licenceKey: key,
+            deviceId: vscode.env.machineId,
+            deviceInfo: `VS Code ${vscode.version} / ${getOsPlatformLabel()}`,
+        }),
+        signal: AbortSignal.timeout(10_000),
+    });
+
+    if (response.ok) {
+        await context.secrets.store(SECRET_LAST_SERVER_CHECK, Date.now().toString());
     }
-    return { ...defaultLicenceState(), serverUnreachable: true };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

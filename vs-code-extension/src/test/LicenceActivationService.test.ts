@@ -9,32 +9,27 @@ const secretStorageMock = {
     delete: vi.fn(async (key: string) => { mockSecrets.delete(key); }),
 };
 
+let mockLicenceKeySetting = '';
+
 vi.mock('vscode', () => ({
     env: { machineId: 'test-machine-id' },
     version: '1.95.0',
+    workspace: {
+        getConfiguration: () => ({
+            get: (_key: string, defaultValue: string) => mockLicenceKeySetting || defaultValue,
+        }),
+    },
 }), { virtual: true });
 
+// ── Mock SignedLicenceService ──────────────────────────────────────────────
+
+const mockVerifyResult = vi.fn();
+
+vi.mock('../SignedLicenceService.js', () => ({
+    verifyLicenceKey: (...args: unknown[]) => mockVerifyResult(...args),
+}));
+
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-const VALID_KEY = 'ASNO-A1B2-C3D4-E5F6-7890';
-
-/**
- * Build a minimal JWT token with the given payload claims.
- * No real signing — just base64url-encoded header.payload.signature.
- */
-function buildTestJwt(payload: Record<string, unknown>): string {
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-    return `${header}.${body}.fake-signature`;
-}
-
-function futureUnix(days: number): number {
-    return Math.floor((Date.now() + days * 86_400_000) / 1000);
-}
-
-function pastUnix(days: number): number {
-    return Math.floor((Date.now() - days * 86_400_000) / 1000);
-}
 
 function buildContext(): { secrets: typeof secretStorageMock; extension: { id: string } } {
     return {
@@ -43,171 +38,144 @@ function buildContext(): { secrets: typeof secretStorageMock; extension: { id: s
     } as any;
 }
 
+function validResult(product: string = 'pro_editor') {
+    return { valid: true, product, serial: 12345, issuedAt: new Date() };
+}
+
 // ── Import the module under test (after mocks) ────────────────────────────
 
-import { activateWithServer, validateWithServer } from '../LicenceActivationService.js';
+import {
+    activateLicenceKey,
+    checkServerForRevocation,
+    loadCachedLicenceState,
+    migrateOldSecrets,
+    verifyLicenceFromSettings,
+} from '../LicenceActivationService.js';
 
 // ── Test suites ────────────────────────────────────────────────────────────
 
-describe('activateWithServer', () => {
+describe('activateLicenceKey', () => {
 
     beforeEach(() => {
         mockSecrets.clear();
         vi.restoreAllMocks();
+        mockVerifyResult.mockReturnValue({ valid: false });
     });
 
     afterEach(() => {
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
     });
 
     it('returns not-entered for empty key and clears secrets', async () => {
-        mockSecrets.set('as-notes.activationToken', 'old-token');
-        const result = await activateWithServer('', buildContext() as any);
+        mockSecrets.set('as-notes.licenceKey', 'old-key');
+        const result = await activateLicenceKey('', buildContext() as any);
         expect(result.status).toBe('not-entered');
         expect(result.product).toBeNull();
-        expect(mockSecrets.has('as-notes.activationToken')).toBe(false);
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
     });
 
-    it('returns invalid for malformed key', async () => {
-        const result = await activateWithServer('bad-key', buildContext() as any);
+    it('returns not-entered for whitespace-only key', async () => {
+        const result = await activateLicenceKey('   ', buildContext() as any);
+        expect(result.status).toBe('not-entered');
+    });
+
+    it('returns invalid when crypto verification fails', async () => {
+        mockVerifyResult.mockReturnValue({ valid: false });
+        const result = await activateLicenceKey('ASNO-INVALID-KEY', buildContext() as any);
         expect(result.status).toBe('invalid');
         expect(result.product).toBeNull();
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
     });
 
-    it('uses cached token when present, matching key, and not expired', async () => {
-        const token = buildTestJwt({
-            sub: 'user1',
-            licenceKey: VALID_KEY,
-            product: 'pro_editor',
-            exp: futureUnix(30),
-        });
-        const state = JSON.stringify({ status: 'valid', product: 'pro_editor' });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-        mockSecrets.set('as-notes.lastValidated', Date.now().toString());
-        mockSecrets.set('as-notes.licenceState', state);
+    it('returns valid pro_editor on successful verification', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        // Stub fetch so background notification doesn't fail
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
-        const result = await activateWithServer(VALID_KEY, buildContext() as any);
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_editor');
     });
 
-    it('calls server when cached token is for a different key', async () => {
-        const token = buildTestJwt({
-            product: 'pro_editor',
-            exp: futureUnix(30),
-        });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', 'ASNO-1111-2222-3333-4444');
-        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+    it('returns valid pro_ai_sync on successful verification', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_ai_sync'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
-        // Mock fetch — return a successful activation
-        const newToken = buildTestJwt({
-            product: 'pro_ai_sync',
-            exp: futureUnix(365),
-        });
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: async () => ({ token: newToken, expiresAt: '2027-03-16T12:00:00.000Z' }),
-        }));
-
-        const result = await activateWithServer(VALID_KEY, buildContext() as any);
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_ai_sync');
-        expect(mockSecrets.get('as-notes.activationToken')).toBe(newToken);
-        expect(mockSecrets.get('as-notes.licenceKey')).toBe(VALID_KEY);
-
-        vi.unstubAllGlobals();
     });
 
-    it('calls server on successful activation and persists state', async () => {
-        const serverToken = buildTestJwt({
-            product: 'pro_editor',
-            exp: futureUnix(365),
-        });
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: async () => ({ token: serverToken, expiresAt: '2027-03-16T12:00:00.000Z' }),
-        }));
+    it('persists state to SecretStorage on success', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
-        const result = await activateWithServer(VALID_KEY, buildContext() as any);
-        expect(result.status).toBe('valid');
-        expect(result.product).toBe('pro_editor');
-        expect(mockSecrets.get('as-notes.activationToken')).toBe(serverToken);
-
-        vi.unstubAllGlobals();
+        await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
+        expect(mockSecrets.get('as-notes.licenceKey')).toBe('ASNO-VALID-KEY');
+        const state = JSON.parse(mockSecrets.get('as-notes.licenceState')!);
+        expect(state.status).toBe('valid');
+        expect(state.product).toBe('pro_editor');
     });
 
-    it('returns invalid and clears state on 403 (revoked)', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: false,
-            status: 403,
-            json: async () => ({ error: 'This licence key has been revoked' }),
-        }));
+    it('does not have serverUnreachable field in state', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
-        const result = await activateWithServer(VALID_KEY, buildContext() as any);
-        expect(result.status).toBe('invalid');
-        expect(mockSecrets.has('as-notes.activationToken')).toBe(false);
-
-        vi.unstubAllGlobals();
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
+        expect(result).not.toHaveProperty('serverUnreachable');
     });
 
-    it('returns invalid and clears state on 404 (not found)', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: false,
-            status: 404,
-            json: async () => ({ error: 'Licence key not found' }),
-        }));
-
-        const result = await activateWithServer(VALID_KEY, buildContext() as any);
-        expect(result.status).toBe('invalid');
-
-        vi.unstubAllGlobals();
-    });
-
-    it('falls back to regex: returns pro_editor when server unreachable and key format is valid', async () => {
-        vi.useFakeTimers({ shouldAdvanceTime: true });
-
+    it('returns valid even when server notification fails (non-blocking)', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 
-        const resultPromise = activateWithServer(VALID_KEY, buildContext() as any);
-        // Advance past all retry delays (1s + 4s + 16s)
-        await vi.advanceTimersByTimeAsync(25_000);
-        const result = await resultPromise;
+        const result = await activateLicenceKey('ASNO-VALID-KEY', buildContext() as any);
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_editor');
-        expect(result.serverUnreachable).toBe(true);
-
-        // Verify state was persisted
-        expect(mockSecrets.get('as-notes.licenceKey')).toBe(VALID_KEY);
-        const persisted = JSON.parse(mockSecrets.get('as-notes.licenceState')!);
-        expect(persisted.status).toBe('valid');
-        expect(persisted.product).toBe('pro_editor');
-
-        vi.unstubAllGlobals();
-        vi.useRealTimers();
     });
 
-    it('falls back to regex: returns not-entered when server unreachable and key format is invalid', async () => {
-        vi.useFakeTimers({ shouldAdvanceTime: true });
+    it('trims whitespace from key before verification', async () => {
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
-        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+        await activateLicenceKey('  ASNO-VALID-KEY  ', buildContext() as any);
+        expect(mockVerifyResult).toHaveBeenCalledWith('ASNO-VALID-KEY');
+    });
 
-        const resultPromise = activateWithServer('ASNO-ZZZZ-ZZZZ-ZZZZ-ZZZZ', buildContext() as any);
-        await vi.advanceTimersByTimeAsync(25_000);
-        const result = await resultPromise;
-        // Invalid format returns 'invalid' before reaching the server, so this never hits the fallback
-        expect(result.status).toBe('invalid');
-        expect(result.product).toBeNull();
+    it('clears previous state when new key is invalid', async () => {
+        // Pre-populate with a valid state
+        mockSecrets.set('as-notes.licenceKey', 'old-key');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
 
-        vi.unstubAllGlobals();
-        vi.useRealTimers();
+        mockVerifyResult.mockReturnValue({ valid: false });
+        await activateLicenceKey('ASNO-BAD-KEY', buildContext() as any);
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
+        expect(mockSecrets.has('as-notes.licenceState')).toBe(false);
     });
 });
 
-describe('validateWithServer', () => {
+describe('loadCachedLicenceState', () => {
+
+    beforeEach(() => {
+        mockSecrets.clear();
+    });
+
+    it('returns defaultLicenceState when nothing is cached', async () => {
+        const result = await loadCachedLicenceState(buildContext() as any);
+        expect(result.status).toBe('not-entered');
+        expect(result.product).toBeNull();
+    });
+
+    it('returns persisted state when available', async () => {
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_ai_sync' }));
+        const result = await loadCachedLicenceState(buildContext() as any);
+        expect(result.status).toBe('valid');
+        expect(result.product).toBe('pro_ai_sync');
+    });
+});
+
+describe('checkServerForRevocation', () => {
 
     beforeEach(() => {
         mockSecrets.clear();
@@ -216,109 +184,182 @@ describe('validateWithServer', () => {
 
     afterEach(() => {
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
     });
 
-    it('returns not-entered when no persisted key/token', async () => {
-        const result = await validateWithServer(buildContext() as any);
+    it('returns defaultLicenceState when no key is persisted', async () => {
+        const result = await checkServerForRevocation(buildContext() as any);
         expect(result.status).toBe('not-entered');
     });
 
-    it('returns valid and updates lastValidated on successful validation', async () => {
-        const token = buildTestJwt({ product: 'pro_ai_sync', exp: futureUnix(365) });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-        mockSecrets.set('as-notes.lastValidated', (Date.now() - 86_400_000).toString());
-
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: async () => ({
-                valid: true,
-                product: 'pro_ai_sync',
-                revoked: false,
-                issuedAt: '2026-03-16T12:00:00.000Z',
-            }),
-        }));
-
-        const result = await validateWithServer(buildContext() as any);
-        expect(result.status).toBe('valid');
-        expect(result.product).toBe('pro_ai_sync');
-
-        // lastValidated should be updated
-        const lv = parseInt(mockSecrets.get('as-notes.lastValidated')!, 10);
-        expect(lv).toBeGreaterThan(Date.now() - 5_000);
-
-        vi.unstubAllGlobals();
-    });
-
-    it('returns invalid and clears state when licence is revoked', async () => {
-        const token = buildTestJwt({ product: 'pro_editor', exp: futureUnix(365) });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: async () => ({
-                valid: false,
-                product: 'pro_editor',
-                revoked: true,
-                issuedAt: '2026-03-16T12:00:00.000Z',
-            }),
-        }));
-
-        const result = await validateWithServer(buildContext() as any);
-        expect(result.status).toBe('invalid');
-        expect(mockSecrets.has('as-notes.activationToken')).toBe(false);
-
-        vi.unstubAllGlobals();
-    });
-
-    it('falls back to regex: returns pro_editor when server unreachable during validation', async () => {
-        vi.useFakeTimers({ shouldAdvanceTime: true });
-        const token = buildTestJwt({ product: 'pro_editor', exp: futureUnix(365) });
-        mockSecrets.set('as-notes.activationToken', token);
-        mockSecrets.set('as-notes.licenceKey', VALID_KEY);
-        mockSecrets.set('as-notes.lastValidated', (Date.now() - 86_400_000).toString());
+    it('returns current state when server confirms (200 OK)', async () => {
+        mockSecrets.set('as-notes.licenceKey', 'ASNO-KEY');
         mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+
+        const result = await checkServerForRevocation(buildContext() as any);
+        expect(result.status).toBe('valid');
+        expect(result.product).toBe('pro_editor');
+        // lastServerCheck should be set
+        expect(mockSecrets.has('as-notes.lastServerCheck')).toBe(true);
+    });
+
+    it('returns invalid and clears state on 403 (revoked)', async () => {
+        mockSecrets.set('as-notes.licenceKey', 'ASNO-KEY');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+        const result = await checkServerForRevocation(buildContext() as any);
+        expect(result.status).toBe('invalid');
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
+    });
+
+    it('returns invalid and clears state on 404 (not found)', async () => {
+        mockSecrets.set('as-notes.licenceKey', 'ASNO-KEY');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+        const result = await checkServerForRevocation(buildContext() as any);
+        expect(result.status).toBe('invalid');
+    });
+
+    it('returns current state when server is unreachable (optimistic)', async () => {
+        mockSecrets.set('as-notes.licenceKey', 'ASNO-KEY');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_ai_sync' }));
 
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 
-        const resultPromise = validateWithServer(buildContext() as any);
-        await vi.advanceTimersByTimeAsync(25_000);
-        const result = await resultPromise;
+        const result = await checkServerForRevocation(buildContext() as any);
+        expect(result.status).toBe('valid');
+        expect(result.product).toBe('pro_ai_sync');
+    });
+
+    it('returns current state on 500 server error (optimistic)', async () => {
+        mockSecrets.set('as-notes.licenceKey', 'ASNO-KEY');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+
+        const result = await checkServerForRevocation(buildContext() as any);
+        expect(result.status).toBe('valid');
+    });
+});
+
+describe('verifyLicenceFromSettings', () => {
+
+    beforeEach(() => {
+        mockSecrets.clear();
+        vi.restoreAllMocks();
+        mockLicenceKeySetting = '';
+        mockVerifyResult.mockReturnValue({ valid: false });
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        mockLicenceKeySetting = '';
+    });
+
+    it('returns not-entered and clears secrets when setting is empty', async () => {
+        mockLicenceKeySetting = '';
+        mockSecrets.set('as-notes.licenceKey', 'old-key');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+
+        const result = await verifyLicenceFromSettings(buildContext() as any);
+        expect(result.status).toBe('not-entered');
+        expect(result.product).toBeNull();
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
+        expect(mockSecrets.has('as-notes.licenceState')).toBe(false);
+    });
+
+    it('returns invalid and clears secrets when key fails verification', async () => {
+        mockLicenceKeySetting = 'ASNO-BAD-KEY';
+        mockVerifyResult.mockReturnValue({ valid: false });
+
+        const result = await verifyLicenceFromSettings(buildContext() as any);
+        expect(result.status).toBe('invalid');
+        expect(result.product).toBeNull();
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
+    });
+
+    it('returns valid pro_editor and persists state when key is valid', async () => {
+        mockLicenceKeySetting = 'ASNO-VALID-KEY';
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
+
+        const result = await verifyLicenceFromSettings(buildContext() as any);
         expect(result.status).toBe('valid');
         expect(result.product).toBe('pro_editor');
-        expect(result.serverUnreachable).toBe(true);
-
-        // Verify state was persisted
+        expect(mockSecrets.get('as-notes.licenceKey')).toBe('ASNO-VALID-KEY');
         const persisted = JSON.parse(mockSecrets.get('as-notes.licenceState')!);
         expect(persisted.status).toBe('valid');
         expect(persisted.product).toBe('pro_editor');
-
-        vi.unstubAllGlobals();
-        vi.useRealTimers();
     });
 
-    it('persisted fallback state survives restart via loadCachedLicenceState', async () => {
-        vi.useFakeTimers({ shouldAdvanceTime: true });
+    it('returns valid pro_ai_sync when key has that product', async () => {
+        mockLicenceKeySetting = 'ASNO-AI-KEY';
+        mockVerifyResult.mockReturnValue(validResult('pro_ai_sync'));
 
-        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
-
-        // Activate with server unreachable — fallback persists state
-        const activatePromise = activateWithServer(VALID_KEY, buildContext() as any);
-        await vi.advanceTimersByTimeAsync(25_000);
-        const result = await activatePromise;
+        const result = await verifyLicenceFromSettings(buildContext() as any);
         expect(result.status).toBe('valid');
+        expect(result.product).toBe('pro_ai_sync');
+    });
 
-        vi.unstubAllGlobals();
-        vi.useRealTimers();
+    it('trims whitespace from the setting value', async () => {
+        mockLicenceKeySetting = '  ASNO-VALID-KEY  ';
+        mockVerifyResult.mockReturnValue(validResult('pro_editor'));
 
-        // Simulate restart: load cached state (no server call)
-        const { loadCachedLicenceState } = await import('../LicenceActivationService.js');
-        const cachedState = await loadCachedLicenceState(buildContext() as any);
-        expect(cachedState.status).toBe('valid');
-        expect(cachedState.product).toBe('pro_editor');
-        expect(cachedState.serverUnreachable).toBe(true);
+        await verifyLicenceFromSettings(buildContext() as any);
+        expect(mockVerifyResult).toHaveBeenCalledWith('ASNO-VALID-KEY');
+    });
+
+    it('clears stale cached state when key is now invalid', async () => {
+        // Simulate old cached valid state from pre-crypto era
+        mockSecrets.set('as-notes.licenceKey', 'old-key');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+        mockSecrets.set('as-notes.lastServerCheck', '12345');
+
+        mockLicenceKeySetting = 'old-key';
+        mockVerifyResult.mockReturnValue({ valid: false });
+
+        const result = await verifyLicenceFromSettings(buildContext() as any);
+        expect(result.status).toBe('invalid');
+        expect(mockSecrets.has('as-notes.licenceKey')).toBe(false);
+        expect(mockSecrets.has('as-notes.licenceState')).toBe(false);
+        expect(mockSecrets.has('as-notes.lastServerCheck')).toBe(false);
+    });
+});
+
+describe('migrateOldSecrets', () => {
+
+    beforeEach(() => {
+        mockSecrets.clear();
+    });
+
+    it('removes legacy activationToken and lastValidated keys', async () => {
+        mockSecrets.set('as-notes.activationToken', 'old-jwt');
+        mockSecrets.set('as-notes.lastValidated', '12345');
+
+        await migrateOldSecrets(secretStorageMock as any);
+
+        expect(mockSecrets.has('as-notes.activationToken')).toBe(false);
+        expect(mockSecrets.has('as-notes.lastValidated')).toBe(false);
+    });
+
+    it('does not throw when legacy keys do not exist', async () => {
+        await expect(migrateOldSecrets(secretStorageMock as any)).resolves.not.toThrow();
+    });
+
+    it('preserves new keys during migration', async () => {
+        mockSecrets.set('as-notes.licenceKey', 'ASNO-KEY');
+        mockSecrets.set('as-notes.licenceState', JSON.stringify({ status: 'valid', product: 'pro_editor' }));
+        mockSecrets.set('as-notes.activationToken', 'old-jwt');
+
+        await migrateOldSecrets(secretStorageMock as any);
+
+        expect(mockSecrets.get('as-notes.licenceKey')).toBe('ASNO-KEY');
+        expect(mockSecrets.has('as-notes.activationToken')).toBe(false);
     });
 });

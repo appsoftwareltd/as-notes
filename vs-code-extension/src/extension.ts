@@ -33,7 +33,7 @@ import {
     defaultLicenceState,
     type LicenceState,
 } from './LicenceService.js';
-import { activateWithServer, validateWithServer, loadCachedLicenceState } from './LicenceActivationService.js';
+import { activateLicenceKey, checkServerForRevocation, verifyLicenceFromSettings, migrateOldSecrets } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
@@ -196,8 +196,8 @@ let isOfficialBuild = false;
 /** Periodic validation timer handle — for cleanup on deactivation. */
 let validationIntervalHandle: ReturnType<typeof setInterval> | undefined;
 
-/** Validation interval: 24 hours. */
-const VALIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** Periodic server check interval: 7 days. */
+const VALIDATION_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Shows a warning notification with action buttons for managing the licence.
@@ -211,19 +211,6 @@ async function showLicenceWarning(): Promise<void> {
     if (action === 'Manage Licence') {
         vscode.env.openExternal(vscode.Uri.parse('https://www.asnotes.io/billing'));
     } else if (action === 'Enter Licence Key') {
-        vscode.commands.executeCommand('as-notes.enterLicenceKey');
-    }
-}
-
-/**
- * Shows a warning when the licence server could not be reached.
- */
-async function showServerUnreachableWarning(): Promise<void> {
-    const action = await vscode.window.showWarningMessage(
-        'AS Notes: Could not reach the licence server to validate your key. Please try removing and re-entering your licence key.',
-        'Enter Licence Key',
-    );
-    if (action === 'Enter Licence Key') {
         vscode.commands.executeCommand('as-notes.enterLicenceKey');
     }
 }
@@ -499,35 +486,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.cleanWorkspace', () => cleanWorkspace()),
     );
-    /** Validate a licence key against the server with appropriate UI feedback. */
+    /** Validate a licence key with appropriate UI feedback. */
     function validateLicenceKeyWithUI(key: string): void {
-        // Handle empty/invalid keys locally — no server call, no spinner.
-        const trimmed = key.trim();
-        if (!trimmed) {
-            activateWithServer(key, context).then((state) => {
-                licenceState = state;
+        activateLicenceKey(key, context).then((state) => {
+            const wasValid = hasProEditorAccess(licenceState);
+            licenceState = state;
+            if (licenceState.status === 'invalid' || licenceState.status === 'not-entered') {
                 showLicenceWarning();
-                updateFullModeStatusBar();
-            });
-            return;
-        }
-
-        // Valid-format key — show progress spinner while contacting server.
-        vscode.window.withProgress(
-            { location: vscode.ProgressLocation.Notification, title: 'AS Notes: Validating licence key…' },
-            () => activateWithServer(key, context).then((state) => {
-                const wasValid = hasProEditorAccess(licenceState);
-                licenceState = state;
-                if (licenceState.serverUnreachable && licenceState.status !== 'valid') {
-                    showServerUnreachableWarning();
-                } else if (licenceState.status === 'invalid' || licenceState.status === 'not-entered') {
-                    showLicenceWarning();
-                } else if (licenceState.status === 'valid' && !wasValid) {
-                    vscode.window.showInformationMessage('AS Notes: Licence activated successfully \u2714');
-                }
-                updateFullModeStatusBar();
-            }),
-        ).then(undefined, (err) => {
+            } else if (licenceState.status === 'valid' && !wasValid) {
+                vscode.window.showInformationMessage('AS Notes: Licence activated successfully \u2714');
+            }
+            updateFullModeStatusBar();
+        }).catch((err) => {
             console.warn('as-notes: licence validation failed:', err);
         });
     }
@@ -537,8 +507,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const currentKey = vscode.workspace.getConfiguration('as-notes').get<string>('licenceKey', '');
             const key = await vscode.window.showInputBox({
                 title: 'AS Notes: Enter Licence Key',
-                prompt: 'Enter your AS Notes Pro licence key (format: ASNO-XXXX-XXXX-XXXX-XXXX)',
-                placeHolder: 'ASNO-XXXX-XXXX-XXXX-XXXX',
+                prompt: 'Enter your AS Notes Pro licence key (starts with ASNO-)',
+                placeHolder: 'ASNO-XXXX-XXXX-...',
                 value: currentKey,
                 ignoreFocusOut: true,
             });
@@ -553,18 +523,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         }),
     );
 
-    // Restore cached licence state on startup — no server call.
-    // The periodic 24h validation handles server-side checks.
-    loadCachedLicenceState(context).then((state) => {
+    // Clean up legacy SecretStorage keys from the JWT-based system.
+    migrateOldSecrets(context.secrets).catch((err) => {
+        console.warn('as-notes: failed to migrate old secrets:', err);
+    });
+
+    // Verify licence from settings on startup (instant, offline Ed25519 check).
+    // This replaces cached SecretStorage lookup -- always re-derives state from
+    // the canonical settings key, eliminating SecretStorage race conditions.
+    verifyLicenceFromSettings(context).then((state) => {
         licenceState = state;
         updateFullModeStatusBar();
     }).catch((err) => {
-        console.warn('as-notes: failed to load cached licence state:', err);
+        console.warn('as-notes: failed to verify licence from settings:', err);
     });
 
-    // Periodic background validation (every 24 hours).
+    // Periodic background check for revocation (every 7 days).
     validationIntervalHandle = setInterval(() => {
-        validateWithServer(context).then((state) => {
+        checkServerForRevocation(context).then((state) => {
             const wasValid = hasProEditorAccess(licenceState);
             licenceState = state;
             if (wasValid && !hasProEditorAccess(licenceState)) {
@@ -572,7 +548,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             }
             updateFullModeStatusBar();
         }).catch((err) => {
-            console.warn('as-notes: periodic licence validation failed:', err);
+            console.warn('as-notes: periodic licence check failed:', err);
         });
     }, VALIDATION_INTERVAL_MS);
 
@@ -2185,7 +2161,10 @@ async function enterFullMode(
 function updateFullModeStatusBar(): void {
     if (!indexService?.isOpen) { return; }
     const pageCount = indexService.getAllPages().length;
-    const proLabel = hasProEditor() ? ' (Pro)' : '';
+    let proLabel = '';
+    if (hasProEditor()) {
+        proLabel = licenceState.product === 'pro_ai_sync' ? ' (Pro AI & Sync)' : ' (Pro Editor)';
+    }
     statusBarItem.text = `$(database) AS Notes${proLabel} — ${pageCount} pages`;
     statusBarItem.tooltip = 'Click to rebuild the AS Notes index';
     statusBarItem.command = 'as-notes.rebuildIndex';

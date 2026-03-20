@@ -1,14 +1,10 @@
 /**
- * LicenceService — pure logic for AS Notes licence key validation and
+ * LicenceService -- pure logic for AS Notes licence types and
  * product-tier helpers.
  *
- * No VS Code imports. All format-validation rules are encapsulated here.
- * The activation service handles server communication; this module only
- * deals with local format checks, types, and tier logic.
- *
- * Licence key format: ASNO-XXXX-XXXX-XXXX-XXXX
- *   - Prefix: ASNO-
- *   - 4 segments of 4 hex characters (case-insensitive on input)
+ * No VS Code imports. Licence key verification is handled by
+ * SignedLicenceService (Ed25519 offline verification). This module
+ * provides shared types, tier logic, and factory functions.
  */
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -20,29 +16,6 @@ export type LicenceProduct = 'pro_editor' | 'pro_ai_sync';
 export interface LicenceState {
     status: LicenceStatus;
     product: LicenceProduct | null; // null when status !== 'valid'
-    serverUnreachable?: boolean;    // true when the result is from cache/grace because the server could not be reached
-}
-
-// ── Format validation ──────────────────────────────────────────────────────
-
-const LICENCE_KEY_REGEX = /^ASNO-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/i;
-
-/**
- * Validate a licence key format and return its status.
- *
- * - `'not-entered'` — key is empty or whitespace only
- * - `'valid'`       — key matches `ASNO-XXXX-XXXX-XXXX-XXXX` (hex segments)
- * - `'invalid'`     — key is present but fails format validation
- *
- * This is a local pre-flight check only — the server is the authority on
- * whether a key is actually activated and not revoked.
- */
-export function validateLicenceKeyFormat(key: string): LicenceStatus {
-    if (!key || key.trim().length === 0) {
-        return 'not-entered';
-    }
-
-    return LICENCE_KEY_REGEX.test(key.trim()) ? 'valid' : 'invalid';
 }
 
 // ── Tier helpers ───────────────────────────────────────────────────────────
