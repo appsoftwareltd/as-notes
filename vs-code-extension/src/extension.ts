@@ -50,6 +50,8 @@ import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
 import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
 import { CalendarPanelProvider } from './CalendarPanelProvider.js';
+import { AiKnowledgePanel } from './AiKnowledgePanel.js';
+import { storeApiKey, clearApiKey } from './AiProviderService.js';
 import type { Priority } from './KanbanTypes.js';
 import { computeNotesRootPaths, toNotesRelativePath, isInsideNotesRoot, type NotesRootPaths } from './NotesRootService.js';
 const ASNOTES_DIR = '.asnotes';
@@ -127,6 +129,10 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.renameKanbanBoard',
     'as-notes.convertTaskToKanbanCard',
     'as-notes.insertTemplate',
+    'as-notes.whatDoIKnowAbout',
+    'as-notes.whatDoIKnowAboutThis',
+    'as-notes.setAiApiKey',
+    'as-notes.clearAiApiKey',
 ];
 
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
@@ -2141,6 +2147,79 @@ async function enterFullMode(
     ignoreFileWatcher.onDidCreate(onIgnoreFileChange);
     ignoreFileWatcher.onDidDelete(onIgnoreFileChange);
     fullModeDisposables.push(ignoreFileWatcher);
+
+    // ── AI Knowledge commands (Pro AI & Sync) ──────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.whatDoIKnowAbout', async () => {
+            if (!hasProAiSync()) {
+                vscode.window.showWarningMessage('AS Notes: AI Knowledge commands require a Pro AI & Sync licence.');
+                return;
+            }
+            const topic = await vscode.window.showInputBox({
+                prompt: 'What do you want to know about?',
+                placeHolder: 'e.g. Project Architecture, Machine Learning, ...',
+                ignoreFocusOut: true,
+            });
+            if (!topic) { return; }
+            const panel = AiKnowledgePanel.createOrShow(
+                context.extensionUri, indexService!, nrUri, context, logService,
+            );
+            panel.startQuery(topic);
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.whatDoIKnowAboutThis', async () => {
+            if (!hasProAiSync()) {
+                vscode.window.showWarningMessage('AS Notes: AI Knowledge commands require a Pro AI & Sync licence.');
+                return;
+            }
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            // Use selection text, or fall back to the filename (without extension)
+            const selection = editor.document.getText(editor.selection).trim();
+            const topic = selection
+                || path.basename(editor.document.fileName, path.extname(editor.document.fileName));
+            const panel = AiKnowledgePanel.createOrShow(
+                context.extensionUri, indexService!, nrUri, context, logService,
+            );
+            panel.startQuery(topic);
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.setAiApiKey', async () => {
+            if (!hasProAiSync()) {
+                vscode.window.showWarningMessage('AS Notes: AI commands require a Pro AI & Sync licence.');
+                return;
+            }
+            const key = await vscode.window.showInputBox({
+                prompt: 'Enter your AI provider API key',
+                password: true,
+                ignoreFocusOut: true,
+                placeHolder: 'API key (stored securely in OS secret storage)',
+            });
+            if (key === undefined) { return; }
+            if (key === '') {
+                vscode.window.showWarningMessage('AS Notes: API key cannot be empty.');
+                return;
+            }
+            await storeApiKey(context.secrets, key);
+            vscode.window.showInformationMessage('AS Notes: AI API key saved.');
+        }),
+    );
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.clearAiApiKey', async () => {
+            if (!hasProAiSync()) {
+                vscode.window.showWarningMessage('AS Notes: AI commands require a Pro AI & Sync licence.');
+                return;
+            }
+            await clearApiKey(context.secrets);
+            vscode.window.showInformationMessage('AS Notes: AI API key cleared.');
+        }),
+    );
 
     // Listen for config changes to restart periodic scan
     fullModeDisposables.push(

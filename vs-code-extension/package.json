@@ -173,6 +173,22 @@
             {
                 "command": "as-notes.insertTemplate",
                 "title": "AS Notes: Insert Template"
+            },
+            {
+                "command": "as-notes.whatDoIKnowAbout",
+                "title": "AS Notes: What Do I Know About..."
+            },
+            {
+                "command": "as-notes.whatDoIKnowAboutThis",
+                "title": "AS Notes: What Do I Know About This?"
+            },
+            {
+                "command": "as-notes.setAiApiKey",
+                "title": "AS Notes: Set AI API Key"
+            },
+            {
+                "command": "as-notes.clearAiApiKey",
+                "title": "AS Notes: Clear AI API Key"
             }
         ],
         "keybindings": [
@@ -310,6 +326,46 @@
                     "type": "boolean",
                     "default": false,
                     "description": "When enabled, new notes created via wikilink navigation are placed in the current editing file's directory instead of the notes folder. Ignored when the source file is in the journal folder."
+                },
+                "as-notes.aiProvider": {
+                    "type": "string",
+                    "default": "openai",
+                    "enum": [
+                        "openai",
+                        "anthropic",
+                        "ollama",
+                        "openai-compatible",
+                        "openrouter"
+                    ],
+                    "enumDescriptions": [
+                        "OpenAI (https://platform.openai.com/docs/models)",
+                        "Anthropic (https://docs.anthropic.com/en/docs/about-claude/models)",
+                        "Ollama - local models (https://ollama.com/library)",
+                        "Any OpenAI-compatible API endpoint",
+                        "OpenRouter (https://openrouter.ai/models)"
+                    ],
+                    "description": "AI provider for the Knowledge Assistant. Set your API key with the 'AS Notes: Set AI API Key' command."
+                },
+                "as-notes.aiModel": {
+                    "type": "string",
+                    "default": "gpt-4o-mini",
+                    "description": "Model identifier for the AI provider. Refer to your provider's documentation for available model names: OpenAI (https://platform.openai.com/docs/models), Anthropic (https://docs.anthropic.com/en/docs/about-claude/models), Ollama (https://ollama.com/library), OpenRouter (https://openrouter.ai/models)."
+                },
+                "as-notes.aiBaseUrl": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Custom API base URL. Required for Ollama and OpenAI-compatible providers. Leave empty for OpenAI, Anthropic, and OpenRouter to use their default endpoints."
+                },
+                "as-notes.aiContextTokenLimit": {
+                    "type": "number",
+                    "default": 32000,
+                    "minimum": 1000,
+                    "description": "Maximum tokens of note content to include per LLM call. Higher values provide richer context but cost more."
+                },
+                "as-notes.aiOutputSubfolder": {
+                    "type": "string",
+                    "default": "ai-output",
+                    "description": "Subfolder within your notes directory for AI-generated notes. Created when using 'Create Note from Summary'."
                 }
             }
         },
@@ -391,6 +447,11 @@
                     "command": "as-notes.viewBacklinks",
                     "when": "as-notes.fullMode && editorLangId == markdown",
                     "group": "navigation"
+                },
+                {
+                    "command": "as-notes.whatDoIKnowAboutThis",
+                    "when": "as-notes.fullMode && editorLangId == markdown",
+                    "group": "navigation"
                 }
             ],
             "view/title": [],
@@ -410,6 +471,10 @@
                 },
                 {
                     "command": "as-notes.navigateToPage",
+                    "when": "false"
+                },
+                {
+                    "command": "as-notes.whatDoIKnowAboutThis",
                     "when": "false"
                 }
             ]
@@ -431,6 +496,7 @@
         "as-notes-common": "file:../common",
         "esbuild": "^0.24.0",
         "markdown-it": "^14.1.1",
+        "marked": "^17.0.5",
         "postcss": "^8.5.8",
         "tailwindcss": "^4.2.1",
         "typescript": "^5.7.0",
@@ -438,6 +504,7 @@
     },
     "dependencies": {
         "ignore": "^7.0.5",
+        "js-tiktoken": "^1.0.21",
         "sql.js": "^1.14.0",
         "yaml": "^2.7.1"
     }

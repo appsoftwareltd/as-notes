@@ -129,6 +129,17 @@ const calendarWebviewBuildOptions = {
     target: ['es2022'],
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const aiKnowledgeWebviewBuildOptions = {
+    entryPoints: ['./src/webview/ai-knowledge.ts'],
+    bundle: true,
+    outfile: 'dist/webview/ai-knowledge.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
 async function buildCss() {
     const tasksCss = readFileSync('./src/webview/tasks.css', 'utf8');
     const tasksResult = await postcss([tailwindcss]).process(tasksCss, {
@@ -169,6 +180,16 @@ async function buildCss() {
     if (calendarResult.map) {
         writeFileSync('./dist/webview/calendar.css.map', calendarResult.map.toString());
     }
+
+    const aiKnowledgeCss = readFileSync('./src/webview/ai-knowledge.css', 'utf8');
+    const aiKnowledgeResult = await postcss([tailwindcss]).process(aiKnowledgeCss, {
+        from: './src/webview/ai-knowledge.css',
+        to: './dist/webview/ai-knowledge.css',
+    });
+    writeFileSync('./dist/webview/ai-knowledge.css', aiKnowledgeResult.css);
+    if (aiKnowledgeResult.map) {
+        writeFileSync('./dist/webview/ai-knowledge.css.map', aiKnowledgeResult.map.toString());
+    }
 }
 
 if (isWatch) {
@@ -193,12 +214,14 @@ if (isWatch) {
     const kanbanCtx = await esbuild.context(kanbanWebviewBuildOptions);
     const kanbanSidebarCtx = await esbuild.context(kanbanSidebarWebviewBuildOptions);
     const calendarCtx = await esbuild.context(calendarWebviewBuildOptions);
+    const aiKnowledgeCtx = await esbuild.context(aiKnowledgeWebviewBuildOptions);
     await extCtx.watch();
     await webCtx.watch();
     await searchCtx.watch();
     await kanbanCtx.watch();
     await kanbanSidebarCtx.watch();
     await calendarCtx.watch();
+    await aiKnowledgeCtx.watch();
     console.log('Watching for changes...');
 } else {
     await buildCss();
@@ -208,5 +231,6 @@ if (isWatch) {
     await esbuild.build(kanbanWebviewBuildOptions);
     await esbuild.build(kanbanSidebarWebviewBuildOptions);
     await esbuild.build(calendarWebviewBuildOptions);
+    await esbuild.build(aiKnowledgeWebviewBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }

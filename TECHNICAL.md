@@ -146,6 +146,17 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Tab / Shift+Tab — indent and outdent](#tab--shifttab--indent-and-outdent)
   - [Paste — multi-line bullet conversion](#paste--multi-line-bullet-conversion)
   - [Todo toggle in outliner mode](#todo-toggle-in-outliner-mode)
+- [AI Knowledge Assistant (Pro)](#ai-knowledge-assistant-pro)
+  - [Architecture overview](#architecture-overview)
+  - [AiKnowledgeTypes.ts](#aiknowledgetypests)
+  - [AiProviderService.ts](#aiproviderservicets)
+  - [AiContextGatherer.ts](#aicontextgathererts)
+  - [AiAgentLoop.ts](#aiagentloopts)
+  - [AiKnowledgePanel.ts](#aiknowledgepanelts)
+  - [Webview -- ai-knowledge.ts / ai-knowledge.css](#webview----ai-knowledgets--ai-knowledgecss)
+  - [Settings](#settings-2)
+  - [Commands](#commands)
+  - [Build pipeline](#build-pipeline-3)
 - [Extension activation and wiring](#extension-activation-and-wiring)
 - [Testing](#testing)
 - [Known limitations and future considerations](#known-limitations-and-future-considerations)
@@ -2653,6 +2664,178 @@ When `as-notes.outlinerMode` is enabled and the line `isOnBulletLine`, the `as-n
 
 ---
 
+## AI Knowledge Assistant (Pro)
+
+The AI Knowledge Assistant answers the question "What do I know about X?" by traversing the wikilink/backlink graph, gathering related notes, and running a multi-pass LLM analysis. It produces a streaming summary with sections for first-order knowledge, discovered connections, a relationship map, and knowledge gaps.
+
+Gated behind `hasProAiSync()` -- all four commands check the Pro licence before executing.
+
+### Architecture overview
+
+Five modules form a dependency chain (no circular imports):
+
+```
+AiKnowledgeTypes         (shared types, no imports)
+      ↑
+AiProviderService        (LLM adapters, SecretStorage)
+      ↑
+AiContextGatherer        (graph traversal, token budgeting)
+      ↑
+AiAgentLoop              (multi-pass orchestrator)
+      ↑
+AiKnowledgePanel         (webview host, message wiring)
+```
+
+The agent loop runs four passes:
+
+1. **GATHER** -- traverse the wikilink graph for first-order context (direct page, backlinks, forward links)
+2. **SCAN & SUMMARISE** -- LLM call to summarise first-order pages; extract `[[wikilink]]` suggestions from a RELATED TOPICS section
+3. **EXPAND** -- gather second/third-order pages for the suggested topics (capped at 5); LLM call to summarise connections
+4. **SYNTHESISE** -- final LLM call producing a comprehensive synthesis, relationship map, and knowledge gaps
+
+Each pass emits `AgentEvent` progress events via a callback. The webview renders these events as streaming markdown using `marked`.
+
+### AiKnowledgeTypes.ts
+
+Shared types with no runtime imports. Key types:
+
+| Type | Description |
+|---|---|
+| `AiProviderName` | `'openai' \| 'anthropic' \| 'ollama' \| 'openai-compatible' \| 'openrouter'` |
+| `AiProviderConfig` | `{ provider, model, baseUrl, apiKey }` |
+| `ChatMessage` | `{ role: 'system' \| 'user' \| 'assistant', content }` |
+| `StreamChunk` | `{ text, done }` |
+| `GatheredPage` | `{ pageId, path, filename, title, content, hopDistance, relation }` |
+| `PageRelation` | `'direct' \| 'backlink' \| 'forward' \| 'alias' \| 'expansion'` |
+| `GatherResult` | `{ topic, pages: GatheredPage[], totalTokens }` |
+| `AgentEvent` | Discriminated union (9 event types): `status`, `section-start`, `token`, `section-end`, `page-gathered`, `expansion-topic`, `complete`, `error`, `cancelled` |
+| `SectionName` | `'first-order' \| 'connections' \| 'relationship-map' \| 'gaps' \| 'synthesis'` |
+| `AgentLoopResult` | `{ topic, sections: Record<SectionName, string>, pages: PageSummary[], cancelled }` |
+
+Webview message protocols: `ExtensionToWebviewMessage` (agentEvent, providerInfo, setTopic, startQuery) and `WebviewToExtensionMessage` (query, cancel, createNote, copyToClipboard, navigateTo, ready).
+
+### AiProviderService.ts
+
+Provider abstraction layer with two adapter implementations:
+
+1. **ChatCompletionsAdapter** -- shared by OpenAI, OpenRouter, OpenAI-compatible, and Ollama. Sends to `/chat/completions` with `stream: true`.
+2. **AnthropicAdapter** -- Anthropic Messages API. Sends to `/messages` with system message extracted to a top-level `system` field.
+
+**Auth strategy:**
+
+| Provider | Auth header | Extra headers |
+|---|---|---|
+| OpenAI | `Authorization: Bearer <key>` | -- |
+| Anthropic | `x-api-key: <key>` | `anthropic-version: 2023-06-01` |
+| Ollama | None (local) | -- |
+| OpenAI-compatible | `Authorization: Bearer <key>` | -- |
+| OpenRouter | `Authorization: Bearer <key>` | `HTTP-Referer: https://asnotes.io`, `X-Title: AS Notes` |
+
+**Default base URLs:** OpenAI `api.openai.com/v1`, Anthropic `api.anthropic.com/v1`, Ollama `localhost:11434/v1`, OpenRouter `openrouter.ai/api/v1`. OpenAI-compatible has no default (user must provide).
+
+**API key management:** Keys are stored via VS Code `SecretStorage` under the key `as-notes.aiApiKey`. Public API: `storeApiKey(secrets, key)`, `clearApiKey(secrets)`, `resolveProviderConfig(secrets, provider, model, baseUrl)`.
+
+**SSE parsing:** `parseSseStream()` is a generic async generator that reads a `ReadableStream<Uint8Array>`, splits on newlines, extracts `data:` lines, and delegates to a provider-specific chunk parser. `parseChatCompletionChunk` parses `choices[0].delta.content`; `parseAnthropicChunk` parses `content_block_delta` events.
+
+**Error handling:** Non-200 responses throw `AiProviderError` with a `statusCode` property.
+
+### AiContextGatherer.ts
+
+Traverses the wikilink/backlink graph to collect related pages, reads their content, and trims to fit a token budget.
+
+**Dependency injection:** `AiContextGathererDeps = { indexService: IndexService, notesRootUri: vscode.Uri }`. IndexService provides `resolvePageByFilename()`, `getBacklinksIncludingAliases()`, and `getLinksForPage()`.
+
+**`gatherFirstOrderContext(topic, deps, tokenBudget)`:**
+
+1. Resolve topic via `resolvePageByFilename(toFilename(topic))` -- returns the direct page (hop 0) with relation `'direct'` or `'alias'`
+2. Query backlinks via `getBacklinksIncludingAliases(pageId)` -- hop 1, relation `'backlink'`
+3. Query forward links via `getLinksForPage(pageId)` then resolve each -- hop 1, relation `'forward'`
+4. Read file content via `vscode.workspace.fs.readFile()` for each page
+5. Deduplicate by `pageId` (a page appearing as both backlink and forward link is kept only once)
+6. Trim to token budget via `trimToTokenBudget()` -- sorts by hop distance ASC then content length ASC; the direct page (hop 0) is always included, truncated if necessary
+
+**`gatherExpansionContext(topics, deps, tokenBudget, excludePageIds)`:**
+
+1. For each topic: resolve page (hop 2, `'expansion'`), then gather its backlinks (hop 3, `'expansion'`)
+2. Skip any page whose ID is in `excludePageIds` (prevents duplicating first-order pages)
+3. Trim to token budget
+
+**Token counting:** Uses `js-tiktoken` with the `gpt-4o` encoding. The encoder is lazily initialised (module-level singleton). `countTokens(text)` returns the token count with a fallback to `Math.ceil(text.length / 4)` if the encoder fails. `truncateToTokens(text, maxTokens)` slices the token array and decodes back to string.
+
+### AiAgentLoop.ts
+
+Multi-pass orchestrator that drives the knowledge assistant. Exported as `runAgentLoop(options): Promise<AgentLoopResult>`.
+
+**Options:** `{ topic, providerConfig, gathererDeps, tokenBudget, onEvent, signal? }`
+
+**Pass execution:**
+
+| Pass | Action | LLM call | Output |
+|---|---|---|---|
+| 1. GATHER | `gatherFirstOrderContext()` | No | `GatheredPage[]` + `page-gathered` events |
+| 2. SCAN | `scanAndSummarise()` | Yes | `first-order` section text + `suggestedTopics` |
+| 3. EXPAND | `gatherExpansionContext()` + `summariseExpansions()` | Yes (if expansion pages found) | `connections` section text |
+| 4. SYNTHESISE | `synthesise()` | Yes | `synthesis`, `relationship-map`, `gaps` sections |
+
+**Topic extraction:** `parseTopicSuggestions(response)` extracts `[[wikilink]]` references from the RELATED TOPICS section of the scan response. Capped at 5 topics via `.slice(0, 5)` to prevent runaway API costs.
+
+**Section extraction:** `extractSection(text, heading)` uses regex to find markdown headings and extract content until the next heading at the same or higher level.
+
+**Cancellation:** `checkCancelled(signal)` is called between every pass. If `signal.aborted` is true, throws `CancellationError`. The catch block returns partial `sections` and `pages` accumulated so far with `cancelled: true`. A `cancelled` event is emitted.
+
+**Error handling:** Any non-cancellation error is caught, emitted as an `error` event, and the partial result is returned with `cancelled: false`.
+
+**System prompts:** Three prompt constants (`SCAN_SYSTEM_PROMPT`, `EXPANSION_SYSTEM_PROMPT`, `SYNTHESIS_SYSTEM_PROMPT`) instruct the LLM to analyse notes, not invent information, and preserve user terminology.
+
+### AiKnowledgePanel.ts
+
+Singleton `WebviewPanel` following the same pattern as `KanbanEditorPanel`. Static `currentPanel` property holds the active instance.
+
+**Singleton lifecycle:** `createOrShow()` reveals or creates the panel. `revive()` restores on window reload. On dispose, `currentPanel` is cleared.
+
+**Pending message queue:** `_pendingMessages` buffers messages sent before the webview signals `ready`. On `ready`, the queue is flushed.
+
+**Query execution:** `_runQuery(topic)` cancels any in-flight query via `AbortController`, reads settings (`aiProvider`, `aiModel`, `aiBaseUrl`, `aiContextTokenLimit`), resolves provider config, and runs the agent loop. Events are forwarded to the webview.
+
+**Create Note:** `_createNote()` writes a markdown file to `<notesRoot>/<notesFolder>/<aiOutputSubfolder>/<topic> - <date>.md`. The filename is sanitised (forbidden path characters removed, whitespace collapsed). The file includes all sections, a generation timestamp, and a page list with `[[wikilinks]]` for traceability.
+
+**Copy to Clipboard:** `_copyToClipboard()` writes the first-order summary, connections, and synthesis to the clipboard.
+
+**Content Security Policy:** Restricts sources to `${webview.cspSource}` only. `localResourceRoots` includes `dist/webview/`.
+
+### Webview -- ai-knowledge.ts / ai-knowledge.css
+
+The webview client renders the AI Knowledge panel UI.
+
+**`ai-knowledge.ts`:** Communicates with the extension via `postMessage`. Renders streaming output using `marked` for markdown-to-HTML conversion. Manages UI state: search input, progress indicators, section containers, action buttons (Create Note, Copy). Handles `agentEvent` messages to incrementally render token-by-token output into section elements.
+
+**`ai-knowledge.css`:** Styles using VS Code CSS custom properties (`--vscode-*`) for theme integration. Layout includes a search header, scrollable content area with section cards, and a fixed action bar.
+
+### Settings
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `as-notes.aiProvider` | enum | `'openai'` | Provider: openai, anthropic, ollama, openai-compatible, openrouter |
+| `as-notes.aiModel` | string | `'gpt-4o-mini'` | Model identifier (free-text, not a fixed list) |
+| `as-notes.aiBaseUrl` | string | `''` | Custom API base URL (required for ollama/openai-compatible) |
+| `as-notes.aiContextTokenLimit` | number | `32000` | Max tokens of note content per LLM call |
+| `as-notes.aiOutputSubfolder` | string | `'ai-output'` | Subfolder for AI-generated notes |
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `as-notes.aiKnowledge` | Open the AI Knowledge panel |
+| `as-notes.aiKnowledgeForLink` | "What do I know about this?" (context menu on wikilink) |
+| `as-notes.setAiApiKey` | Store API key in SecretStorage |
+| `as-notes.clearAiApiKey` | Remove stored API key |
+
+### Build pipeline
+
+`build.mjs` was updated to add `ai-knowledge` as a webview entry point (alongside existing `tasks`, `search`, `kanban`, `kanban-sidebar`). The CSS file `src/webview/ai-knowledge.css` is copied to `dist/webview/ai-knowledge.css`.
+
+---
+
 ## Extension activation and wiring
 
 `extension.ts` is the entry point. On activation (`onLanguage:markdown`):
@@ -2685,7 +2868,7 @@ The markdown document selector is `{ language: 'markdown' }`, which VS Code maps
 
 ## Testing
 
-Tests use vitest and are split across fourteen test files (key files described below):
+Tests use vitest and are split across twenty-five test files (key files described below):
 
 ### `WikilinkService.test.ts` (23 tests)
 
@@ -2808,6 +2991,44 @@ All tests use real `fs` in an `os.tmpdir()` temp directory, cleaned up in `after
 4. **Existing hook without marker** (4 tests) — returns `'appended'`, preserves original content, contains start marker, end marker appears after original content.
 
 5. **Existing hook with marker** (3 tests) — returns `'exists'`, file unchanged, idempotent on repeated calls.
+
+### `AiContextGatherer.test.ts` (19 tests)
+
+1. **First-order gathering** (10 tests) — resolves direct page at hop 0, alias resolution with `'alias'` relation, backlink gathering at hop 1, forward link gathering at hop 1, file content reading, empty result for unknown topic, deduplication of pages appearing as both backlink and forward link, token budget trimming (closer pages prioritised), direct page truncation when exceeding budget alone, totalTokens accuracy.
+
+2. **Expansion gathering** (5 tests) — expansion pages at hop 2 with `'expansion'` relation, third-order backlinks at hop 3, exclusion of first-order page IDs, exclusion of already-seen backlinks, token budget enforcement.
+
+3. **Token counting** (4 tests) — positive integer for non-empty text, zero for empty string, token count less than character count (proper tokenizer verification), unicode handling.
+
+### `AiAgentLoop.test.ts` (12 tests)
+
+1. **4-pass architecture** (2 tests) — gather/scan/synthesise flow for first-order only; full gather/scan/expand/synthesise with expansion topics.
+
+2. **Automatic expansion** (1 test) — `gatherExpansionContext` called without user confirmation when scan suggests topics.
+
+3. **Cancellation** (1 test) — AbortSignal mid-scan preserves partial sections, returns `cancelled: true`, emits `cancelled` event.
+
+4. **Topic cap** (1 test) — expansion topics capped at 5 even when LLM suggests more.
+
+5. **Error handling** (2 tests) — LLM failure emits error event with partial results; context gathering failure emits error event.
+
+6. **Event ordering** (2 tests) — page-gathered events for each page; correct sequence (status, page-gathered, section-start, token, section-end, complete).
+
+7. **Topic extraction integration** (2 tests) — extracts `[[wikilink]]` suggestions from RELATED TOPICS section; handles responses with no RELATED TOPICS gracefully.
+
+8. **Empty knowledge base** (1 test) — no pages found emits status + complete immediately.
+
+### `AiProviderService.test.ts` (22 tests)
+
+1. **Config resolution** (7 tests) — default base URLs for each provider (openai, anthropic, ollama, openrouter), user-supplied base URL override, free-text model pass-through, empty API key when none stored.
+
+2. **Secret management** (2 tests) — storeApiKey delegates to SecretStorage, clearApiKey delegates to SecretStorage.
+
+3. **Request formatting** (7 tests) — OpenAI `/chat/completions` with Bearer auth, Ollama `/chat/completions` with no auth, OpenRouter with `HTTP-Referer` and `X-Title` headers, Anthropic `/messages` with `x-api-key` and `anthropic-version`, Anthropic system message extracted to body field, OpenAI-compatible with Bearer auth, `stream: true` in request body.
+
+4. **SSE stream parsing** (3 tests) — ChatCompletions chunks (OpenAI format), Anthropic chunks (Messages API format), non-data lines ignored.
+
+5. **Error handling** (3 tests) — non-200 throws `AiProviderError` with status code, Anthropic non-200 throws, null response body throws.
 
 ---
 
