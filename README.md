@@ -776,36 +776,78 @@ npm run lint     # Type-check
 cd html-conversion
 npm install
 npm run build
-npm run convert -- --input ../docs-src/pages --output ../docs
+npm run convert -- --input ../docs-src/pages --output ../docs --default-public
 ```
 
 The conversion:
 
-- Scans the input directory for `.md` files
+- Scans the input directory recursively for `.md` files
 - Resolves `[[wikilinks]]` to relative `.html` links
-- Generates a `<nav>` sidebar on each page
-- Creates placeholder pages for missing wikilink targets with a "This page has not been created yet" message
+- Generates a sidebar `<nav>` on each page (docs and blog layouts)
+- Filters pages by `public: true` front matter (or all pages with `--default-public`)
+- Creates placeholder pages for missing wikilink targets
 - Wipes the output directory before each run
+- Generates `sitemap.xml` and `feed.xml`
 
-**Styling** (optional):
+**Config file** (recommended):
+
+Create `asnotes-publish.json` in your notes root:
+
+```json
+{
+    "inputDir": "./pages",
+    "outputDir": "../docs",
+    "defaultPublic": true,
+    "layout": "docs",
+    "theme": "default",
+    "baseUrl": "",
+    "includes": "./includes"
+}
+```
+
+Then run with `--config`:
+
+```bash
+npm run convert -- --config ../asnotes-publish.json
+```
+
+**Layouts:**
+
+| Layout | Description |
+|---|---|
+| `docs` (default) | Sidebar navigation + content area with TOC |
+| `blog` | Sidebar navigation + narrower centered content + date metadata |
+| `minimal` | Single-column, no navigation |
+
+Custom layouts can be placed in the includes directory as `{layoutName}.html` with `{{content}}`, `{{nav}}`, `{{toc}}`, `{{title}}`, `{{header}}`, `{{footer}}`, `{{stylesheets}}`, `{{meta}}`, `{{date}}`, `{{base-url}}` tokens.
+
+**Themes:**
+
+| Theme | Description |
+|---|---|
+| `default` | Light theme with CSS Grid sidebar layout |
+| `dark` | Dark theme with CSS Grid sidebar layout |
+
+Both themes output formatted, human-editable CSS (`theme-{name}.css`). They use a 220px sidebar with sticky positioning, responsive collapse to single-column below 700px.
+
+**CLI flags:**
 
 | Flag | Description |
 |---|---|
-| `--stylesheet <url>` | Injects a `<link rel="stylesheet">` into every page's `<head>`. Repeatable; tags appear in order. Accepts CDN URLs or relative paths (e.g. `docs.css`). |
-| `--asset <file>` | Copies a local file into the output directory. Use with `--stylesheet` to reference local CSS by filename. Repeatable. |
-
-Example with `github-markdown-css` and a custom local stylesheet:
-
-```bash
-npm run convert -- \
-  --input ../docs-src/pages \
-  --output ../docs \
-  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css \
-  --stylesheet docs.css \
-  --asset ../docs-src/docs.css
-```
-
-Content is always wrapped in `<article class="markdown-body">`, making it natively compatible with `github-markdown-css`.
+| `--config <path>` | Load settings from a publish config JSON file |
+| `--input <dir>` | Input directory containing `.md` files |
+| `--output <dir>` | Output directory for generated HTML |
+| `--layout <name>` | Layout template: `docs`, `blog`, `minimal` (default: `docs`) |
+| `--theme <name>` | Built-in CSS theme: `default`, `dark` |
+| `--includes <path>` | Directory for custom layouts, headers, and footers |
+| `--stylesheet <url>` | Additional stylesheet (repeatable). CDN URLs or relative paths |
+| `--asset <file>` | Copy a local file into the output directory (repeatable) |
+| `--base-url <path>` | Base URL prefix for all links |
+| `--default-public` | Publish all pages unless `public: false` |
+| `--default-assets` | Copy all assets unless `assets: false` |
+| `--retina` | Generate retina-compatible image markup |
+| `--include-drafts` | Include pages with `draft: true` |
+| `--exclude <dirname>` | Exclude directories from scanning (repeatable) |
 
 In CI, the `build-docs` job runs the same steps automatically on push/PR to `main` (see `.github/workflows/ci.yml`).
 

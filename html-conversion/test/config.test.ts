@@ -37,7 +37,7 @@ describe('--config flag', () => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-config-test-'));
         inputDir = path.join(tmpDir, 'notes');
         outputDir = path.join(tmpDir, 'site');
-        configPath = path.join(tmpDir, 'as-notes-publish.json');
+        configPath = path.join(tmpDir, 'asnotes-publish.json');
         fs.mkdirSync(inputDir, { recursive: true });
         // Create a simple test page
         fs.writeFileSync(
@@ -68,7 +68,7 @@ describe('--config flag', () => {
 
     it('should default --input to config file parent directory', () => {
         // Put the config in the notes dir itself
-        const cfgInNotes = path.join(inputDir, 'as-notes-publish.json');
+        const cfgInNotes = path.join(inputDir, 'asnotes-publish.json');
         fs.writeFileSync(cfgInNotes, JSON.stringify({
             defaultPublic: true,
             outputDir: path.resolve(outputDir),
@@ -215,10 +215,11 @@ describe('auto-generated index page', () => {
         expect(output).toContain('No index.md found');
         expect(fs.existsSync(path.join(outputDir, 'index.html'))).toBe(true);
         const html = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf-8');
-        // Links should be wikilink-resolved with class="wikilink"
+        // Links should point to correct pages
         expect(html).toContain('href="about.html"');
         expect(html).toContain('href="contact.html"');
-        expect(html).toContain('class="wikilink"');
+        expect(html).toContain('About');
+        expect(html).toContain('Contact');
         expect(html).toContain('<title>Home</title>');
     });
 

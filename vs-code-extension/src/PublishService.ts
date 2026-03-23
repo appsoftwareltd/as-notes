@@ -5,7 +5,7 @@ import { FrontMatterService } from 'as-notes-common';
 
 const frontMatterService = new FrontMatterService();
 
-const CONFIG_FILENAME = 'as-notes-publish.json';
+const CONFIG_FILENAME = 'asnotes-publish.json';
 
 interface PublishConfig {
     inputDir?: string;
@@ -183,7 +183,7 @@ function discoverConfigFiles(notesRoot: string): { filename: string; config: Pub
     try {
         const files = fs.readdirSync(notesRoot);
         for (const file of files) {
-            if (/^as-notes-publish(\.[^.]+)?\.json$/i.test(file)) {
+            if (/^asnotes-publish(\.[^.]+)?\.json$/i.test(file)) {
                 try {
                     const raw = fs.readFileSync(path.join(notesRoot, file), 'utf-8');
                     const parsed = JSON.parse(raw);
@@ -203,8 +203,8 @@ function discoverConfigFiles(notesRoot: string): { filename: string; config: Pub
 
 /**
  * Derive the config filename from the input directory.
- * Notes root -> as-notes-publish.json
- * Subdirectory -> as-notes-publish.<dirname>.json
+ * Notes root -> asnotes-publish.json
+ * Subdirectory -> asnotes-publish.<dirname>.json
  */
 function configFilenameForInputDir(notesRoot: string, inputDir: string): string {
     if (!inputDir) return CONFIG_FILENAME;
@@ -212,7 +212,7 @@ function configFilenameForInputDir(notesRoot: string, inputDir: string): string 
     const resolvedRoot = path.resolve(notesRoot);
     if (resolved === resolvedRoot) return CONFIG_FILENAME;
     const dirName = path.basename(resolved);
-    return `as-notes-publish.${dirName}.json`;
+    return `asnotes-publish.${dirName}.json`;
 }
 
 /**
@@ -361,9 +361,11 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
     if (!includesDirPick) return undefined;
 
     if (includesDirPick.value === 'create') {
-        const defaultIncludesPath = path.join(notesRoot, 'includes');
+        const inputDirName = config.inputDir ? path.basename(path.resolve(notesRoot, config.inputDir)) : '';
+        const includesFolderName = inputDirName ? `asnotes-publish.includes.${inputDirName}` : 'asnotes-publish.includes';
+        const defaultIncludesPath = path.join(notesRoot, includesFolderName);
         await createDefaultPartials(defaultIncludesPath);
-        config.includes = './includes';
+        config.includes = './' + includesFolderName;
     } else if (includesDirPick.value === 'pick') {
         const chosen = await vscode.window.showOpenDialog({
             canSelectFiles: false,

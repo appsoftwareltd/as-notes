@@ -200,10 +200,14 @@ function scanMarkdownFiles(dir: string, excludeDirs: string[] = []): ScannedFile
     return results;
 }
 
+function stripBrackets(text: string): string {
+    return text.replace(/\[\[|\]\]/g, '');
+}
+
 function buildNav(pages: PageEntry[], currentPage: string, baseUrl: string): string {
     const items = pages.map(p => {
         const isCurrent = p.name === currentPage ? ' class="nav-current"' : '';
-        const displayName = p.name === 'index' ? 'Home' : p.title || p.name;
+        const displayName = p.name === 'index' ? 'Home' : stripBrackets(p.title || p.name);
         const href = baseUrl ? baseUrl + '/' + p.href : p.href;
         return `        <li${isCurrent}><a href="${href}">${escapeHtml(displayName)}</a></li>`;
     });
@@ -779,8 +783,10 @@ function main(): void {
             }
         }
 
-        // Title from front matter or filename (Iteration 3A)
-        const title = meta.fields.title || (pageName === 'index' ? 'Home' : pageName);
+        // Title from front matter or filename (Iteration 3A, 12F: strip brackets)
+        const title = meta.fields.title
+            ? stripBrackets(meta.fields.title)
+            : (pageName === 'index' ? 'Home' : stripBrackets(pageName));
 
         // Per-page layout override (Iteration 4C)
         const pageLayout = meta.fields.layout || layout;
@@ -817,20 +823,16 @@ function main(): void {
     const missingTargets = resolver.getMissingTargets();
 
     // Auto-generate index.html if no index.md was found (Iteration 11B)
-    // Render through MarkdownIt so wikilinks are resolved consistently (Iteration 12C)
+    // Generate as direct HTML to handle page names with brackets cleanly (Iteration 12F)
     if (needsAutoIndex) {
-        const indexLines = ['# Home\n'];
-        for (const p of navPages) {
-            if (p.name === 'index') continue;
-            indexLines.push(`- [[${p.name}]]`);
-        }
-        const indexMarkdown = indexLines.join('\n');
-
-        const indexMd = new MarkdownIt({ html: true });
-        wikilinkPlugin(indexMd, { wikilinkService, resolver: resolver.createResolverFn() });
-        indexMd.use(taskTagPlugin);
-        addHeadingIds(indexMd);
-        const indexBody = indexMd.render(indexMarkdown);
+        const indexItems = navPages
+            .filter(p => p.name !== 'index')
+            .map(p => {
+                const displayName = escapeHtml(stripBrackets(p.title || p.name));
+                const href = baseUrl ? baseUrl + '/' + p.href : p.href;
+                return `<li><a href="${href}">${displayName}</a></li>`;
+            });
+        const indexBody = `<h1 id="home">Home</h1>\n<ul>\n${indexItems.join('\n')}\n</ul>`;
         const indexToc = generateToc(indexBody);
 
         const nav = buildNav(navPages, 'index', baseUrl);
@@ -852,7 +854,7 @@ function main(): void {
         const outputPath = path.join(output, slugify(pageName) + '.html');
         const nav = buildNav(navPages, pageName, baseUrl);
         const body = '    <p class="missing-page">This page has not been created yet.</p>';
-        const html = wrapHtml(pageName, nav, body, { stylesheets: resolvedStylesheets, layout, includesDir: includes ? path.resolve(includes) : undefined, baseUrl });
+        const html = wrapHtml(stripBrackets(pageName), nav, body, { stylesheets: resolvedStylesheets, layout, includesDir: includes ? path.resolve(includes) : undefined, baseUrl });
 
         fs.writeFileSync(outputPath, html, 'utf-8');
         console.log(`  [missing] ${slugify(pageName)}.html (placeholder)`);
@@ -886,51 +888,437 @@ function getBuiltInThemeCss(name: string): string | null {
     switch (name) {
         case 'default':
             return `/* AS Notes default theme */
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.6; color: #24292e; max-width: 1200px; margin: 0 auto; padding: 20px; }
-.site-nav { border-bottom: 1px solid #e1e4e8; padding-bottom: 16px; margin-bottom: 24px; }
-.site-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.site-nav a { text-decoration: none; color: #0366d6; padding: 4px 8px; border-radius: 4px; }
-.site-nav a:hover { background: #f1f8ff; }
-.nav-current a { font-weight: 600; background: #f1f8ff; }
-article { max-width: 800px; }
-h1, h2, h3, h4 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; }
-a { color: #0366d6; text-decoration: none; }
-a:hover { text-decoration: underline; }
-code { background: #f6f8fa; padding: 2px 6px; border-radius: 3px; font-size: 85%; }
-pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-img { max-width: 100%; height: auto; }
-.toc { background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px; padding: 12px 20px; margin-bottom: 24px; }
-.toc summary { font-weight: 600; cursor: pointer; }
-.toc ul { margin: 8px 0 0 0; }
-.toc li { margin: 4px 0; }
-.page-date { display: block; color: #586069; font-size: 0.9em; margin-bottom: 16px; }
-.blog-post { max-width: 720px; margin: 0 auto; }
-.missing-page { color: #cb2431; font-style: italic; }
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+/* -- Layout grid -------------------------------------------------- */
+
+body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #24292e;
+    background: #ffffff;
+}
+
+/* -- Header / footer ---------------------------------------------- */
+
+header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+}
+
+footer {
+    grid-column: 1 / -1;
+    grid-row: 3;
+}
+
+/* -- Sidebar nav -------------------------------------------------- */
+
+.site-nav {
+    grid-column: 1;
+    grid-row: 2;
+    background: #f6f8fa;
+    border-right: 1px solid #d0d7de;
+    padding: 1.5rem 1rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.site-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.site-nav ul li {
+    margin: 0.2rem 0;
+}
+
+.site-nav ul li a {
+    display: block;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #24292f;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.site-nav ul li a:hover {
+    background: #eaeef2;
+    color: #0550ae;
+}
+
+.site-nav ul li.nav-current a {
+    background: #ddf4ff;
+    color: #0550ae;
+    font-weight: 600;
+}
+
+/* -- Content ------------------------------------------------------ */
+
+article {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 900px;
+    overflow-x: auto;
+}
+
+article.markdown-body {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 900px;
+    overflow-x: auto;
+}
+
+article.blog-post {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* -- Typography --------------------------------------------------- */
+
+h1, h2, h3, h4 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+a {
+    color: #0366d6;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* -- Code --------------------------------------------------------- */
+
+code {
+    background: #f6f8fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 85%;
+}
+
+pre {
+    background: #f6f8fa;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+/* -- Images ------------------------------------------------------- */
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* -- Table of contents -------------------------------------------- */
+
+.toc {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 12px 20px;
+    margin-bottom: 24px;
+}
+
+.toc summary {
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.toc ul {
+    margin: 8px 0 0 0;
+}
+
+.toc li {
+    margin: 4px 0;
+}
+
+/* -- Blog date ---------------------------------------------------- */
+
+.page-date {
+    display: block;
+    color: #586069;
+    font-size: 0.9em;
+    margin-bottom: 16px;
+}
+
+/* -- Missing page ------------------------------------------------- */
+
+.missing-page {
+    color: #cb2431;
+    font-style: italic;
+}
+
+/* -- Responsive --------------------------------------------------- */
+
+@media (max-width: 700px) {
+    body {
+        grid-template-columns: 1fr;
+    }
+
+    .site-nav {
+        position: relative;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #d0d7de;
+    }
+
+    article,
+    article.markdown-body,
+    article.blog-post {
+        padding: 1.5rem;
+    }
+}
 `;
         case 'dark':
             return `/* AS Notes dark theme */
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.6; color: #c9d1d9; background: #0d1117; max-width: 1200px; margin: 0 auto; padding: 20px; }
-.site-nav { border-bottom: 1px solid #30363d; padding-bottom: 16px; margin-bottom: 24px; }
-.site-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.site-nav a { text-decoration: none; color: #58a6ff; padding: 4px 8px; border-radius: 4px; }
-.site-nav a:hover { background: #161b22; }
-.nav-current a { font-weight: 600; background: #161b22; }
-article { max-width: 800px; }
-h1, h2, h3, h4 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; color: #f0f6fc; }
-a { color: #58a6ff; text-decoration: none; }
-a:hover { text-decoration: underline; }
-code { background: #161b22; padding: 2px 6px; border-radius: 3px; font-size: 85%; }
-pre { background: #161b22; padding: 16px; border-radius: 6px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-img { max-width: 100%; height: auto; }
-.toc { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 12px 20px; margin-bottom: 24px; }
-.toc summary { font-weight: 600; cursor: pointer; color: #f0f6fc; }
-.toc ul { margin: 8px 0 0 0; }
-.toc li { margin: 4px 0; }
-.page-date { display: block; color: #8b949e; font-size: 0.9em; margin-bottom: 16px; }
-.blog-post { max-width: 720px; margin: 0 auto; }
-.missing-page { color: #f85149; font-style: italic; }
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+/* -- Layout grid -------------------------------------------------- */
+
+body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #c9d1d9;
+    background: #0d1117;
+}
+
+/* -- Header / footer ---------------------------------------------- */
+
+header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+}
+
+footer {
+    grid-column: 1 / -1;
+    grid-row: 3;
+}
+
+/* -- Sidebar nav -------------------------------------------------- */
+
+.site-nav {
+    grid-column: 1;
+    grid-row: 2;
+    background: #161b22;
+    border-right: 1px solid #30363d;
+    padding: 1.5rem 1rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.site-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.site-nav ul li {
+    margin: 0.2rem 0;
+}
+
+.site-nav ul li a {
+    display: block;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #c9d1d9;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.site-nav ul li a:hover {
+    background: #1f2937;
+    color: #58a6ff;
+}
+
+.site-nav ul li.nav-current a {
+    background: #1f2937;
+    color: #58a6ff;
+    font-weight: 600;
+}
+
+/* -- Content ------------------------------------------------------ */
+
+article {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 900px;
+    overflow-x: auto;
+}
+
+article.markdown-body {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 900px;
+    overflow-x: auto;
+}
+
+article.blog-post {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* -- Typography --------------------------------------------------- */
+
+h1, h2, h3, h4 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    color: #f0f6fc;
+}
+
+a {
+    color: #58a6ff;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* -- Code --------------------------------------------------------- */
+
+code {
+    background: #161b22;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 85%;
+}
+
+pre {
+    background: #161b22;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+/* -- Images ------------------------------------------------------- */
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* -- Table of contents -------------------------------------------- */
+
+.toc {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 12px 20px;
+    margin-bottom: 24px;
+}
+
+.toc summary {
+    font-weight: 600;
+    cursor: pointer;
+    color: #f0f6fc;
+}
+
+.toc ul {
+    margin: 8px 0 0 0;
+}
+
+.toc li {
+    margin: 4px 0;
+}
+
+/* -- Blog date ---------------------------------------------------- */
+
+.page-date {
+    display: block;
+    color: #8b949e;
+    font-size: 0.9em;
+    margin-bottom: 16px;
+}
+
+/* -- Missing page ------------------------------------------------- */
+
+.missing-page {
+    color: #f85149;
+    font-style: italic;
+}
+
+/* -- Responsive --------------------------------------------------- */
+
+@media (max-width: 700px) {
+    body {
+        grid-template-columns: 1fr;
+    }
+
+    .site-nav {
+        position: relative;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #30363d;
+    }
+
+    article,
+    article.markdown-body,
+    article.blog-post {
+        padding: 1.5rem;
+    }
+}
 `;
         default:
             return null;
