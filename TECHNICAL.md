@@ -288,8 +288,6 @@ If a user opens an excluded file (e.g. via the command palette) and triggers the
 
 `ignoreService` is kept as a module-level variable (alongside `indexService` and `indexScanner`) and is set to `undefined` in `exitFullMode()`. In `initWorkspace()`, a temporary `IgnoreService` is constructed (after creating the file) and passed to the one-time `IndexScanner` used for the initial full scan, so newly initialised workspaces also respect default exclusions immediately.
 
-
-
 ```sql
 CREATE TABLE pages (
     id INTEGER PRIMARY KEY,
@@ -769,6 +767,7 @@ The kanban board feature provides a visual task management UI within VS Code. It
 ### File structure
 
 ```
+
 kanban/
   <board-slug>/
     board.yaml                              ← BoardConfig (name, lanes, users, labels)
@@ -777,6 +776,7 @@ kanban/
     assets/
       <card-id>/
         <filename>                          ← attached files
+
 ```
 
 Board slugs and lane slugs are lowercased, with non-alphanumeric characters replaced by hyphens. The `assets/` directory is excluded from lane scanning. The `archive/` lane slug is reserved and excluded from the board config lanes list.
@@ -965,6 +965,7 @@ The editor panel webview (`src/webview/kanban.ts`). Compiled to `dist/webview/ka
 **Card rendering:** Each lane column is rendered with its cards sorted by `sortOrder` (falling back to the `created` timestamp). Cards show priority badge, title, assignee, labels, and due date.
 
 **Drag and drop:**
+
 - Cards are draggable between lanes. On drop, a `moveCard` message is sent with the new lane and an interpolated `sortOrder` (midpoint between neighbours, or ±1 at boundaries).
 - Files can be dropped onto the asset drop zone in the card modal; a `addAsset` message is sent for each dropped file (assets handled via the extension's file picker dialog, not the webview directly — drag events trigger the extension-side file picker).
 
@@ -1025,6 +1026,7 @@ The kanban root URI is always `<workspaceRoot>/kanban`. The `kanban/` directory 
 
 The kanban data directory is intentionally **not** excluded from git. The initialisation script (`initWorkspace`) adds a comment block to `.gitignore` for the index database and logs, but `kanban/` is left out so that boards and cards are version-controlled by default. Users can add `kanban/` to `.gitignore` manually if they prefer not to commit their boards.
 .          ↔ deep/nested → 2 (two hops down from root)
+
 ```
 
 The algorithm:
@@ -1257,7 +1259,7 @@ The wikilink colour defaults to the VS Code theme's `textLink.foreground` colour
 
 | Setting | Default | Description |
 |---|---|---|
-| `as-notes.wikilinkColour` | _(empty — uses theme colour)_ | Hex colour for wikilinks (e.g. `#3794ff`). Leave empty to follow the theme. |
+| `as-notes.wikilinkColour` | *(empty — uses theme colour)* | Hex colour for wikilinks (e.g. `#3794ff`). Leave empty to follow the theme. |
 
 Changing the setting takes effect immediately — no reload required. Internally, decoration types are immutable in VS Code, so changing the colour disposes the old types and creates new ones.
 
@@ -1282,6 +1284,7 @@ Parsing every line on every event is expensive for large documents. Segments are
 - **Debounced text changes:** `onDidChangeTextDocument` is debounced at 50 ms. Rapidly fired edit events are batched into a single re-parse.
 
 This ensures:
+
 - Opening a document parses once and applies decorations immediately.
 - Typing triggers at most one re-parse per 50 ms burst.
 
@@ -1641,8 +1644,8 @@ The function uses regex matching to detect the current state and return the togg
 
 1. **Done todo** — `/^(\s*)([-*])\s+\[(?:x|X)\]\s?(.*)/` → strip bullet and checkbox, return `indent + rest`
 2. **Unchecked todo** — `/^(\s*)([-*])\s+\[ \]\s?(.*)/` → replace `[ ]` with `[x]`
-3. **List item** (bullet without checkbox) — `/^(\s*)([-*])\s+(.*)/` → insert `[ ] ` after the bullet
-4. **Plain text** — everything else → prepend `- [ ] ` after leading whitespace
+3. **List item** (bullet without checkbox) — `/^(\s*)([-*])\s+(.*)/` → insert `[ ]` after the bullet
+4. **Plain text** — everything else → prepend `- [ ]` after leading whitespace
 
 Leading whitespace (indentation) is captured and preserved in all cases. Both `-` and `*` bullets are supported. Both `[x]` and `[X]` are recognised as done.
 
@@ -1893,6 +1896,7 @@ Each entry has a `kind` field:
 The webview is a separate IIFE bundle (`dist/webview/search.js`) with Tailwind CSS (`dist/webview/search.css`), built through the same PostCSS + Tailwind pipeline as the tasks view.
 
 **UI components:**
+
 - Search input with magnifying glass icon and "Go To" button
 - Dropdown list with up to 20 filtered results, absolutely positioned to overflow the panel bounds
 - Each dropdown item shows an icon (page/alias/forward), label, detail, and a "New" badge for forward references
@@ -1933,6 +1937,7 @@ The backlinks panel displays all incoming links to a target page — either the 
 All backlinks are grouped by their **chain pattern** — the abstract sequence of page names from root to the target link. For example, `[[Project]] → [[Tasks]] → [[NGINX]]` is a different pattern from `[[NGINX]]` alone.
 
 Grouping logic:
+
 1. Query all links pointing to the target page's filename(s) — including alias filenames
 2. For each link, build the full chain via `buildChainForLink()` (walk `outline_parent_link_id` upward, then reverse)
 3. Compute a **pattern key**: the lowercased, `→`-joined sequence of page names (case-insensitive grouping)
@@ -1947,6 +1952,7 @@ Grouping logic:
 3. **Forward ref mode**: uses stored `lockedPageName` → `getBacklinkChainsByName(pageName)`
 
 Both `getBacklinkChains()` and `getBacklinkChainsByName()` call the private `buildBacklinkChainGroups(targetFilenames)` method which:
+
 - Queries `SELECT l.id, l.source_page_id, p.* FROM links l JOIN pages p ON l.source_page_id = p.id WHERE LOWER(l.page_filename) IN (...)` with case-insensitive filename matching
 - Builds chain for each link via `buildChainForLink(linkId)`
 - Groups by lowercased pattern key into `BacklinkChainGroup[]`
@@ -2036,6 +2042,7 @@ The default is configured via `as-notes.backlinkWrapContext` (boolean, default `
 ### Rendering
 
 Each chain group renders as a collapsible section with:
+
 - **Header**: the chain pattern displayed as clickable page name links separated by `→` arrows, with an instance count badge
 - **Instances**: each instance shows the source page title followed by the chain with per-link line numbers (e.g. `[L12]`), each clickable for navigation
 - **Context block**: below each chain instance, a multi-line context snippet (±1 surrounding lines) of the last link (the target link) is displayed in a blockquote-styled `<pre>` block. Common leading whitespace is stripped so that outliner-indented content doesn't waste horizontal space (relative indentation is preserved). The wikilink text on the relevant line is highlighted using `--vscode-textLink-foreground`. The blockquote uses `--vscode-textBlockQuote-border` for the left border and `--vscode-textBlockQuote-background` for the background fill. Context text uses `--vscode-descriptionForeground` for a muted secondary appearance.
@@ -2139,6 +2146,7 @@ Typing `/` in any markdown file (except inside front matter, inline code, or fen
 `src/SlashCommandProvider.ts` — a `vscode.CompletionItemProvider` registered on trigger character `/`.
 
 **Suppression rules** (same pattern as `WikilinkCompletionProvider`):
+
 - YAML front matter (`---` fences)
 - Fenced code blocks (` ``` ` or `~~~`)
 - Inline code spans (`` ` ``)
@@ -2171,7 +2179,7 @@ Detection for the latter two is handled by `isPositionInsideCode()` in `Completi
 | `Task: Due Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskDueDate` |
 | `Task: Completion Date` | *(task lines only)* Replaces `/` with `""` and fires `as-notes.insertTaskCompletionDate` |
 
-Table commands append ` (Pro)` to the label only when the user is **not** Pro licenced. Template also appends ` (Pro)` for free users. Task commands are only shown when the cursor is on a task line (`- [ ]` or `- [x]`).
+Table commands append `(Pro)` to the label only when the user is **not** Pro licenced. Template also appends `(Pro)` for free users. Task commands are only shown when the cursor is on a task line (`- [ ]` or `- [x]`).
 
 The completion range covers only the `/` character.
 
@@ -2296,12 +2304,13 @@ interface TemplateContext {
 **Clamping:** The four "Remove N" functions (`removeRowsAbove`, `removeRowsBelow`, `removeColumnsRight`, `removeColumnsLeft`) clamp the requested count to the maximum available, gracefully removing as many as possible.
 
 **Cell width rules:**
+
 - New table: default width (7 chars content area)
 - Add columns: default width for new columns
 - Add rows: widths from header row
 - Format: `max(longest cell content, default minimum)` per column
 
-**Pro gating:** All ten table commands show in the slash menu for all users but append ` (Pro)` to the label only when the user is not Pro licenced. Execution is gated via `isProLicenced()` with a warning notification for free users. `SlashCommandProvider` receives an `isProLicenced: () => boolean` callback via its constructor.
+**Pro gating:** All ten table commands show in the slash menu for all users but append `(Pro)` to the label only when the user is not Pro licenced. Execution is gated via `isProLicenced()` with a warning notification for free users. `SlashCommandProvider` receives an `isProLicenced: () => boolean` callback via its constructor.
 
 ## Pro licence
 
@@ -2338,11 +2347,13 @@ activateWithServer(key: string, context: vscode.ExtensionContext): Promise<Licen
 ```
 
 The stub:
+
 - Validates the key format locally (no network call)
 - On success, writes a stub token (`stub:<base64(key)>`) to `context.secrets` under the key `as-notes.activationToken`
 - On subsequent startups, checks the stored token before re-validating locally
 
 Three internal helpers are clearly marked for replacement:
+
 - `_callServer(key)` — replace with the real HTTP call
 - `_buildToken(key)` — replace with storage of the server-returned signed token
 - `_verifyToken(token, key)` — replace with Ed25519/HMAC signature verification against the baked-in public key
@@ -2431,6 +2442,7 @@ ensurePreCommitHook(workspaceRoot: string): HookResult
 ```
 
 `ensurePreCommitHook()` is **idempotent** and **self-healing**:
+
 - `no-git` — `.git/hooks/` directory does not exist (not a git repo)
 - `created` — no pre-commit hook existed; created with `#!/bin/sh` + block
 - `appended` — hook existed but lacked the marker; block appended
@@ -2442,6 +2454,7 @@ ensurePreCommitHook(workspaceRoot: string): HookResult
 The hook file is made executable via `fs.chmodSync(hookPath, 0o755)` (wrapped in try/catch — no-op on Windows without Git Bash, but the hook still runs in Git Bash environments).
 
 `ensurePreCommitHook()` is called in three places in `extension.ts`:
+
 1. `initWorkspace()` — after creating `.asnotes/`
 2. `rebuildIndex()` — at the start of the rebuild
 3. `startPeriodicScan()` setInterval callback — each periodic scan tick
@@ -2504,6 +2517,7 @@ to `.vscode/settings.json` at workspace scope. `${fileName}` is a built-in VS Co
 | `as-notes.assetPath` | `assets/images` | Workspace-relative folder where dropped/pasted files are saved |
 
 **Trigger points** (all in `extension.ts`):
+
 1. `enterFullMode()` — on activation when `.asnotes/` is found
 2. `initWorkspace` command — when user initialises a new workspace
 3. `rebuildIndex` command — re-applies in case settings were modified externally
@@ -2537,7 +2551,7 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 
 ## Outliner mode
 
-Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a bullet-first outliner. It only affects lines beginning with `- ` (hyphen-space) — all other lines retain normal editor behaviour.
+Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a bullet-first outliner. It only affects lines beginning with `-` (hyphen-space) — all other lines retain normal editor behaviour.
 
 ### OutlinerService
 
@@ -2548,7 +2562,7 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | Function | Purpose |
 |---|---|
 | `isOnBulletLine(lineText)` | Returns `true` for lines matching `/^\s*- /` |
-| `getOutlinerEnterInsert(lineText)` | Returns the `\n{indent}- ` or `\n{indent}- [ ] ` string to insert on Enter |
+| `getOutlinerEnterInsert(lineText)` | Returns the `\n{indent}-` or `\n{indent}- [ ]` string to insert on Enter |
 | `isCodeFenceOpen(lineText)` | Returns `true` when a bullet line ends with `` ``` `` (optionally + language) |
 | `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
 | `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
@@ -2575,6 +2589,7 @@ This combination allows keybindings to fire only when in outliner mode AND on a 
 Keybinding: `Enter` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !suggestWidgetVisible && editorHasSelection == false && !inlineSuggestionVisible`.
 
 Command `as-notes.outlinerEnter` for each cursor (in priority order):
+
 1. **Bullet code fence open** — `isCodeFenceOpen` returns `true`: inserts code block skeleton indented +2 past bullet (see below).
 2. **Bullet line** — deletes from cursor to end of line, inserts `getOutlinerEnterInsert(lineText)`. Text after cursor is pushed to the new bullet.
 
@@ -2639,22 +2654,24 @@ On non-bullet lines Tab retains normal VS Code behaviour with no extra logic.
 Keybinding: `Ctrl+V` / `Cmd+V` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly`.
 
 Command `as-notes.outlinerPaste`:
+
 1. Reads clipboard via `vscode.env.clipboard.readText()`.
 2. Calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
 3. If result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
 4. Otherwise, replaces the entire current line with the formatted bullets.
 
 **`formatOutlinerPaste` rules:**
+
 - CRLF normalised to LF. Empty/whitespace-only lines stripped. Each remaining line trimmed.
-- Plain bullet: each line gets `{indent}- ` prefix.
-- Unchecked todo: each line gets `{indent}- [ ] ` prefix.
-- Done todo: first line keeps `{indent}- [x] `, subsequent lines get `{indent}- [ ] `.
+- Plain bullet: each line gets `{indent}-` prefix.
+- Unchecked todo: each line gets `{indent}- [ ]` prefix.
+- Done todo: first line keeps `{indent}- [x]`, subsequent lines get `{indent}- [ ]`.
 - Text before cursor on the current line is preserved; text after cursor is appended to the last pasted line.
 - Single-line clipboard text: no conversion (returns `null`).
 
 ### Todo toggle in outliner mode
 
-When `as-notes.outlinerMode` is enabled and the line `isOnBulletLine`, the `as-notes.toggleTodo` command uses `toggleOutlinerTodoLine` instead of the default `toggleTodoLine`. The outliner cycle preserves the `- ` prefix:
+When `as-notes.outlinerMode` is enabled and the line `isOnBulletLine`, the `as-notes.toggleTodo` command uses `toggleOutlinerTodoLine` instead of the default `toggleTodoLine`. The outliner cycle preserves the `-` prefix:
 
 | State | Default toggle result | Outliner toggle result |
 |---|---|---|
@@ -2856,7 +2873,7 @@ The webview client renders the AI Knowledge panel UI.
    - Registers the `as-notes.navigateWikilink`, `as-notes.toggleTodo`, `as-notes.toggleTaskAtLine`, `as-notes.toggleTaskFromPanel`, `as-notes.navigateToTask`, `as-notes.showBacklinks`, `as-notes.openDailyJournal`, `as-notes.renameJournalFiles`, task hashtag commands (`as-notes.insertTaskHashtag`, `as-notes.insertTaskDueDate`, `as-notes.insertTaskCompletionDate`), and all eight encryption commands
    - Sets up index update triggers (save, file events, editor switch)
    - Starts the periodic scanner
-5. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared. Passive-mode command stubs remain active.
+6. **Passive mode** (no `.asnotes/`): status bar only, no providers, context key cleared. Passive-mode command stubs remain active.
 
 All full-mode registrations are tracked in `fullModeDisposables[]` and pushed to `context.subscriptions`. The `deactivate()` function persists the database and cleans up.
 
