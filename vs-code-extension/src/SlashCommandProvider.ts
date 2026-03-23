@@ -248,6 +248,60 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
         };
         items.push(removeColsLeftItem);
 
+        // ── Publishing slash commands ─────────────────────────────────────
+
+        // ── Public ──────────────────────────────────────────────────────
+        const publicItem = new vscode.CompletionItem('Public', vscode.CompletionItemKind.Property);
+        publicItem.detail = 'Toggle public: true/false in front matter';
+        publicItem.sortText = 'da-publish-public';
+        publicItem.filterText = '/Public';
+        publicItem.insertText = '';
+        publicItem.range = range;
+        publicItem.command = {
+            command: 'as-notes.togglePublic',
+            title: 'Toggle Public',
+        };
+        items.push(publicItem);
+
+        // ── Layout ──────────────────────────────────────────────────────
+        const layoutItem = new vscode.CompletionItem('Layout', vscode.CompletionItemKind.Property);
+        layoutItem.detail = 'Cycle layout: docs/blog/minimal in front matter';
+        layoutItem.sortText = 'db-publish-layout';
+        layoutItem.filterText = '/Layout';
+        layoutItem.insertText = '';
+        layoutItem.range = range;
+        layoutItem.command = {
+            command: 'as-notes.cycleLayout',
+            title: 'Cycle Layout',
+        };
+        items.push(layoutItem);
+
+        // ── Retina ──────────────────────────────────────────────────────
+        const retinaItem = new vscode.CompletionItem('Retina', vscode.CompletionItemKind.Property);
+        retinaItem.detail = 'Toggle retina: true/false in front matter';
+        retinaItem.sortText = 'dc-publish-retina';
+        retinaItem.filterText = '/Retina';
+        retinaItem.insertText = '';
+        retinaItem.range = range;
+        retinaItem.command = {
+            command: 'as-notes.toggleRetina',
+            title: 'Toggle Retina',
+        };
+        items.push(retinaItem);
+
+        // ── Assets ──────────────────────────────────────────────────────
+        const assetsItem = new vscode.CompletionItem('Assets', vscode.CompletionItemKind.Property);
+        assetsItem.detail = 'Toggle assets: true/false in front matter';
+        assetsItem.sortText = 'dd-publish-assets';
+        assetsItem.filterText = '/Assets';
+        assetsItem.insertText = '';
+        assetsItem.range = range;
+        assetsItem.command = {
+            command: 'as-notes.toggleAssets',
+            title: 'Toggle Assets',
+        };
+        items.push(assetsItem);
+
         // ── Card: Entry Date (kanban card files only) ─────────────────────
         const filePath = document.uri.fsPath.replace(/\\/g, '/');
         const isKanbanCardFile = /\/kanban\//.test(filePath) && /\/card_[^/]+\.md$/.test(filePath);

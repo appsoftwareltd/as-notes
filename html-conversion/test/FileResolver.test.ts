@@ -1,11 +1,49 @@
 import { describe, it, expect } from 'vitest';
-import { FileResolver } from '../src/FileResolver.js';
+import { FileResolver, slugify } from '../src/FileResolver.js';
+
+describe('slugify', () => {
+    it('should lowercase and hyphenate', () => {
+        expect(slugify('My Cool Page')).toBe('my-cool-page');
+    });
+
+    it('should handle underscores', () => {
+        expect(slugify('my_page_name')).toBe('my-page-name');
+    });
+
+    it('should remove special characters', () => {
+        expect(slugify('Page & Notes!')).toBe('page-notes');
+    });
+
+    it('should collapse consecutive hyphens', () => {
+        expect(slugify('Page -- Something')).toBe('page-something');
+    });
+
+    it('should trim leading/trailing hyphens', () => {
+        expect(slugify('-Leading-')).toBe('leading');
+    });
+
+    it('should keep index as index', () => {
+        expect(slugify('index')).toBe('index');
+    });
+
+    it('should handle already-slugified names', () => {
+        expect(slugify('my-page')).toBe('my-page');
+    });
+
+    it('should handle names with numbers', () => {
+        expect(slugify('Chapter 1 Introduction')).toBe('chapter-1-introduction');
+    });
+
+    it('should handle mixed case', () => {
+        expect(slugify('Getting Started')).toBe('getting-started');
+    });
+});
 
 describe('FileResolver', () => {
     describe('basic resolution', () => {
-        it('should resolve a page name to its .html href', () => {
+        it('should resolve a page name to its slugified .html href', () => {
             const resolver = new FileResolver(['index.md', 'Wikilinks.md']);
-            expect(resolver.resolve('Wikilinks')).toBe('Wikilinks.html');
+            expect(resolver.resolve('Wikilinks')).toBe('wikilinks.html');
         });
 
         it('should resolve index page', () => {
@@ -13,33 +51,33 @@ describe('FileResolver', () => {
             expect(resolver.resolve('index')).toBe('index.html');
         });
 
-        it('should return a valid .html href for missing targets', () => {
+        it('should return a slugified .html href for missing targets', () => {
             const resolver = new FileResolver(['index.md']);
-            expect(resolver.resolve('NonExistent')).toBe('NonExistent.html');
+            expect(resolver.resolve('NonExistent')).toBe('nonexistent.html');
         });
     });
 
     describe('case-insensitive matching', () => {
         it('should resolve case-insensitively', () => {
             const resolver = new FileResolver(['Wikilinks.md']);
-            expect(resolver.resolve('wikilinks')).toBe('Wikilinks.html');
+            expect(resolver.resolve('wikilinks')).toBe('wikilinks.html');
         });
 
-        it('should resolve uppercase input to original filename casing', () => {
+        it('should resolve uppercase input to slugified href', () => {
             const resolver = new FileResolver(['Wikilinks.md']);
-            expect(resolver.resolve('WIKILINKS')).toBe('Wikilinks.html');
+            expect(resolver.resolve('WIKILINKS')).toBe('wikilinks.html');
         });
     });
 
-    describe('URL encoding', () => {
-        it('should URL-encode spaces in page names', () => {
+    describe('slug formatting', () => {
+        it('should slugify spaces in page names', () => {
             const resolver = new FileResolver(['My Page.md']);
-            expect(resolver.resolve('My Page')).toBe('My%20Page.html');
+            expect(resolver.resolve('My Page')).toBe('my-page.html');
         });
 
-        it('should URL-encode special characters', () => {
+        it('should slugify special characters', () => {
             const resolver = new FileResolver(['Page & Notes.md']);
-            expect(resolver.resolve('Page & Notes')).toBe('Page%20%26%20Notes.html');
+            expect(resolver.resolve('Page & Notes')).toBe('page-notes.html');
         });
     });
 
@@ -47,13 +85,13 @@ describe('FileResolver', () => {
         it('should work as a WikilinkResolverFn via createResolverFn', () => {
             const resolver = new FileResolver(['index.md', 'Topics.md']);
             const resolverFn = resolver.createResolverFn();
-            expect(resolverFn('Topics', {})).toBe('Topics.html');
+            expect(resolverFn('Topics', {})).toBe('topics.html');
         });
 
         it('should handle missing pages in resolver fn', () => {
             const resolver = new FileResolver(['index.md']);
             const resolverFn = resolver.createResolverFn();
-            expect(resolverFn('Missing', {})).toBe('Missing.html');
+            expect(resolverFn('Missing', {})).toBe('missing.html');
         });
     });
 
@@ -63,8 +101,8 @@ describe('FileResolver', () => {
             const pages = resolver.listPages();
             expect(pages).toEqual([
                 { name: 'index', href: 'index.html' },
-                { name: 'Getting Started', href: 'Getting%20Started.html' },
-                { name: 'Wikilinks', href: 'Wikilinks.html' },
+                { name: 'Getting Started', href: 'getting-started.html' },
+                { name: 'Wikilinks', href: 'wikilinks.html' },
             ]);
         });
 
@@ -98,9 +136,9 @@ describe('FileResolver', () => {
             expect(resolver.getMissingTargets()).toEqual(new Set(['Missing']));
         });
 
-        it('should URL-encode missing target hrefs', () => {
+        it('should slugify missing target hrefs', () => {
             const resolver = new FileResolver(['index.md']);
-            expect(resolver.resolve('Missing Page')).toBe('Missing%20Page.html');
+            expect(resolver.resolve('Missing Page')).toBe('missing-page.html');
             expect(resolver.getMissingTargets()).toEqual(new Set(['Missing Page']));
         });
 

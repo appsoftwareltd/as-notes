@@ -8,6 +8,8 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 
 > **GitHub:** [https://github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
 
+![AS Notes editor screenshot](../assets/images/as-notes-editor-screenshot.png)
+
 ## Why VS Code?
 
 Using VS Code as your notes app gives you a huge amount for free before you even start using AS Notes features:

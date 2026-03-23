@@ -1,0 +1,6 @@
+{
+    "as-notes.rootDirectory": "docs-src",
+    "markdown.copyFiles.destination": {
+        "**/*.md": "/docs-src/assets/images/${fileName}"
+    }
+}

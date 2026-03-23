@@ -119,6 +119,19 @@ const kanbanSidebarWebviewBuildOptions = {
 };
 
 /** @type {import('esbuild').BuildOptions} */
+const convertBuildOptions = {
+    entryPoints: ['../html-conversion/src/convert.ts'],
+    bundle: true,
+    outfile: 'dist/convert.js',
+    format: 'esm',
+    platform: 'node',
+    sourcemap: true,
+    banner: {
+        js: '#!/usr/bin/env node',
+    },
+};
+
+/** @type {import('esbuild').BuildOptions} */
 const calendarWebviewBuildOptions = {
     entryPoints: ['./src/webview/calendar.ts'],
     bundle: true,
@@ -193,12 +206,14 @@ if (isWatch) {
     const kanbanCtx = await esbuild.context(kanbanWebviewBuildOptions);
     const kanbanSidebarCtx = await esbuild.context(kanbanSidebarWebviewBuildOptions);
     const calendarCtx = await esbuild.context(calendarWebviewBuildOptions);
+    const convertCtx = await esbuild.context(convertBuildOptions);
     await extCtx.watch();
     await webCtx.watch();
     await searchCtx.watch();
     await kanbanCtx.watch();
     await kanbanSidebarCtx.watch();
     await calendarCtx.watch();
+    await convertCtx.watch();
     console.log('Watching for changes...');
 } else {
     await buildCss();
@@ -208,5 +223,6 @@ if (isWatch) {
     await esbuild.build(kanbanWebviewBuildOptions);
     await esbuild.build(kanbanSidebarWebviewBuildOptions);
     await esbuild.build(calendarWebviewBuildOptions);
+    await esbuild.build(convertBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }

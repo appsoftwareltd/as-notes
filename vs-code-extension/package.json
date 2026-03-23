@@ -173,6 +173,30 @@
             {
                 "command": "as-notes.insertTemplate",
                 "title": "AS Notes: Insert Template"
+            },
+            {
+                "command": "as-notes.togglePublic",
+                "title": "AS Notes: Toggle Public"
+            },
+            {
+                "command": "as-notes.cycleLayout",
+                "title": "AS Notes: Cycle Layout"
+            },
+            {
+                "command": "as-notes.toggleRetina",
+                "title": "AS Notes: Toggle Retina"
+            },
+            {
+                "command": "as-notes.toggleAssets",
+                "title": "AS Notes: Toggle Assets"
+            },
+            {
+                "command": "as-notes.publishToHtml",
+                "title": "AS Notes: Publish to HTML"
+            },
+            {
+                "command": "as-notes.configurePublish",
+                "title": "AS Notes: Configure Publish Settings"
             }
         ],
         "keybindings": [

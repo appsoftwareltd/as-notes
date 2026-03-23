@@ -1,8 +1,21 @@
 import type { WikilinkResolverFn } from 'as-notes-common';
 
+export function slugify(name: string): string {
+    return name
+        .toLowerCase()
+        .replace(/[\s_]+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
 export interface PageEntry {
     name: string;
     href: string;
+    title?: string;
+    order?: number;
+    date?: string;
+    description?: string;
 }
 
 /**
@@ -35,7 +48,7 @@ export class FileResolver {
         const originalName = this.lookup.get(key);
 
         if (originalName) {
-            return encodeURIComponent(originalName).replace(/%2F/gi, '/') + '.html';
+            return slugify(originalName) + '.html';
         }
 
         // Track the missing target (deduplicate by lowercase key, keep first casing)
@@ -43,7 +56,7 @@ export class FileResolver {
             this.missingTargets.set(key, pageFileName);
         }
 
-        return encodeURIComponent(pageFileName).replace(/%2F/gi, '/') + '.html';
+        return slugify(pageFileName) + '.html';
     }
 
     createResolverFn(): WikilinkResolverFn {
@@ -62,7 +75,7 @@ export class FileResolver {
         for (const [_key, name] of this.originalNames) {
             entries.push({
                 name,
-                href: encodeURIComponent(name).replace(/%2F/gi, '/') + '.html',
+                href: slugify(name) + '.html',
             });
         }
 
