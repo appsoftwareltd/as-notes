@@ -16,3 +16,7 @@ AGENTS.md
 # No node modules at workspace root, but added in case accidentally created
 
 node_modules
+
+# Test outputs
+
+test-results.txt

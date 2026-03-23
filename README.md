@@ -9,7 +9,6 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 [![License](https://img.shields.io/badge/license-Elastic--2.0-lightgrey)](https://github.com/appsoftwareltd/as-notes/blob/main/LICENSE)
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
-
 |||
 |--|--|
 |Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
@@ -30,14 +29,14 @@ AS Notes brings [[wikilink]] style note-taking (and much more) directly into VS 
 
 ## Why VS Code?
 
-Many of us spend a lot of time in VS Code and using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features: 
+Many of us spend a lot of time in VS Code and using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features:
 
 - Cross platform + Web (via Workspaces)
 - UI features such as Tabs, File Explorer, Themes
 - Huge extension library that can be used along side AS Notes (Mermaid diagramming, Vim etc)
 - AI Chat (GitHub CoPilot / Claude etc.) you can use to work with your notes
 - Multiline editing Outliner functionality via `Ctrl + [ / ]`
-- Code highlighting 
+- Code highlighting
 - And all of the many features that VS Code has
 
 ## Features
@@ -48,7 +47,7 @@ Many of us spend a lot of time in VS Code and using VS Code as your main notes a
 - Version control friendly (Git & GitOps)
 - Lightweight indexing of your notes (local sqlite3 WASM)
 
-- Performant on large (~20k markdown files) knowledge bases 
+- Performant on large (~20k markdown files) knowledge bases
 
 ### Wikilinks
 
@@ -207,7 +206,7 @@ AS Notes can work alongside knowledge bases created in Obsidian or Logseq due to
 
 ### Outliner Mode
 
-Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `- ` and custom keybindings keep you in flow:
+Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `-` and custom keybindings keep you in flow:
 
 | Key | Action |
 |---|---|
@@ -286,11 +285,13 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 4. To read a note, run **AS Notes: [All|Current] Note(s)** - files are decrypted in place using your stored passphrase.
 
 **Encryption details:**
+
 - Algorithm: AES-256-GCM with a per-encryption random 12-byte nonce
 - Key derivation: PBKDF2-SHA256 (100,000 iterations) from your passphrase
 - File format: a single-line `ASNOTES_ENC_V1:<base64url payload>` marker - used to help prevent accidental commits via a Git pre-commit hook.
 
 **Commands:**
+
 - `AS Notes: Set Encryption Key` - save passphrase to OS keychain
 - `AS Notes: Clear Encryption Key` - remove the stored passphrase
 - `AS Notes: Create Encrypted Note` - create a new named `.enc.md` file in the notes folder
@@ -306,7 +307,7 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 
 ## Getting started
 
-For a sample knowledge base, clone https://github.com/appsoftwareltd/as-notes-demo-notes and follow the instructions there to initialise.
+For a sample knowledge base, clone <https://github.com/appsoftwareltd/as-notes-demo-notes> and follow the instructions there to initialise.
 
 ### Initialise a workspace
 
@@ -555,6 +556,7 @@ A separate toggle controls **context verbosity** - compact (single-line, truncat
 #### Context menu - View Backlinks
 
 Right-click any wikilink in the editor to open backlinks for that specific page:
+
 - Works with aliases - if the wikilink targets an alias, backlinks for the canonical page are shown.
 - Works with forward references - pages that don't exist yet still show any incoming links.
 
@@ -610,6 +612,7 @@ A workspace can contain any number of named boards, stored as plain files in a `
 Each board starts with three lanes: **TODO**, **DOING**, and **DONE**. TODO and DONE are protected and cannot be removed or renamed.
 
 In the editor panel:
+
 - **Add lane** — click **+ Lane** in the board header.
 - **Rename lane** — click the pencil icon on any non-protected lane header.
 - **Remove lane** — click the × button; if the lane contains cards a confirmation is shown and cards are deleted along with it.
@@ -730,7 +733,7 @@ The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and 
 
 ### Poor performance when under file sync tool management
 
-It has been observed that the VS Code editor can feel slower when the directory is under management by some sync tools (e.g. MS OneDrive, Google Drive, Dropbox etc). 
+It has been observed that the VS Code editor can feel slower when the directory is under management by some sync tools (e.g. MS OneDrive, Google Drive, Dropbox etc).
 
 AS Notes directories can be managed via sync, though Git is recommended as it does not watch files like the sync tools do and has full conflict resolution features.
 
@@ -777,6 +780,7 @@ npm run convert -- --input ../docs-src/pages --output ../docs
 ```
 
 The conversion:
+
 - Scans the input directory for `.md` files
 - Resolves `[[wikilinks]]` to relative `.html` links
 - Generates a `<nav>` sidebar on each page
@@ -838,8 +842,8 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.2.6"   # change version
-git tag v2.2.6                   # change version
+git commit -m "Release v2.2.7"   # change version
+git tag v2.2.7                   # change version
 git push origin main --tags
 ```
 
@@ -863,4 +867,4 @@ This software is provided "as is", without warranty of any kind, express or impl
 
 This extension is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](LICENSE).
 
-You are free to use, share, and adapt this extension for **non-commercial purposes** with attribution. Commercial use requires a separate commercial license. See [LICENSE](LICENSE) for full terms or contact us https://www.appsoftware.com/contact.
+You are free to use, share, and adapt this extension for **non-commercial purposes** with attribution. Commercial use requires a separate commercial license. See [LICENSE](LICENSE) for full terms or contact us <https://www.appsoftware.com/contact>.

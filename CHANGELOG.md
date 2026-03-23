@@ -4,6 +4,10 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.2.7] - 2026-03-23
+
+- Feature: Move to offline licence activation for licence keys.
+
 ## [2.2.6] - 2026-03-19
 
 - Bugfix: Non initialised directories showed permanent loading status in the sidebar / icon.
@@ -26,7 +30,7 @@ All notable changes to AS Notes will be documented here.
 ## [2.2.0] - 2026-03-12
 
 - Added Kanban boards
-- Improved editor fenced codeblock completion behaviours in and out of outliner mode / context 
+- Improved editor fenced codeblock completion behaviours in and out of outliner mode / context
 
 ## [2.1.1] - 2026-03-11
 
