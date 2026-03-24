@@ -12,6 +12,7 @@ interface PublishConfig {
     defaultPublic?: boolean;
     defaultAssets?: boolean;
     layout?: string;
+    layouts?: string;
     includes?: string;
     theme?: string;
     baseUrl?: string;
@@ -153,6 +154,7 @@ function withDefaults(config: PublishConfig): Required<PublishConfig> {
         defaultPublic: config.defaultPublic ?? false,
         defaultAssets: config.defaultAssets ?? false,
         layout: config.layout ?? 'docs',
+        layouts: config.layouts ?? '',
         includes: config.includes ?? '',
         theme: config.theme ?? 'default',
         baseUrl: config.baseUrl ?? '',
@@ -228,31 +230,105 @@ function toRelativePath(notesRoot: string, chosenPath: string): string {
 }
 
 const DEFAULT_HEADER_HTML = `<div class="site-header">
-    <a class="site-title" href="{{base-url}}/">Home</a>
+    <a class="site-title" href="{{base-url}}/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+        Home
+    </a>
 </div>
 `;
 
 const DEFAULT_FOOTER_HTML = `<div class="site-footer">
-    <p>&copy; ${new Date().getFullYear()} Built with <a href="https://www.asnotes.io">AS Notes</a></p>
+    <p>&copy; ${new Date().getFullYear()} Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
 </div>
 `;
 
 /**
- * Create default header.html and footer.html in the layout directory if they do not already exist.
+ * Create default header.html and footer.html in the includes directory if they do not already exist.
  */
-async function createDefaultPartials(layoutDirPath: string): Promise<void> {
-    if (!fs.existsSync(layoutDirPath)) {
-        fs.mkdirSync(layoutDirPath, { recursive: true });
+async function createDefaultPartials(includesDirPath: string): Promise<void> {
+    if (!fs.existsSync(includesDirPath)) {
+        fs.mkdirSync(includesDirPath, { recursive: true });
     }
 
-    const headerPath = path.join(layoutDirPath, 'header.html');
+    const headerPath = path.join(includesDirPath, 'header.html');
     if (!fs.existsSync(headerPath)) {
         fs.writeFileSync(headerPath, DEFAULT_HEADER_HTML, 'utf-8');
     }
 
-    const footerPath = path.join(layoutDirPath, 'footer.html');
+    const footerPath = path.join(includesDirPath, 'footer.html');
     if (!fs.existsSync(footerPath)) {
         fs.writeFileSync(footerPath, DEFAULT_FOOTER_HTML, 'utf-8');
+    }
+}
+
+const LAYOUT_DOCS = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>{{stylesheets}}{{meta}}
+</head>
+<body>
+{{header}}{{nav}}
+    <article class="markdown-body">
+{{toc}}
+{{content}}
+    </article>
+{{footer}}</body>
+</html>
+`;
+
+const LAYOUT_BLOG = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>{{stylesheets}}{{meta}}
+</head>
+<body>
+{{header}}{{nav}}
+    <article class="blog-post">
+{{date}}{{toc}}
+{{content}}
+    </article>
+{{footer}}</body>
+</html>
+`;
+
+const LAYOUT_MINIMAL = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>{{stylesheets}}{{meta}}
+</head>
+<body>
+{{header}}    <article>
+{{content}}
+    </article>
+{{footer}}</body>
+</html>
+`;
+
+const LAYOUT_TEMPLATES: Record<string, string> = {
+    docs: LAYOUT_DOCS,
+    blog: LAYOUT_BLOG,
+    minimal: LAYOUT_MINIMAL,
+};
+
+/**
+ * Create default layout template files in the layouts directory if they do not already exist.
+ */
+async function createDefaultLayouts(layoutsDirPath: string): Promise<void> {
+    if (!fs.existsSync(layoutsDirPath)) {
+        fs.mkdirSync(layoutsDirPath, { recursive: true });
+    }
+
+    for (const [name, template] of Object.entries(LAYOUT_TEMPLATES)) {
+        const layoutPath = path.join(layoutsDirPath, `${name}.html`);
+        if (!fs.existsSync(layoutPath)) {
+            fs.writeFileSync(layoutPath, template, 'utf-8');
+        }
     }
 }
 
@@ -269,7 +345,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: '$(root-folder) Notes root', description: `Use ${notesRoot} as the input directory`, value: 'root' },
             { label: '$(folder-opened) Choose a subdirectory...', description: 'Pick a specific folder to publish', value: 'pick' },
         ],
-        { placeHolder: 'Input directory', title: 'Publish Settings (1/8)' },
+        { placeHolder: 'Input directory', title: 'Publish Settings (1/9)' },
     );
     if (!inputDirPick) return undefined;
 
@@ -280,7 +356,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             canSelectMany: false,
             defaultUri: vscode.Uri.file(notesRoot),
             openLabel: 'Select Input Directory',
-            title: 'Publish Settings (1/8): Input Directory',
+            title: 'Publish Settings (1/9): Input Directory',
         });
         if (!chosen || chosen.length === 0) return undefined;
         config.inputDir = toRelativePath(notesRoot, chosen[0].fsPath);
@@ -294,7 +370,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'Yes', description: 'All pages are published unless public: false', value: true },
             { label: 'No', description: 'Only pages with public: true are published', value: false },
         ],
-        { placeHolder: 'Publish all pages by default?', title: 'Publish Settings (2/8)' },
+        { placeHolder: 'Publish all pages by default?', title: 'Publish Settings (2/9)' },
     );
     if (!publicPick) return undefined;
     config.defaultPublic = publicPick.value;
@@ -305,7 +381,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'Yes', description: 'Copy referenced images and files', value: true },
             { label: 'No', description: 'Only copy assets for pages with assets: true', value: false },
         ],
-        { placeHolder: 'Copy referenced assets by default?', title: 'Publish Settings (3/8)' },
+        { placeHolder: 'Copy referenced assets by default?', title: 'Publish Settings (3/9)' },
     );
     if (!assetsPick) return undefined;
     config.defaultAssets = assetsPick.value;
@@ -317,7 +393,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'blog', description: 'Navigation + blog-style article with date' },
             { label: 'minimal', description: 'Content only, no navigation' },
         ],
-        { placeHolder: 'Choose a layout', title: 'Publish Settings (4/8)' },
+        { placeHolder: 'Choose a layout', title: 'Publish Settings (4/9)' },
     );
     if (!layoutPick) return undefined;
     config.layout = layoutPick.label;
@@ -329,7 +405,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'dark', description: 'Dark theme' },
             { label: 'none', description: 'No built-in theme (use custom stylesheets)' },
         ],
-        { placeHolder: 'Choose a theme', title: 'Publish Settings (5/8)' },
+        { placeHolder: 'Choose a theme', title: 'Publish Settings (5/9)' },
     );
     if (!themePick) return undefined;
     config.theme = themePick.label === 'none' ? '' : themePick.label;
@@ -337,7 +413,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
     // Step 6: Base URL
     const baseUrlInput = await vscode.window.showInputBox({
         prompt: 'URL path prefix for deployed site (leave empty for root)',
-        title: 'Publish Settings (6/8)',
+        title: 'Publish Settings (6/9)',
         value: config.baseUrl ?? '',
         placeHolder: '/my-repo',
     });
@@ -345,18 +421,49 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
     config.baseUrl = baseUrlInput.replace(/\/+$/, '');
 
     // Step 7: Output Directory
-    const outputDir = await pickOutputDirectory(notesRoot, config.outputDir);
+    const outputDir = await pickOutputDirectory(notesRoot, config.inputDir, config.outputDir);
     if (!outputDir) return undefined;
     config.outputDir = outputDir;
 
-    // Step 8: Includes Directory
+    // Step 8: Layouts Directory
+    const layoutsDirPick = await vscode.window.showQuickPick(
+        [
+            { label: '$(new-folder) Create default layouts', description: 'Create a layouts directory with editable layout templates (docs, blog, minimal)', value: 'create' },
+            { label: '$(folder-opened) Browse...', description: 'Choose an existing layouts directory', value: 'pick' },
+            { label: 'Skip', description: 'Use built-in layouts only', value: 'skip' },
+        ],
+        { placeHolder: 'Layouts directory?', title: 'Publish Settings (8/9)' },
+    );
+    if (!layoutsDirPick) return undefined;
+
+    if (layoutsDirPick.value === 'create') {
+        const inputDirName = config.inputDir ? path.basename(path.resolve(notesRoot, config.inputDir)) : '';
+        const layoutsFolderName = inputDirName ? `asnotes-publish.layouts.${inputDirName}` : 'asnotes-publish.layouts';
+        const defaultLayoutsPath = path.join(notesRoot, layoutsFolderName);
+        await createDefaultLayouts(defaultLayoutsPath);
+        config.layouts = './' + layoutsFolderName;
+    } else if (layoutsDirPick.value === 'pick') {
+        const chosen = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            defaultUri: vscode.Uri.file(notesRoot),
+            openLabel: 'Select Layouts Directory',
+            title: 'Publish Settings (8/9): Layouts Directory',
+        });
+        if (chosen && chosen.length > 0) {
+            config.layouts = toRelativePath(notesRoot, chosen[0].fsPath);
+        }
+    }
+
+    // Step 9: Includes Directory
     const includesDirPick = await vscode.window.showQuickPick(
         [
             { label: '$(new-folder) Create default includes', description: 'Create an includes directory with default header and footer templates', value: 'create' },
             { label: '$(folder-opened) Browse...', description: 'Choose an existing includes directory', value: 'pick' },
-            { label: 'Skip', description: 'Use built-in layouts only', value: 'skip' },
+            { label: 'Skip', description: 'Use built-in header and footer only', value: 'skip' },
         ],
-        { placeHolder: 'Includes directory?', title: 'Publish Settings (8/8)' },
+        { placeHolder: 'Includes directory?', title: 'Publish Settings (9/9)' },
     );
     if (!includesDirPick) return undefined;
 
@@ -373,7 +480,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             canSelectMany: false,
             defaultUri: vscode.Uri.file(notesRoot),
             openLabel: 'Select Includes Directory',
-            title: 'Publish Settings (8/8): Includes Directory',
+            title: 'Publish Settings (9/9): Includes Directory',
         });
         if (chosen && chosen.length > 0) {
             config.includes = toRelativePath(notesRoot, chosen[0].fsPath);
@@ -384,21 +491,35 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
 }
 
 /**
- * Pick an output directory. If a saved dir exists, offer to reuse it.
+ * Pick an output directory. Shows a QuickPick with a sensible default and browse option.
  * Returns the chosen path (relative to notesRoot if inside it, otherwise absolute), or undefined if cancelled.
  */
-async function pickOutputDirectory(notesRoot: string, savedDir?: string): Promise<string | undefined> {
+async function pickOutputDirectory(notesRoot: string, inputDir?: string, savedDir?: string): Promise<string | undefined> {
+    // Derive a sensible default: <inputDirName>-publish, or just "publish"
+    const inputDirName = inputDir ? path.basename(path.resolve(notesRoot, inputDir)) : '';
+    const defaultDirName = inputDirName ? `./${inputDirName}-publish` : './publish';
+
     if (savedDir) {
         const resolvedSaved = path.isAbsolute(savedDir) ? savedDir : path.resolve(notesRoot, savedDir);
         const pick = await vscode.window.showQuickPick(
             [
                 { label: `$(folder) ${resolvedSaved}`, description: 'Use saved output directory', value: 'reuse' },
-                { label: '$(folder-opened) Choose a different directory...', value: 'pick' },
+                { label: '$(folder-opened) Choose a different directory...', description: 'Browse for a folder', value: 'pick' },
             ],
             { placeHolder: 'Output directory', title: 'Publish Settings (7/8)' },
         );
         if (!pick) return undefined;
         if (pick.value === 'reuse') return savedDir;
+    } else {
+        const pick = await vscode.window.showQuickPick(
+            [
+                { label: `$(folder) ${defaultDirName}`, description: `Create ${defaultDirName} relative to notes root`, value: 'default' },
+                { label: '$(folder-opened) Browse...', description: 'Choose an existing directory', value: 'pick' },
+            ],
+            { placeHolder: 'Where should the HTML output be written?', title: 'Publish Settings (7/8)' },
+        );
+        if (!pick) return undefined;
+        if (pick.value === 'default') return defaultDirName;
     }
 
     const chosen = await vscode.window.showOpenDialog({

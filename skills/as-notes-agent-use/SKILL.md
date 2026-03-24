@@ -22,7 +22,7 @@ AS Notes turns VS Code into a PKMS. Activates when `.asnotes/` exists at the wor
 - Add `aliases:` front matter only when a page genuinely needs alternative names
 - Use task tags (`#P1`, `#D-YYYY-MM-DD`, etc.) inline on task lines - do not invent new tag formats
 - In outliner mode every line must start with `- `; use indentation for hierarchy
-- When the user's notes may be published as a static HTML site, ensure wikilinks and structure are clean - the `html-conversion` tool converts them to relative `.html` links
+- When the user's notes may be published as a static HTML site, ensure wikilinks and structure are clean - the `publish` tool converts them to relative `.html` links
 - See [Writing Notes in AS Notes Format](#writing-notes-in-as-notes-format) for templates
 
 ### When helping or troubleshooting (use case 2)
@@ -368,7 +368,7 @@ When a user reports a problem, work through these checks in order:
 
 ## Publishing to Static HTML
 
-`html-conversion` is a Node.js tool (`html-conversion/` in the repo) that converts a notes workspace to a static HTML site.
+`publish` is a Node.js tool (`publish/` in the repo) that converts a notes workspace to a static HTML site.
 
 - Scans `--input` for `.md` → outputs `.html` files
 - `[[wikilinks]]` → relative `.html` links; auto-generates `<nav>` sidebar
@@ -377,7 +377,7 @@ When a user reports a problem, work through these checks in order:
 - **Wipes output directory before each run**
 
 ```bash
-cd html-conversion && npm install && npm run build
+cd publish && npm install && npm run build
 npm run convert -- --input <notes-dir> --output <output-dir>
 ```
 
@@ -400,7 +400,7 @@ npm run convert -- \
 ```yaml
 - name: Build docs
   run: |
-    cd html-conversion && npm ci && npm run build
+    cd publish && npm ci && npm run build
     npm run convert -- --input ../docs-src/pages --output ../docs
 ```
 

@@ -169,7 +169,7 @@ as-notes/
 │   └── test/
 │       └── WikilinkService.test.ts  # 23 tests
 ├── vs-code-extension/       # VS Code extension (imports from common via file: dep)
-├── html-conversion/         # CLI: markdown+wikilinks → static HTML
+├── publish/         # CLI: markdown+wikilinks → static HTML
 │   ├── src/
 │   │   ├── convert.ts       # CLI entry point (--input, --output, --stylesheet, --asset)
 │   │   └── FileResolver.ts  # Flat-file wikilink→href resolver
@@ -181,7 +181,7 @@ as-notes/
 
 ### Cross-package dependency
 
-`vs-code-extension` and `html-conversion` both depend on `as-notes-common` via `"file:../common"` in `package.json`. This creates a symlink in `node_modules/as-notes-common` — no npm publish needed. esbuild resolves the symlink and bundles the shared code.
+`vs-code-extension` and `publish` both depend on `as-notes-common` via `"file:../common"` in `package.json`. This creates a symlink in `node_modules/as-notes-common` — no npm publish needed. esbuild resolves the symlink and bundles the shared code.
 
 ### VS Code extension
 
@@ -200,7 +200,7 @@ The build script (`build.mjs`) copies the `sql-wasm.wasm` binary to `dist/` alon
 A standalone CLI tool for converting an AS Notes workspace (markdown files with `[[wikilinks]]`) into static HTML:
 
 - **FileResolver** — scans a directory for `.md` files, builds a case-insensitive filename→href lookup map (same semantics as the extension: spaces URL-encoded). Tracks missing targets during resolution and exposes them via `getMissingTargets()` so placeholder pages can be generated.
-- **convert.ts** — CLI entry point. Args: `--input <dir>`, `--output <dir>`, `--config <path>`, `--stylesheet <url>` (repeatable), `--asset <file>` (repeatable), `--layout <name>`, `--theme <name>`, `--includes <path>`, `--base-url <path>`, `--default-public`, `--default-assets`, `--retina`, `--include-drafts`, `--exclude <dirname>` (repeatable). Wipes the output directory, copies any assets, runs markdown-it with the shared `wikilinkPlugin`, wraps each page in an HTML shell with `<nav>` sidebar, writes `.html` files. After converting real pages, generates placeholder pages for any missing wikilink targets and the same nav sidebar.
+- **convert.ts** — CLI entry point. Args: `--input <dir>`, `--output <dir>`, `--config <path>`, `--stylesheet <url>` (repeatable), `--asset <file>` (repeatable), `--layout <name>`, `--layouts <path>`, `--theme <name>`, `--includes <path>`, `--base-url <path>`, `--default-public`, `--default-assets`, `--retina`, `--include-drafts`, `--exclude <dirname>` (repeatable). Wipes the output directory, copies any assets, runs markdown-it with the shared `wikilinkPlugin`, wraps each page in an HTML shell with `<nav>` sidebar, writes `.html` files. After converting real pages, generates placeholder pages for any missing wikilink targets and the same nav sidebar. Files ending in `.enc.md` (encrypted notes) are always excluded from scanning.
 - **Config file** — `--config <path>` loads settings from an `asnotes-publish.json` file. CLI flags override config values. When `--config` is given without `--input`, defaults to the config file's parent directory.
 - **Layouts** — three built-in layouts: `docs` (sidebar nav + content area, default), `blog` (sidebar nav + narrower centered content + date metadata), `minimal` (no nav, single-column). The layout determines the HTML template structure. Per-page layout override via `layout` front matter field. Custom layouts can be placed in the includes directory as `{layoutName}.html`.
 - **Themes** — two built-in themes: `default` (light) and `dark`. Both use a CSS Grid sidebar layout (220px nav column + flexible content) with explicit 3-row grid (`auto 1fr auto`) for header/nav+content/footer placement, sticky sidebar, responsive collapse to single column below 700px. Theme CSS is written as a formatted, human-editable file (`theme-{name}.css`) to the output directory. The blog layout gets a narrower centered content column; the minimal layout fills the full width (no sidebar since no nav).
@@ -216,9 +216,9 @@ A standalone CLI tool for converting an AS Notes workspace (markdown files with 
 
 `PublishService.ts` provides the VS Code integration for HTML publishing:
 
-- **Wizard** — 8-step QuickPick/InputBox flow: default-public, default-assets, layout, theme, base URL, input dir, output dir, includes dir. Config is saved to `asnotes-publish.json` (or `asnotes-publish.{dirName}.json` for subdirectory inputs).
+- **Wizard** — 9-step QuickPick/InputBox flow: default-public, default-assets, layout, theme, base URL, input dir, output dir, layouts dir, includes dir. Config is saved to `asnotes-publish.json` (or `asnotes-publish.{dirName}.json` for subdirectory inputs).
 - **Multi-site** — `discoverConfigFiles()` finds all `asnotes-publish*.json` files. The publish command always shows a picker when configs exist, with a "Publish All" option for multiple configs.
-- **Scoped includes** — the wizard creates includes directories scoped to the input directory name (`asnotes-publish.includes.{inputDirName}` for subdirectory inputs, `asnotes-publish.includes` for root), aligning with the config naming convention.
+- **Scoped directories** — the wizard creates layouts and includes directories scoped to the input directory name (`asnotes-publish.layouts.{inputDirName}` / `asnotes-publish.includes.{inputDirName}` for subdirectory inputs, `asnotes-publish.layouts` / `asnotes-publish.includes` for root), aligning with the config naming convention. The layouts wizard step scaffolds editable copies of all three built-in layouts (`docs.html`, `blog.html`, `minimal.html`).
 - **Config defaults** — `withDefaults()` ensures all fields are written to the JSON with sensible defaults, making the file self-documenting and human-editable.
 
 ---

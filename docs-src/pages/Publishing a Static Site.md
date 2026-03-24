@@ -6,7 +6,7 @@ This documentation is itself a working example -- it was written in AS Notes and
 
 ## How It Works
 
-The `html-conversion` package recursively scans a folder of markdown files and converts them to HTML. Subdirectories are walked automatically, so notes organised in folders like `notes/`, `journals/`, and `pages/` are all discovered. The `templates` and `node_modules` directories are excluded by default.
+The `publish` package recursively scans a folder of markdown files and converts them to HTML. Subdirectories are walked automatically, so notes organised in folders like `notes/`, `journals/`, and `pages/` are all discovered. The `templates` and `node_modules` directories are excluded by default.
 
 [[Wikilinks]] between pages are automatically resolved to the correct HTML links. A navigation sidebar is generated from all public pages. Only pages you mark as public are published.
 
@@ -23,23 +23,33 @@ Each page is wrapped in a layout template with class names you can style any way
 
 There are two ways to run the converter:
 
-### Standalone CLI (for CI/CD and scripting)
+### npm (recommended for CI/CD)
 
-The `html-conversion` package lives in the AS Notes repository. Clone or download the repository, then install and build:
+Install the CLI globally or use npx:
 
 ```bash
-cd html-conversion
+npx asnotes-publish --config ./asnotes-publish.json
+```
+
+Or install globally:
+
+```bash
+npm install -g asnotes-publish
+asnotes-publish --config ./asnotes-publish.json
+```
+
+This is the recommended approach for CI/CD pipelines (GitHub Actions, Netlify, Vercel, Cloudflare Pages).
+
+### Build from source
+
+Alternatively, the `publish` package in the AS Notes repository can be built from source:
+
+```bash
+cd publish
 npm install
 npm run build
+node dist/convert.js --config ../asnotes-publish.json
 ```
-
-This builds the CLI to `html-conversion/dist/convert.js`. Run it with:
-
-```bash
-npm run convert -- --input /path/to/notes --output /path/to/site --default-public
-```
-
-This is the recommended approach for CI/CD pipelines (GitHub Actions, Netlify, Vercel, Cloudflare Pages). The source lives in the repo alongside your notes.
 
 ### VS Code Extension
 
@@ -114,6 +124,10 @@ public: true
 ```
 
 Pages without front matter or without `public: true` are skipped silently.
+
+### Encrypted Files
+
+Files ending in `.enc.md` (AS Notes encrypted files) are always excluded from publishing. This is a hardcoded safety measure -- encrypted notes are never included in the output regardless of `--default-public` or per-file front matter settings.
 
 ### Excluding Directories
 
@@ -273,13 +287,17 @@ layout: minimal
 
 ### Custom Layouts
 
-Create HTML template files with placeholder tokens and point to them with `--includes`:
+The setup wizard (Step 8) offers to create a **layouts directory** containing editable copies of all three built-in layouts. You can modify these files to customise the HTML structure of your site.
+
+Point the converter at your layouts directory with `--layouts`:
 
 ```bash
-npm run convert -- --input ./notes --output ./site --includes /path/to/includes --layout my-layout
+npm run convert -- --input ./notes --output ./site --layouts ./layouts --layout my-layout
 ```
 
-The converter looks for `my-layout.html` in the includes directory. If found, it takes precedence over built-in layouts.
+The converter looks for `my-layout.html` in the layouts directory first, then falls back to the includes directory, then to built-in layouts.
+
+You can also create entirely new layout files in the layouts directory and reference them by name (without the `.html` extension) in `--layout` or per-page `layout:` front matter.
 
 Template tokens:
 
@@ -498,8 +516,8 @@ Key classes:
 ## CLI Reference
 
 ```
-node dist/convert.js --input <dir> --output <dir> [options]
-node dist/convert.js --config <file> [options]
+asnotes-publish --input <dir> --output <dir> [options]
+asnotes-publish --config <file> [options]
 
 Options:
   --config <file>           Load settings from a JSON config file
@@ -508,7 +526,8 @@ Options:
   --default-public          Treat all pages as public unless public: false
   --default-assets          Copy referenced assets unless assets: false
   --layout <name>           Layout template: docs, blog, minimal (default: docs)
-  --includes <path>         Directory for custom layouts, headers, and footers
+  --layouts <path>          Directory containing editable layout templates
+  --includes <path>         Directory for custom headers and footers
   --theme <name>            Built-in CSS theme: default, dark
   --retina                  Enable retina image sizing globally
   --base-url <prefix>       URL path prefix for links and assets
@@ -525,7 +544,7 @@ Default excluded directories: templates, node_modules
 
 Publish settings are stored in a JSON config file at the root of your notes directory (next to `.asnotes/`). Both the VS Code extension and the CLI read from this file.
 
-The default filename is `as-notes-publish.json`. When publishing from a subdirectory, the filename includes the directory name: `as-notes-publish.<dirname>.json` (e.g. `as-notes-publish.docs-src.json`). See [Multi-Site Publishing](#multi-site-publishing) below.
+The default filename is `asnotes-publish.json`. When publishing from a subdirectory, the filename includes the directory name: `asnotes-publish.<dirname>.json` (e.g. `asnotes-publish.docs-src.json`). See [Multi-Site Publishing](#multi-site-publishing) below.
 
 ### Schema
 
@@ -535,6 +554,7 @@ The default filename is `as-notes-publish.json`. When publishing from a subdirec
     "defaultPublic": true,
     "defaultAssets": true,
     "layout": "docs",
+    "layouts": "./layouts",
     "includes": "./includes",
     "theme": "default",
     "baseUrl": "/my-repo",
@@ -556,7 +576,8 @@ The wizard writes all fields with their defaults so you can discover every avail
 | `defaultPublic` | boolean | `false` | Publish all pages unless `public: false` |
 | `defaultAssets` | boolean | `false` | Copy referenced assets unless `assets: false` |
 | `layout` | string | `"docs"` | Layout template: `docs`, `blog`, `minimal` |
-| `includes` | string | `""` | Directory for custom HTML layout templates, headers, and footers |
+| `layouts` | string | `""` | Directory containing editable layout templates |
+| `includes` | string | `""` | Directory for custom headers and footers |
 | `theme` | string | `""` | Built-in CSS theme: `default`, `dark` |
 | `baseUrl` | string | `""` | URL path prefix for links and assets |
 | `retina` | boolean | `false` | Enable retina image sizing globally |
@@ -570,7 +591,7 @@ The wizard writes all fields with their defaults so you can discover every avail
 Pass `--config` to the CLI to load settings from the file:
 
 ```bash
-node dist/convert.js --config ./as-notes-publish.json
+asnotes-publish --config ./asnotes-publish.json
 ```
 
 When `--config` is used:
@@ -582,14 +603,13 @@ When `--config` is used:
 This means a minimal CI/CD invocation with a config file is:
 
 ```bash
-cd html-conversion && npm ci && npm run build
-node dist/convert.js --config ../as-notes-publish.json
+npx asnotes-publish --config ./asnotes-publish.json
 ```
 
 You can override individual settings:
 
 ```bash
-node dist/convert.js --config ../as-notes-publish.json --include-drafts --output ./preview
+npx asnotes-publish --config ./asnotes-publish.json --include-drafts --output ./preview
 ```
 
 ### Multi-Site Publishing
@@ -600,18 +620,18 @@ The config filename is derived from the input directory name:
 
 | Input directory | Config filename |
 |---|---|
-| Notes root | `as-notes-publish.json` |
-| `./docs-src` | `as-notes-publish.docs-src.json` |
-| `./blog` | `as-notes-publish.blog.json` |
-| `./pages` | `as-notes-publish.pages.json` |
+| Notes root | `asnotes-publish.json` |
+| `./docs-src` | `asnotes-publish.docs-src.json` |
+| `./blog` | `asnotes-publish.blog.json` |
+| `./pages` | `asnotes-publish.pages.json` |
 
 For example, a workspace with both documentation and a blog might have:
 
 ```
 my-notes/
   .asnotes/
-  as-notes-publish.docs-src.json    # publishes docs-src/ to site/
-  as-notes-publish.blog.json        # publishes blog/ to blog-site/
+  asnotes-publish.docs-src.json    # publishes docs-src/ to site/
+  asnotes-publish.blog.json        # publishes blog/ to blog-site/
   docs-src/
     pages/
       Getting Started.md
@@ -624,8 +644,8 @@ my-notes/
 Build each site separately:
 
 ```bash
-node dist/convert.js --config ../as-notes-publish.docs-src.json
-node dist/convert.js --config ../as-notes-publish.blog.json
+npx asnotes-publish --config ./asnotes-publish.docs-src.json
+npx asnotes-publish --config ./asnotes-publish.blog.json
 ```
 
 The VS Code extension discovers all config files automatically and shows a picker when multiple exist.
@@ -640,6 +660,7 @@ If you prefer CLI flags over a config file, here is the mapping:
 | `defaultPublic` | `--default-public` |
 | `defaultAssets` | `--default-assets` |
 | `layout` | `--layout <name>` |
+| `layouts` | `--layouts <path>` |
 | `includes` | `--includes <path>` |
 | `theme` | `--theme <name>` |
 | `baseUrl` | `--base-url <prefix>` |
@@ -664,9 +685,10 @@ If no publish config exists, a setup wizard walks you through:
 5. **Theme** -- default, dark, or none
 6. **Base URL** -- path prefix for deployed site
 7. **Output directory** -- where to write the HTML
-8. **Includes directory** -- create default includes, browse for an existing directory, or skip
+8. **Layouts directory** -- create default editable layouts, browse for an existing directory, or skip
+9. **Includes directory** -- create default includes, browse for an existing directory, or skip
 
-The wizard saves your choices to the appropriate config file (e.g. `as-notes-publish.json` or `as-notes-publish.docs-src.json`). All fields are written with defaults so you can discover every option by reading the JSON file.
+The wizard saves your choices to the appropriate config file (e.g. `asnotes-publish.json` or `asnotes-publish.docs-src.json`). All fields are written with defaults so you can discover every option by reading the JSON file.
 
 On subsequent runs with a single config, the converter uses the saved settings immediately -- no wizard, no prompts. With multiple config files, a picker lets you choose which site to publish or create a new configuration.
 
@@ -709,15 +731,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm ci
-        working-directory: html-conversion
-      - run: npm run build
-        working-directory: html-conversion
-      - run: >
-          npm run convert --
-          --config ../as-notes-publish.json
-          --base-url /${{ github.event.repository.name }}
-        working-directory: html-conversion
+      - run: npx asnotes-publish --config ./asnotes-publish.json --base-url /${{ github.event.repository.name }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -725,20 +739,19 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
-Adjust `--config` path and any flag overrides to match your repository layout. The `--base-url` override is needed for GitHub Pages subdirectory deployment. All other settings come from `as-notes-publish.json`.
+Adjust `--config` path and any flag overrides to match your repository layout. The `--base-url` override is needed for GitHub Pages subdirectory deployment. All other settings come from `asnotes-publish.json`.
 
 Alternatively, you can use explicit flags instead of a config file:
 
 ```yaml
       - run: >
-          npm run convert --
-          --input ../notes
-          --output ../site
+          npx asnotes-publish
+          --input ./notes
+          --output ./site
           --default-public
           --default-assets
           --theme default
           --base-url /${{ github.event.repository.name }}
-        working-directory: html-conversion
 ```
 
 ### Custom Domain
@@ -749,8 +762,7 @@ To serve from a custom domain (e.g. `docs.example.com`):
 2. Add a step after the convert step to write the `CNAME` file (the converter wipes output on each run):
 
    ```yaml
-   - run: echo "docs.example.com" > ../site/CNAME
-     working-directory: html-conversion
+   - run: echo "docs.example.com" > ./site/CNAME
    ```
 
 3. Enter the domain in **Settings > Pages > Custom domain** and enable **Enforce HTTPS**
@@ -764,7 +776,7 @@ Add this to your repository root:
 
 ```toml
 [build]
-  command = "cd html-conversion && npm ci && npm run build && npm run convert -- --config ../as-notes-publish.json"
+  command = "npx asnotes-publish --config ./asnotes-publish.json"
   publish = "site"
 
 [build.environment]
@@ -792,7 +804,7 @@ Create `vercel.json` in your repository root:
 
 ```json
 {
-    "buildCommand": "cd html-conversion && npm ci && npm run build && npm run convert -- --config ../as-notes-publish.json",
+    "buildCommand": "npx asnotes-publish --config ./asnotes-publish.json",
     "outputDirectory": "site",
     "framework": null
 }
@@ -819,7 +831,7 @@ Vercel deploys on every push and provides a preview URL for each branch.
 
 | Setting | Value |
 |---|---|
-| Build command | `cd html-conversion && npm ci && npm run build && npm run convert -- --config ../as-notes-publish.json` |
+| Build command | `npx asnotes-publish --config ./asnotes-publish.json` |
 | Build output directory | `site` |
 | Node.js version | `20` (set as environment variable `NODE_VERSION`) |
 

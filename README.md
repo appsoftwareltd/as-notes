@@ -755,9 +755,9 @@ The repository is structured as a monorepo with three packages:
 |---|---|
 | `common/` | Shared wikilink parsing library (`Wikilink`, `WikilinkService`, `MarkdownItWikilinkPlugin`) |
 | `vs-code-extension/` | The VS Code extension |
-| `html-conversion/` | CLI utility that converts an AS Notes notebook (markdown + wikilinks) to static HTML |
+| `publish/` | CLI utility that converts an AS Notes notebook (markdown + wikilinks) to static HTML |
 
-Documentation source lives in `docs-src/` (an AS Notes workspace). The `html-conversion` tool converts it to `docs/`.
+Documentation source lives in `docs-src/` (an AS Notes workspace). The `publish` tool converts it to `docs/`.
 
 ### VS Code Extension
 
@@ -772,8 +772,16 @@ npm run lint     # Type-check
 
 ### HTML Conversion
 
+The converter is published as an npm package:
+
 ```bash
-cd html-conversion
+npx asnotes-publish --config ./asnotes-publish.json
+```
+
+For development from source:
+
+```bash
+cd publish
 npm install
 npm run build
 npm run convert -- --input ../docs-src/pages --output ../docs --default-public
@@ -785,6 +793,7 @@ The conversion:
 - Resolves `[[wikilinks]]` to relative `.html` links
 - Generates a sidebar `<nav>` on each page (docs and blog layouts)
 - Filters pages by `public: true` front matter (or all pages with `--default-public`)
+- Always excludes `.enc.md` (encrypted) files from output
 - Creates placeholder pages for missing wikilink targets
 - Wipes the output directory before each run
 - Generates `sitemap.xml` and `feed.xml`
@@ -838,8 +847,9 @@ Both themes output formatted, human-editable CSS (`theme-{name}.css`). They use 
 | `--input <dir>` | Input directory containing `.md` files |
 | `--output <dir>` | Output directory for generated HTML |
 | `--layout <name>` | Layout template: `docs`, `blog`, `minimal` (default: `docs`) |
+| `--layouts <path>` | Directory containing editable layout templates |
 | `--theme <name>` | Built-in CSS theme: `default`, `dark` |
-| `--includes <path>` | Directory for custom layouts, headers, and footers |
+| `--includes <path>` | Directory for custom headers and footers |
 | `--stylesheet <url>` | Additional stylesheet (repeatable). CDN URLs or relative paths |
 | `--asset <file>` | Copy a local file into the output directory (repeatable) |
 | `--base-url <path>` | Base URL prefix for all links |
@@ -890,6 +900,26 @@ git push origin main --tags
 ```
 
 Pushing the tag triggers the [Release workflow](.github/workflows/release.yml), which creates a GitHub Release automatically with auto-generated release notes and the VS Code Marketplace install link.
+
+### Publishing the npm CLI (`asnotes-publish`)
+
+**Step 1 - bump the version**
+
+Update `version` in `publish/package.json`.
+
+**Step 2 - build and publish**
+
+```bash
+cd publish
+npm run build
+npm publish
+```
+
+**Step 3 - verify**
+
+```bash
+npx asnotes-publish --help
+```
 
 ## Agent Skills
 

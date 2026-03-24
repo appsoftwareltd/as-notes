@@ -120,7 +120,7 @@ const kanbanSidebarWebviewBuildOptions = {
 
 /** @type {import('esbuild').BuildOptions} */
 const convertBuildOptions = {
-    entryPoints: ['../html-conversion/src/convert.ts'],
+    entryPoints: ['../publish/src/convert.ts'],
     bundle: true,
     outfile: 'dist/convert.js',
     format: 'esm',

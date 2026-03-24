@@ -243,3 +243,117 @@ describe('auto-generated index page', () => {
         expect(html).toContain('index.html');
     });
 });
+
+describe('.enc.md exclusion', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-enc-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        fs.mkdirSync(inputDir, { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should exclude .enc.md files from published output', () => {
+        fs.writeFileSync(path.join(inputDir, 'Public.md'), '---\npublic: true\n---\n# Public Page\n');
+        fs.writeFileSync(path.join(inputDir, 'Secret.enc.md'), '---\npublic: true\n---\n# Secret Note\n');
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        expect(output).toContain('Public');
+        expect(output).not.toContain('Secret');
+        expect(fs.existsSync(path.join(outputDir, 'public.html'))).toBe(true);
+        expect(fs.existsSync(path.join(outputDir, 'secret.html'))).toBe(false);
+        expect(fs.existsSync(path.join(outputDir, 'secret-enc.html'))).toBe(false);
+    });
+
+    it('should exclude .enc.md files even with --default-public', () => {
+        fs.writeFileSync(path.join(inputDir, 'Normal.md'), '# Normal\n');
+        fs.writeFileSync(path.join(inputDir, 'Encrypted.enc.md'), '# Encrypted\n');
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        expect(output).toContain('Normal');
+        expect(output).not.toContain('Encrypted');
+    });
+
+    it('should exclude .enc.md files in subdirectories', () => {
+        const subDir = path.join(inputDir, 'private');
+        fs.mkdirSync(subDir, { recursive: true });
+        fs.writeFileSync(path.join(inputDir, 'Public.md'), '---\npublic: true\n---\n# Public\n');
+        fs.writeFileSync(path.join(subDir, 'Deep.enc.md'), '---\npublic: true\n---\n# Deep Secret\n');
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        expect(output).toContain('Public');
+        expect(output).not.toContain('Deep');
+    });
+});
+
+describe('--layouts flag', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+    let layoutsDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-layouts-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        layoutsDir = path.join(tmpDir, 'layouts');
+        fs.mkdirSync(inputDir, { recursive: true });
+        fs.mkdirSync(layoutsDir, { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should use custom layout from layouts directory', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        fs.writeFileSync(path.join(layoutsDir, 'docs.html'), '<html><body class="custom-layout">{{content}}</body></html>');
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public', '--layouts', layoutsDir]);
+        expect(output).toContain('Hello');
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('custom-layout');
+    });
+
+    it('should fall back to built-in layout when layouts directory has no matching file', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        // layoutsDir exists but has no docs.html
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public', '--layouts', layoutsDir]);
+        expect(output).toContain('Hello');
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('markdown-body');
+    });
+
+    it('should load layouts from config file', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        fs.writeFileSync(path.join(layoutsDir, 'blog.html'), '<html><body class="my-blog">{{content}}</body></html>');
+        const configPath = path.join(tmpDir, 'asnotes-publish.json');
+        fs.writeFileSync(configPath, JSON.stringify({
+            inputDir: './notes',
+            outputDir: './site',
+            defaultPublic: true,
+            layout: 'blog',
+            layouts: './layouts',
+        }));
+        const output = run(['--config', configPath]);
+        expect(output).toContain('Hello');
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('my-blog');
+    });
+
+    it('should prefer layouts directory over includes directory for layout files', () => {
+        const includesDir = path.join(tmpDir, 'includes');
+        fs.mkdirSync(includesDir, { recursive: true });
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        fs.writeFileSync(path.join(layoutsDir, 'docs.html'), '<html><body class="from-layouts">{{content}}</body></html>');
+        fs.writeFileSync(path.join(includesDir, 'docs.html'), '<html><body class="from-includes">{{content}}</body></html>');
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public', '--layouts', layoutsDir, '--includes', includesDir]);
+        expect(output).toContain('Hello');
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('from-layouts');
+        expect(html).not.toContain('from-includes');
+    });
+});

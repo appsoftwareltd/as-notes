@@ -10,6 +10,7 @@ interface PublishConfig {
     defaultPublic?: boolean;
     defaultAssets?: boolean;
     layout?: string;
+    layouts?: string;
     includes?: string;
     theme?: string;
     baseUrl?: string;
@@ -30,6 +31,7 @@ interface CliArgs {
     defaultPublic: boolean;
     defaultAssets: boolean;
     layout: string;
+    layouts: string;
     includes: string;
     theme: string;
     retina: boolean;
@@ -69,6 +71,7 @@ function parseArgs(argv: string[]): CliArgs {
     let defaultPublic = false;
     let defaultAssets = false;
     let layout = '';
+    let layouts = '';
     let includes = '';
     let theme = '';
     let retina = false;
@@ -95,6 +98,8 @@ function parseArgs(argv: string[]): CliArgs {
             defaultAssets = true; cliSet.add('defaultAssets');
         } else if (argv[i] === '--layout' && i + 1 < argv.length) {
             layout = argv[++i]; cliSet.add('layout');
+        } else if (argv[i] === '--layouts' && i + 1 < argv.length) {
+            layouts = argv[++i]; cliSet.add('layouts');
         } else if (argv[i] === '--includes' && i + 1 < argv.length) {
             includes = argv[++i]; cliSet.add('includes');
         } else if (argv[i] === '--theme' && i + 1 < argv.length) {
@@ -128,6 +133,7 @@ function parseArgs(argv: string[]): CliArgs {
         if (!cliSet.has('exclude') && Array.isArray(cfg.exclude)) {
             for (const e of cfg.exclude) { if (typeof e === 'string') exclude.push(e); }
         }
+        if (!cliSet.has('layouts') && cfg.layouts) layouts = path.resolve(configDir, cfg.layouts);
         if (!cliSet.has('includes') && cfg.includes) includes = path.resolve(configDir, cfg.includes);
 
         // Default --input to config's inputDir (resolved relative to config dir), then config file's parent directory
@@ -141,8 +147,8 @@ function parseArgs(argv: string[]): CliArgs {
     if (!layout) layout = 'docs';
 
     if (!input || !output) {
-        console.error('Usage: as-notes-convert --input <dir> --output <dir> [options]');
-        console.error('       as-notes-convert --config <file> [options]');
+        console.error('Usage: asnotes-publish --input <dir> --output <dir> [options]');
+        console.error('       asnotes-publish --config <file> [options]');
         console.error('');
         console.error('Options:');
         console.error('  --config <file>           Load settings from a JSON config file');
@@ -151,7 +157,8 @@ function parseArgs(argv: string[]): CliArgs {
         console.error('  --default-public          Treat pages as public unless public: false');
         console.error('  --default-assets          Copy referenced assets unless assets: false');
         console.error('  --layout <name>           Layout template: docs, blog, minimal (default: docs)');
-        console.error('  --includes <path>         Directory for custom layouts, headers, and footers');
+        console.error('  --layouts <path>          Directory containing layout template files');
+        console.error('  --includes <path>         Directory for custom headers and footers');
         console.error('  --theme <name>            Built-in CSS theme name');
         console.error('  --retina                  Enable retina image sizing globally');
         console.error('  --base-url <prefix>       URL path prefix for links/assets');
@@ -165,7 +172,7 @@ function parseArgs(argv: string[]): CliArgs {
         process.exit(1);
     }
 
-    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, includes, theme, retina, baseUrl, includeDrafts };
+    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, retina, baseUrl, includeDrafts };
 }
 
 interface ScannedFile {
@@ -186,7 +193,7 @@ function scanMarkdownFiles(dir: string, excludeDirs: string[] = []): ScannedFile
                 if (!allExcludes.has(entry.name.toLowerCase())) {
                     walk(path.join(currentDir, entry.name), relativePrefix ? relativePrefix + '/' + entry.name : entry.name);
                 }
-            } else if (entry.isFile() && entry.name.endsWith('.md')) {
+            } else if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.endsWith('.enc.md')) {
                 results.push({
                     relativePath: relativePrefix ? relativePrefix + '/' + entry.name : entry.name,
                     filename: entry.name,
@@ -232,10 +239,11 @@ function wrapHtml(title: string, nav: string, body: string, options: {
     date?: string;
     toc?: string;
     layout?: string;
+    layoutsDir?: string;
     includesDir?: string;
     baseUrl?: string;
 } = {}): string {
-    const { stylesheets = [], description, date, toc, layout = 'docs', includesDir, baseUrl = '' } = options;
+    const { stylesheets = [], description, date, toc, layout = 'docs', layoutsDir, includesDir, baseUrl = '' } = options;
 
     const escapedTitle = escapeHtml(title);
     const headerPartial = loadPartial(includesDir, 'header.html');
@@ -246,7 +254,13 @@ function wrapHtml(title: string, nav: string, body: string, options: {
         header: headerPartial, footer: footerPartial,
     };
 
-    // Try user-defined layout first, then built-in
+    // Try user-defined layout: layoutsDir first, then includesDir (backwards compat), then built-in
+    if (layoutsDir) {
+        const layoutPath = path.join(layoutsDir, layout + '.html');
+        if (fs.existsSync(layoutPath)) {
+            return applyTemplate(fs.readFileSync(layoutPath, 'utf-8'), templateVars);
+        }
+    }
     if (includesDir) {
         const customLayoutPath = path.join(includesDir, layout + '.html');
         if (fs.existsSync(customLayoutPath)) {
@@ -568,8 +582,10 @@ function escapeXml(text: string): string {
 
 function main(): void {
     const args = parseArgs(process.argv);
-    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, includes, theme, retina, baseUrl, includeDrafts } = args;
+    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, retina, baseUrl, includeDrafts } = args;
     const frontMatterService = new FrontMatterService();
+    const resolvedLayoutsDir = layouts ? path.resolve(layouts) : undefined;
+    const resolvedIncludesDir = includes ? path.resolve(includes) : undefined;
 
     // Wipe output directory
     if (fs.existsSync(output)) {
@@ -801,7 +817,8 @@ function main(): void {
             date: meta.fields.date,
             toc,
             layout: pageLayout,
-            includesDir: includes ? path.resolve(includes) : undefined,
+            layoutsDir: resolvedLayoutsDir,
+            includesDir: resolvedIncludesDir,
             baseUrl,
         });
 
@@ -840,7 +857,8 @@ function main(): void {
             stylesheets: resolvedStylesheets,
             toc: indexToc,
             layout,
-            includesDir: includes ? path.resolve(includes) : undefined,
+            layoutsDir: resolvedLayoutsDir,
+            includesDir: resolvedIncludesDir,
             baseUrl,
         });
         fs.writeFileSync(path.join(output, 'index.html'), indexHtml, 'utf-8');
@@ -854,7 +872,7 @@ function main(): void {
         const outputPath = path.join(output, slugify(pageName) + '.html');
         const nav = buildNav(navPages, pageName, baseUrl);
         const body = '    <p class="missing-page">This page has not been created yet.</p>';
-        const html = wrapHtml(stripBrackets(pageName), nav, body, { stylesheets: resolvedStylesheets, layout, includesDir: includes ? path.resolve(includes) : undefined, baseUrl });
+        const html = wrapHtml(stripBrackets(pageName), nav, body, { stylesheets: resolvedStylesheets, layout, layoutsDir: resolvedLayoutsDir, includesDir: resolvedIncludesDir, baseUrl });
 
         fs.writeFileSync(outputPath, html, 'utf-8');
         console.log(`  [missing] ${slugify(pageName)}.html (placeholder)`);
@@ -924,6 +942,45 @@ header {
 footer {
     grid-column: 1 / -1;
     grid-row: 3;
+}
+
+.site-header {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    background: #f6f8fa;
+    border-bottom: 1px solid #d0d7de;
+}
+
+.site-header .site-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #24292e;
+    text-decoration: none;
+}
+
+.site-header .site-title:hover {
+    color: #0366d6;
+}
+
+.site-header .site-logo {
+    flex-shrink: 0;
+}
+
+.site-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #d0d7de;
+    background: #f6f8fa;
+    font-size: 0.85rem;
+    color: #586069;
+    text-align: center;
+}
+
+.site-footer a {
+    color: #0366d6;
 }
 
 /* -- Sidebar nav -------------------------------------------------- */
@@ -1140,6 +1197,45 @@ header {
 footer {
     grid-column: 1 / -1;
     grid-row: 3;
+}
+
+.site-header {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+}
+
+.site-header .site-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #c9d1d9;
+    text-decoration: none;
+}
+
+.site-header .site-title:hover {
+    color: #58a6ff;
+}
+
+.site-header .site-logo {
+    flex-shrink: 0;
+}
+
+.site-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #30363d;
+    background: #161b22;
+    font-size: 0.85rem;
+    color: #8b949e;
+    text-align: center;
+}
+
+.site-footer a {
+    color: #58a6ff;
 }
 
 /* -- Sidebar nav -------------------------------------------------- */
