@@ -7,6 +7,10 @@ order: 1
 
 # Introducing AS Notes
 
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+- [GitHub](https://github.com/appsoftwareltd/as-notes)
+- [Docs](https://www.asnotes.io)
+
 Thank you for finding your way to our new blog. We'd like to introduce you to **AS Notes**:
 
 Most note-taking tools want you to leave your editor. AS Notes doesn't. It brings `[[wikilink]]` style knowledge management directly into VS Code, where many of us already spend most of our day.
