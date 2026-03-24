@@ -863,7 +863,7 @@ Vercel deploys on every push and provides a preview URL for each branch.
 
 ### 1. Connect Your Repository
 
-1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and go to **Workers & Pages**
+1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and go to **Compute** > **Workers & Pages**
 2. Click **Create application > Pages > Connect to Git**
 3. Select your repository
 

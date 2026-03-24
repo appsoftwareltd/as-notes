@@ -63,26 +63,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: publish/package-lock.json
-      - run: npm ci
-        working-directory: common
-      - run: npm ci
-        working-directory: publish
-      - run: npm run build
-        working-directory: publish
-      - run: >
-          npm run convert --
-          --input ../docs-src/pages
-          --output ../docs
-          --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css
-          --stylesheet docs.css
-          --asset ../docs-src/docs.css
-        working-directory: publish
+      - run: npx @appsoftwareltd/asnotes-publish --config docs-src/asnotes-publish.notes.json
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         with:
-          path: docs
+          path: docs-src/notes-publish
 
   deploy-pages:
     needs: build-docs
