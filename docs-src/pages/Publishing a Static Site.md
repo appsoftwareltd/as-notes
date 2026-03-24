@@ -209,7 +209,15 @@ With `--default-assets`, pages can opt out with `assets: false`.
 
 ### How It Works
 
-The converter scans rendered HTML for local `<img src="...">` references. Referenced files are copied from the input directory to the output directory, preserving relative paths. Absolute URLs (`http://`, `https://`) and data URIs are ignored.
+The converter scans rendered HTML for local `<img src="...">` references. Each reference is resolved relative to the page's source location within the input directory. Since all HTML pages are output to a flat directory, the converter rewrites `src` attributes so that asset paths resolve correctly in the published output.
+
+For example, if `pages/My Page.md` references `../assets/images/photo.png`, the converter:
+
+1. Resolves the path relative to the page's source directory (`pages/`)
+2. Copies the file to the output directory as `assets/images/photo.png`
+3. Rewrites the `<img src>` in the HTML to `assets/images/photo.png`
+
+Absolute URLs (`http://`, `https://`) and data URIs are ignored.
 
 If a referenced file is missing, a warning is logged.
 
@@ -368,6 +376,38 @@ Both built-in and custom layouts include `{{header}}` and `{{footer}}` tokens, s
 
 When using the VS Code publish wizard, the includes directory step (step 8) offers three options: create default `header.html` and `footer.html` files, browse for an existing includes directory, or skip. Edit the generated files to add your own navigation, branding, and contact information.
 
+### Custom Navigation
+
+By default, the converter auto-generates a sidebar navigation listing all published pages in order. To take full control of navigation content and structure, create a `nav.md` file at the root of your input directory.
+
+`nav.md` is rendered as markdown with full wikilink support, so you can use headings, horizontal rules, lists, and links to organise your navigation however you like:
+
+```markdown
+## Guides
+
+- [[Getting Started]]
+- [[Publishing a Static Site]]
+
+---
+
+## Reference
+
+- [[Settings]]
+- [[Wikilinks]]
+```
+
+The rendered HTML replaces the auto-generated `<nav class="site-nav">` element on every page.
+
+**How it works:**
+
+- If `nav.md` exists in the input directory root, it is used as the navigation for all pages
+- If `nav.md` does not exist, the auto-generated navigation is used (with `nav-current` highlighting)
+- `nav.md` is not published as a standalone page and does not appear in the sitemap
+- Wikilinks in `nav.md` are resolved to their HTML page slugs, with `--base-url` applied if set
+- The `nav-current` CSS class is not applied when using custom navigation (since the content is user-controlled)
+
+**Multi-site support:** Since `nav.md` lives in the input directory, each site configuration can have its own navigation when using multi-site publishing.
+
 ## Themes
 
 Built-in CSS themes provide ready-made styling without writing CSS:
@@ -504,7 +544,7 @@ Key classes:
 |---|---|---|
 | `site-header` | `<div>` | Default header partial wrapper (customise in `header.html`) |
 | `site-footer` | `<div>` | Default footer partial wrapper (customise in `footer.html`) |
-| `site-nav` | `<nav>` | Sidebar navigation |
+| `site-nav` | `<nav>` | Sidebar navigation (auto-generated or from `nav.md`) |
 | `nav-current` | `<li>` | Currently active page |
 | `markdown-body` | `<article>` | Content area (docs layout) -- compatible with github-markdown-css |
 | `blog-post` | `<article>` | Content area (blog layout) |

@@ -357,3 +357,377 @@ describe('--layouts flag', () => {
         expect(html).not.toContain('from-includes');
     });
 });
+
+describe('data-layout attribute', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-data-layout-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        fs.mkdirSync(inputDir, { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should add data-layout="docs" to body for docs layout', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--layout', 'docs']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('data-layout="docs"');
+    });
+
+    it('should add data-layout="blog" to body for blog layout', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--layout', 'blog']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('data-layout="blog"');
+    });
+
+    it('should add data-layout="minimal" to body for minimal layout', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--layout', 'minimal']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('data-layout="minimal"');
+    });
+
+    it('should place nav after article in blog layout', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        fs.writeFileSync(path.join(inputDir, 'World.md'), '---\npublic: true\n---\n# World\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--layout', 'blog']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        const articleEnd = html.indexOf('</article>');
+        const navStart = html.indexOf('<nav');
+        expect(articleEnd).toBeGreaterThan(-1);
+        expect(navStart).toBeGreaterThan(-1);
+        expect(navStart).toBeGreaterThan(articleEnd);
+    });
+
+    it('should place nav before article in docs layout', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+        fs.writeFileSync(path.join(inputDir, 'World.md'), '---\npublic: true\n---\n# World\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--layout', 'docs']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        const articleStart = html.indexOf('<article');
+        const navStart = html.indexOf('<nav');
+        expect(articleStart).toBeGreaterThan(-1);
+        expect(navStart).toBeGreaterThan(-1);
+        expect(navStart).toBeLessThan(articleStart);
+    });
+});
+
+describe('asset path resolution', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-asset-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        fs.mkdirSync(inputDir, { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should copy assets referenced by same-directory images', () => {
+        fs.writeFileSync(path.join(inputDir, 'photo.png'), 'PNG_DATA');
+        fs.writeFileSync(
+            path.join(inputDir, 'Page.md'),
+            '---\npublic: true\nassets: true\n---\n# Page\n\n![Image](photo.png)\n',
+        );
+        run(['--input', inputDir, '--output', outputDir]);
+        expect(fs.existsSync(path.join(outputDir, 'photo.png'))).toBe(true);
+        const html = fs.readFileSync(path.join(outputDir, 'page.html'), 'utf-8');
+        expect(html).toContain('src="photo.png"');
+    });
+
+    it('should copy assets in subdirectories and rewrite paths', () => {
+        const imgDir = path.join(inputDir, 'images');
+        fs.mkdirSync(imgDir, { recursive: true });
+        fs.writeFileSync(path.join(imgDir, 'pic.png'), 'PNG_DATA');
+        fs.writeFileSync(
+            path.join(inputDir, 'Page.md'),
+            '---\npublic: true\nassets: true\n---\n# Page\n\n![Image](images/pic.png)\n',
+        );
+        run(['--input', inputDir, '--output', outputDir]);
+        expect(fs.existsSync(path.join(outputDir, 'images', 'pic.png'))).toBe(true);
+        const html = fs.readFileSync(path.join(outputDir, 'page.html'), 'utf-8');
+        expect(html).toContain('src="images/pic.png"');
+    });
+
+    it('should copy assets referenced with ../ paths outside input dir', () => {
+        // Input is a subdirectory; assets are at the parent level
+        const pagesDir = path.join(tmpDir, 'docs', 'pages');
+        const assetsDir = path.join(tmpDir, 'docs', 'assets', 'images');
+        const outDir = path.join(tmpDir, 'out');
+        fs.mkdirSync(pagesDir, { recursive: true });
+        fs.mkdirSync(assetsDir, { recursive: true });
+        fs.writeFileSync(path.join(assetsDir, 'screenshot.png'), 'PNG_DATA');
+        fs.writeFileSync(
+            path.join(pagesDir, 'index.md'),
+            '---\npublic: true\nassets: true\n---\n# Home\n\n![Screenshot](../assets/images/screenshot.png)\n',
+        );
+        run(['--input', pagesDir, '--output', outDir]);
+        // Asset should be copied into output (leading ../ stripped)
+        expect(fs.existsSync(path.join(outDir, 'assets', 'images', 'screenshot.png'))).toBe(true);
+        const html = fs.readFileSync(path.join(outDir, 'index.html'), 'utf-8');
+        expect(html).toContain('src="assets/images/screenshot.png"');
+    });
+
+    it('should copy assets from pages in subdirectories', () => {
+        const subDir = path.join(inputDir, 'guides');
+        const imgDir = path.join(inputDir, 'images');
+        fs.mkdirSync(subDir, { recursive: true });
+        fs.mkdirSync(imgDir, { recursive: true });
+        fs.writeFileSync(path.join(imgDir, 'help.png'), 'PNG_DATA');
+        fs.writeFileSync(
+            path.join(subDir, 'Tutorial.md'),
+            '---\npublic: true\nassets: true\n---\n# Tutorial\n\n![Help](../images/help.png)\n',
+        );
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        expect(fs.existsSync(path.join(outputDir, 'images', 'help.png'))).toBe(true);
+        const html = fs.readFileSync(path.join(outputDir, 'tutorial.html'), 'utf-8');
+        expect(html).toContain('src="images/help.png"');
+    });
+
+    it('should apply base-url prefix to rewritten asset paths', () => {
+        fs.writeFileSync(path.join(inputDir, 'photo.png'), 'PNG_DATA');
+        fs.writeFileSync(
+            path.join(inputDir, 'Page.md'),
+            '---\npublic: true\nassets: true\n---\n# Page\n\n![Image](photo.png)\n',
+        );
+        run(['--input', inputDir, '--output', outputDir, '--base-url', '/my-repo']);
+        const html = fs.readFileSync(path.join(outputDir, 'page.html'), 'utf-8');
+        expect(html).toContain('src="/my-repo/photo.png"');
+    });
+
+    it('should warn for missing referenced assets', () => {
+        fs.writeFileSync(
+            path.join(inputDir, 'Page.md'),
+            '---\npublic: true\nassets: true\n---\n# Page\n\n![Missing](gone.png)\n',
+        );
+        const output = run(['--input', inputDir, '--output', outputDir]);
+        expect(output).toContain('warning');
+        expect(output).toContain('not found');
+    });
+});
+
+describe('nav.md custom navigation', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-nav-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        fs.mkdirSync(inputDir, { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should use auto-generated nav when no nav.md exists', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\n');
+        fs.writeFileSync(path.join(inputDir, 'Beta.md'), '---\npublic: true\n---\n# Beta\n');
+        run(['--input', inputDir, '--output', outputDir]);
+        const html = fs.readFileSync(path.join(outputDir, 'alpha.html'), 'utf-8');
+        expect(html).toContain('site-nav');
+        expect(html).toContain('Alpha');
+        expect(html).toContain('Beta');
+        // Should have nav-current for auto-generated nav
+        expect(html).toContain('nav-current');
+    });
+
+    it('should render nav.md as custom navigation', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\n');
+        fs.writeFileSync(path.join(inputDir, 'Beta.md'), '---\npublic: true\n---\n# Beta\n');
+        fs.writeFileSync(
+            path.join(inputDir, 'nav.md'),
+            '- [[Alpha]]\n\n---\n\n- [[Beta]]\n',
+        );
+        const output = run(['--input', inputDir, '--output', outputDir]);
+        expect(output).toContain('nav.md');
+        const html = fs.readFileSync(path.join(outputDir, 'alpha.html'), 'utf-8');
+        expect(html).toContain('site-nav');
+        expect(html).toContain('alpha.html');
+        expect(html).toContain('beta.html');
+        // Should contain the <hr> from --- in nav.md
+        expect(html).toContain('<hr');
+    });
+
+    it('should not publish nav.md as a standalone page', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\n');
+        fs.writeFileSync(
+            path.join(inputDir, 'nav.md'),
+            '- [[Alpha]]\n',
+        );
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        expect(fs.existsSync(path.join(outputDir, 'nav.html'))).toBe(false);
+    });
+
+    it('should apply base-url to wikilinks in nav.md', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\n');
+        fs.writeFileSync(
+            path.join(inputDir, 'nav.md'),
+            '- [[Alpha]]\n',
+        );
+        run(['--input', inputDir, '--output', outputDir, '--base-url', '/docs']);
+        const html = fs.readFileSync(path.join(outputDir, 'alpha.html'), 'utf-8');
+        expect(html).toContain('href="/docs/alpha.html"');
+    });
+
+    it('should apply base-url to wikilinks in article body', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\nSee [[Beta]] for more.\n');
+        fs.writeFileSync(path.join(inputDir, 'Beta.md'), '---\npublic: true\n---\n# Beta\nBack to [[Alpha]].\n');
+        run(['--input', inputDir, '--output', outputDir, '--base-url', '/docs']);
+        const alphaHtml = fs.readFileSync(path.join(outputDir, 'alpha.html'), 'utf-8');
+        const betaHtml = fs.readFileSync(path.join(outputDir, 'beta.html'), 'utf-8');
+        // Extract article body to avoid matching nav links
+        const alphaBody = alphaHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1] || '';
+        const betaBody = betaHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1] || '';
+        expect(alphaBody).toContain('href="/docs/beta.html"');
+        expect(betaBody).toContain('href="/docs/alpha.html"');
+    });
+
+    it('should support headings and markdown formatting in nav.md', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\n');
+        fs.writeFileSync(path.join(inputDir, 'Beta.md'), '---\npublic: true\n---\n# Beta\n');
+        fs.writeFileSync(
+            path.join(inputDir, 'nav.md'),
+            '### Section One\n\n- [[Alpha]]\n\n### Section Two\n\n- [[Beta]]\n',
+        );
+        run(['--input', inputDir, '--output', outputDir]);
+        const html = fs.readFileSync(path.join(outputDir, 'alpha.html'), 'utf-8');
+        expect(html).toContain('Section One');
+        expect(html).toContain('Section Two');
+        expect(html).toContain('<h3');
+    });
+
+    it('should not include nav.md in sitemap', () => {
+        fs.writeFileSync(path.join(inputDir, 'Alpha.md'), '---\npublic: true\n---\n# Alpha\n');
+        fs.writeFileSync(
+            path.join(inputDir, 'nav.md'),
+            '- [[Alpha]]\n',
+        );
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf-8');
+        expect(sitemap).not.toContain('nav.html');
+        expect(sitemap).toContain('alpha.html');
+    });
+
+    it('should render nested wikilinks in bulleted list as inline links within a single li', () => {
+        fs.writeFileSync(path.join(inputDir, 'Plant.md'), '---\npublic: true\n---\n# Plant\n');
+        fs.writeFileSync(path.join(inputDir, 'Plant Foods.md'), '---\npublic: true\n---\n# Plant Foods\n');
+        fs.writeFileSync(path.join(inputDir, 'Demo.md'), '---\npublic: true\n---\n# Demo\n');
+        fs.writeFileSync(path.join(inputDir, 'Plant Based.md'), '---\npublic: true\n---\n# Plant Based\n');
+        fs.writeFileSync(
+            path.join(inputDir, 'nav.md'),
+            '- [[[[Plant]] Foods]]\n- [[Plant Based [[Demo]]]]\n',
+        );
+        run(['--input', inputDir, '--output', outputDir]);
+        const html = fs.readFileSync(path.join(outputDir, 'plant.html'), 'utf-8');
+        // Nested wikilinks should produce multiple <a> tags inside a single <li>
+        // [[[[Plant]] Foods]] -> <li>...<a>Plant</a><a> Foods</a>...</li>
+        const navMatch = html.match(/<nav class="site-nav">([\s\S]*?)<\/nav>/);
+        expect(navMatch).not.toBeNull();
+        const navHtml = navMatch![1];
+        // Each bulleted item should be a single <li> containing the wikilink parts
+        const liItems = navHtml.match(/<li>[\s\S]*?<\/li>/g) ?? [];
+        expect(liItems.length).toBe(2);
+        // First <li> should contain both "Plant" and "Foods" as links
+        expect(liItems[0]).toContain('plant.html');
+        expect(liItems[0]).toContain('plant-foods.html');
+        // Second <li> should contain both "Plant Based" and "Demo" as links
+        // Outer wikilink target is "Plant Based Demo" (inner brackets stripped) → plant-based-demo.html
+        expect(liItems[1]).toContain('demo.html');
+        expect(liItems[1]).toContain('plant-based-demo.html');
+    });
+});
+
+describe('--theme and --themes flags', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-theme-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        fs.mkdirSync(inputDir, { recursive: true });
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should not include sticky positioning in default theme nav', () => {
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--theme', 'default']);
+        const css = fs.readFileSync(path.join(outputDir, 'theme-default.css'), 'utf-8');
+        expect(css).not.toContain('position: sticky');
+        expect(css).not.toMatch(/[^-]height: 100vh/);
+        expect(css).not.toContain('overflow-y: auto');
+        expect(css).toContain('.site-nav');
+    });
+
+    it('should not include sticky positioning in dark theme nav', () => {
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--theme', 'dark']);
+        const css = fs.readFileSync(path.join(outputDir, 'theme-dark.css'), 'utf-8');
+        expect(css).not.toContain('position: sticky');
+        expect(css).not.toMatch(/[^-]height: 100vh/);
+        expect(css).not.toContain('overflow-y: auto');
+        expect(css).toContain('.site-nav');
+    });
+
+    it('should use custom theme from themes directory', () => {
+        const themesDir = path.join(tmpDir, 'themes');
+        fs.mkdirSync(themesDir, { recursive: true });
+        fs.writeFileSync(path.join(themesDir, 'default.css'), 'body { color: red; }');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--theme', 'default', '--themes', themesDir]);
+        const css = fs.readFileSync(path.join(outputDir, 'theme-default.css'), 'utf-8');
+        expect(css).toBe('body { color: red; }');
+    });
+
+    it('should fall back to built-in theme when themes directory has no matching file', () => {
+        const themesDir = path.join(tmpDir, 'themes');
+        fs.mkdirSync(themesDir, { recursive: true });
+        // themesDir exists but has no default.css
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--theme', 'default', '--themes', themesDir]);
+        const css = fs.readFileSync(path.join(outputDir, 'theme-default.css'), 'utf-8');
+        expect(css).toContain('AS Notes default theme');
+    });
+
+    it('should load themes directory from config file', () => {
+        const themesDir = path.join(tmpDir, 'themes');
+        fs.mkdirSync(themesDir, { recursive: true });
+        fs.writeFileSync(path.join(themesDir, 'dark.css'), '.custom-dark { background: #000; }');
+        const configPath = path.join(tmpDir, 'asnotes-publish.json');
+        fs.writeFileSync(configPath, JSON.stringify({
+            inputDir: './notes',
+            outputDir: './site',
+            defaultPublic: true,
+            theme: 'dark',
+            themes: './themes',
+        }));
+        run(['--config', configPath]);
+        const css = fs.readFileSync(path.join(outputDir, 'theme-dark.css'), 'utf-8');
+        expect(css).toBe('.custom-dark { background: #000; }');
+    });
+
+    it('should log custom theme source', () => {
+        const themesDir = path.join(tmpDir, 'themes');
+        fs.mkdirSync(themesDir, { recursive: true });
+        fs.writeFileSync(path.join(themesDir, 'default.css'), 'body {}');
+        const output = run(['--input', inputDir, '--output', outputDir, '--default-public', '--theme', 'default', '--themes', themesDir]);
+        expect(output).toContain('(custom)');
+    });
+});

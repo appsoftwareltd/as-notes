@@ -13,6 +13,7 @@ interface PublishConfig {
     layouts?: string;
     includes?: string;
     theme?: string;
+    themes?: string;
     baseUrl?: string;
     retina?: boolean;
     includeDrafts?: boolean;
@@ -34,6 +35,7 @@ interface CliArgs {
     layouts: string;
     includes: string;
     theme: string;
+    themes: string;
     retina: boolean;
     baseUrl: string;
     includeDrafts: boolean;
@@ -74,6 +76,7 @@ function parseArgs(argv: string[]): CliArgs {
     let layouts = '';
     let includes = '';
     let theme = '';
+    let themes = '';
     let retina = false;
     let baseUrl = '';
     let includeDrafts = false;
@@ -102,6 +105,8 @@ function parseArgs(argv: string[]): CliArgs {
             layouts = argv[++i]; cliSet.add('layouts');
         } else if (argv[i] === '--includes' && i + 1 < argv.length) {
             includes = argv[++i]; cliSet.add('includes');
+        } else if (argv[i] === '--themes' && i + 1 < argv.length) {
+            themes = argv[++i]; cliSet.add('themes');
         } else if (argv[i] === '--theme' && i + 1 < argv.length) {
             theme = argv[++i]; cliSet.add('theme');
         } else if (argv[i] === '--retina') {
@@ -134,6 +139,7 @@ function parseArgs(argv: string[]): CliArgs {
             for (const e of cfg.exclude) { if (typeof e === 'string') exclude.push(e); }
         }
         if (!cliSet.has('layouts') && cfg.layouts) layouts = path.resolve(configDir, cfg.layouts);
+        if (!cliSet.has('themes') && cfg.themes) themes = path.resolve(configDir, cfg.themes);
         if (!cliSet.has('includes') && cfg.includes) includes = path.resolve(configDir, cfg.includes);
 
         // Default --input to config's inputDir (resolved relative to config dir), then config file's parent directory
@@ -160,6 +166,7 @@ function parseArgs(argv: string[]): CliArgs {
         console.error('  --layouts <path>          Directory containing layout template files');
         console.error('  --includes <path>         Directory for custom headers and footers');
         console.error('  --theme <name>            Built-in CSS theme name');
+        console.error('  --themes <path>           Directory containing custom theme CSS files');
         console.error('  --retina                  Enable retina image sizing globally');
         console.error('  --base-url <prefix>       URL path prefix for links/assets');
         console.error('  --include-drafts          Include pages with draft: true');
@@ -172,7 +179,7 @@ function parseArgs(argv: string[]): CliArgs {
         process.exit(1);
     }
 
-    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, retina, baseUrl, includeDrafts };
+    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts };
 }
 
 interface ScannedFile {
@@ -334,13 +341,12 @@ function getBuiltInLayout(name: string): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{title}}</title>{{stylesheets}}{{meta}}
 </head>
-<body>
-{{header}}{{nav}}
-    <article class="blog-post">
+<body data-layout="blog">
+{{header}}    <article class="blog-post">
 {{date}}{{toc}}
 {{content}}
     </article>
-{{footer}}</body>
+{{nav}}{{footer}}</body>
 </html>
 `;
         case 'minimal':
@@ -351,7 +357,7 @@ function getBuiltInLayout(name: string): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{title}}</title>{{stylesheets}}{{meta}}
 </head>
-<body>
+<body data-layout="minimal">
 {{header}}    <article>
 {{content}}
     </article>
@@ -367,7 +373,7 @@ function getBuiltInLayout(name: string): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{title}}</title>{{stylesheets}}{{meta}}
 </head>
-<body>
+<body data-layout="docs">
 {{header}}{{nav}}
     <article class="markdown-body">
 {{toc}}
@@ -387,42 +393,78 @@ function escapeHtml(text: string): string {
         .replace(/"/g, '&quot;');
 }
 
-/** Extract image/asset references from rendered HTML. */
-function discoverAssetRefs(html: string): string[] {
-    const refs: string[] = [];
-    // Match src="..." in img tags
+interface AssetRef {
+    /** Original src attribute value from HTML */
+    originalRef: string;
+    /** Resolved path relative to output root (used for both HTML rewriting and copy destination) */
+    outputRelPath: string;
+    /** Absolute source path on disk */
+    absSource: string;
+}
+
+/**
+ * Extract image/asset references from rendered HTML, resolving paths relative to
+ * the page's source location. Returns resolved refs suitable for path rewriting and copying.
+ */
+function discoverAssetRefs(html: string, pageRelativePath: string, inputDir: string): AssetRef[] {
+    const refs: AssetRef[] = [];
     const imgRegex = /<img[^>]+src="([^"]+)"/gi;
     let match: RegExpExecArray | null;
     while ((match = imgRegex.exec(html)) !== null) {
         const src = decodeURIComponent(match[1]);
         // Skip absolute URLs and data URIs
-        if (!src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
-            refs.push(src);
+        if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+            continue;
         }
+
+        // Resolve absolute source path from the page's directory within the input dir
+        const pageDir = path.dirname(path.join(inputDir, pageRelativePath));
+        const absSource = path.resolve(pageDir, src);
+
+        // Compute output-relative path
+        const relToInput = path.relative(inputDir, absSource);
+        let outputRelPath: string;
+        if (!relToInput.startsWith('..')) {
+            // Asset is within the input directory
+            outputRelPath = relToInput.split(path.sep).join('/');
+        } else {
+            // Asset is outside the input directory: strip leading ../ segments
+            const normalized = relToInput.split(path.sep).join('/');
+            outputRelPath = normalized.replace(/^(\.\.\/)+/, '');
+        }
+
+        refs.push({ originalRef: match[1], outputRelPath, absSource });
     }
     return refs;
 }
 
-/** Copy asset files to output, preserving relative directory structure. */
-function copyAssets(assetRefs: string[], inputDir: string, outputDir: string): { copied: number; warnings: string[] } {
+/** Rewrite asset src attributes in HTML to use resolved output-relative paths. */
+function rewriteAssetPaths(html: string, refs: AssetRef[], baseUrl: string): string {
+    let result = html;
+    for (const ref of refs) {
+        const prefix = baseUrl ? baseUrl + '/' : '';
+        result = result.split(`src="${ref.originalRef}"`).join(`src="${prefix}${ref.outputRelPath}"`);
+    }
+    return result;
+}
+
+/** Copy asset files to output using pre-resolved paths. */
+function copyAssets(assetRefs: AssetRef[], outputDir: string): { copied: number; warnings: string[] } {
     const warnings: string[] = [];
     let copied = 0;
     const seen = new Set<string>();
 
     for (const ref of assetRefs) {
-        // Normalise path separators
-        const normalizedRef = ref.replace(/\//g, path.sep);
-        const srcPath = path.resolve(inputDir, normalizedRef);
-        const destPath = path.resolve(outputDir, normalizedRef);
+        // Dedup by absolute source path
+        if (seen.has(ref.absSource)) continue;
+        seen.add(ref.absSource);
 
-        // Dedup
-        if (seen.has(srcPath)) continue;
-        seen.add(srcPath);
-
-        if (!fs.existsSync(srcPath)) {
-            warnings.push(`Referenced asset not found: ${ref}`);
+        if (!fs.existsSync(ref.absSource)) {
+            warnings.push(`Referenced asset not found: ${ref.originalRef}`);
             continue;
         }
+
+        const destPath = path.join(outputDir, ref.outputRelPath);
 
         // Ensure destination directory exists
         const destDir = path.dirname(destPath);
@@ -430,9 +472,9 @@ function copyAssets(assetRefs: string[], inputDir: string, outputDir: string): {
             fs.mkdirSync(destDir, { recursive: true });
         }
 
-        fs.copyFileSync(srcPath, destPath);
+        fs.copyFileSync(ref.absSource, destPath);
         copied++;
-        console.log(`  [asset] ${ref}`);
+        console.log(`  [asset] ${ref.outputRelPath}`);
     }
 
     return { copied, warnings };
@@ -582,9 +624,10 @@ function escapeXml(text: string): string {
 
 function main(): void {
     const args = parseArgs(process.argv);
-    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, retina, baseUrl, includeDrafts } = args;
+    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts } = args;
     const frontMatterService = new FrontMatterService();
     const resolvedLayoutsDir = layouts ? path.resolve(layouts) : undefined;
+    const resolvedThemesDir = themes ? path.resolve(themes) : undefined;
     const resolvedIncludesDir = includes ? path.resolve(includes) : undefined;
 
     // Wipe output directory
@@ -621,16 +664,28 @@ function main(): void {
         }
     }
 
-    // Add built-in theme CSS if specified (Iteration 4D)
+    // Add theme CSS if specified: custom themes directory takes precedence over built-in
     if (theme) {
-        const themeCss = getBuiltInThemeCss(theme);
+        let themeCss: string | null = null;
+        const themeFile = `theme-${theme}.css`;
+        if (resolvedThemesDir) {
+            const customThemePath = path.join(resolvedThemesDir, `${theme}.css`);
+            if (fs.existsSync(customThemePath)) {
+                themeCss = fs.readFileSync(customThemePath, 'utf-8');
+                console.log(`  [theme] ${themeFile} (custom)`);
+            }
+        }
+        if (!themeCss) {
+            themeCss = getBuiltInThemeCss(theme);
+            if (themeCss) {
+                console.log(`  [theme] ${themeFile}`);
+            }
+        }
         if (themeCss) {
-            const themeFile = `theme-${theme}.css`;
             fs.writeFileSync(path.join(output, themeFile), themeCss, 'utf-8');
             resolvedStylesheets.unshift((baseUrl ? baseUrl + '/' : '') + themeFile);
-            console.log(`  [theme] ${themeFile}`);
         } else {
-            console.warn(`  [warning] Unknown theme: ${theme}`);
+            console.log(`  [warning] Unknown theme: ${theme}`);
         }
     }
 
@@ -642,7 +697,8 @@ function main(): void {
     }
 
     // Scan input for markdown files (recursive, with directory exclusion)
-    const scannedFiles = scanMarkdownFiles(input, exclude);
+    const scannedFiles = scanMarkdownFiles(input, exclude)
+        .filter(f => f.filename.toLowerCase() !== 'nav.md'); // nav.md is consumed for navigation, not published
     if (scannedFiles.length === 0) {
         console.error(`No .md files found in ${input}`);
         process.exit(1);
@@ -756,10 +812,35 @@ function main(): void {
     // Add heading IDs for TOC support (Iteration 6D)
     addHeadingIds(md);
 
+    // Custom navigation from nav.md (Iteration 12J)
+    let customNav: string | undefined;
+    const navMdPath = path.join(input, 'nav.md');
+    if (fs.existsSync(navMdPath)) {
+        const navContent = fs.readFileSync(navMdPath, 'utf-8');
+        const navMd = new MarkdownIt({ html: true });
+        wikilinkPlugin(navMd, {
+            wikilinkService,
+            resolver: resolver.createResolverFn(),
+        });
+        let navHtml = navMd.render(frontMatterService.stripFrontMatter(navContent));
+        // Prepend baseUrl to resolved wikilink hrefs (they come out as e.g. "my-page.html")
+        if (baseUrl) {
+            navHtml = navHtml.replace(/href="([^"]*\.html(?:#[^"]*)?)"/g, (match, href) => {
+                // Only rewrite relative hrefs (not absolute URLs)
+                if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('/')) {
+                    return match;
+                }
+                return `href="${baseUrl}/${href}"`;
+            });
+        }
+        customNav = `    <nav class="site-nav">\n${navHtml}    </nav>`;
+        console.log('  [nav] Using custom navigation from nav.md');
+    }
+
     // Convert only public pages
     let warningCount = 0;
     let assetsCopied = 0;
-    const allAssetRefs: string[] = [];
+    const allAssetRefs: AssetRef[] = [];
 
     for (const pageName of publicPages) {
         const meta = pageMetadata.get(pageName)!;
@@ -781,13 +862,25 @@ function main(): void {
 
         // Strip front matter before rendering
         const strippedMarkdown = frontMatterService.stripFrontMatter(meta.content);
-        const htmlBody = pageMd.render(strippedMarkdown);
+        let htmlBody = pageMd.render(strippedMarkdown);
 
-        // Asset discovery and copying (Iteration 2)
+        // Asset discovery, path rewriting, and copying (Iteration 2, 12J)
         const assetsEnabled = meta.fields.assets !== undefined ? meta.fields.assets : defaultAssets;
         if (assetsEnabled) {
-            const refs = discoverAssetRefs(htmlBody);
+            const pageRelPath = pageSourcePath.get(pageName) || pageName + '.md';
+            const refs = discoverAssetRefs(htmlBody, pageRelPath, input);
+            htmlBody = rewriteAssetPaths(htmlBody, refs, baseUrl);
             allAssetRefs.push(...refs);
+        }
+
+        // Prepend baseUrl to wikilink hrefs in article body (Iteration 12O)
+        if (baseUrl) {
+            htmlBody = htmlBody.replace(/href="([^"]*\.html(?:#[^"]*)?)"/g, (match, href) => {
+                if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('/')) {
+                    return match;
+                }
+                return `href="${baseUrl}/${href}"`;
+            });
         }
 
         // Check for links to non-public pages and log warnings
@@ -810,7 +903,7 @@ function main(): void {
         // Generate TOC (Iteration 6D)
         const toc = generateToc(htmlBody);
 
-        const nav = buildNav(navPages, pageName, baseUrl);
+        const nav = customNav ?? buildNav(navPages, pageName, baseUrl);
         const html = wrapHtml(title, nav, htmlBody, {
             stylesheets: resolvedStylesheets,
             description: meta.fields.description,
@@ -826,12 +919,12 @@ function main(): void {
         console.log(`  ${pageName}.md -> ${slugify(pageName)}.html`);
     }
 
-    // Copy discovered assets (Iteration 2)
+    // Copy discovered assets (Iteration 2, 12J: resolved paths)
     if (allAssetRefs.length > 0) {
-        const result = copyAssets(allAssetRefs, input, output);
+        const result = copyAssets(allAssetRefs, output);
         assetsCopied = result.copied;
         for (const w of result.warnings) {
-            console.warn(`  [warning] ${w}`);
+            console.log(`  [warning] ${w}`);
             warningCount++;
         }
     }
@@ -852,7 +945,7 @@ function main(): void {
         const indexBody = `<h1 id="home">Home</h1>\n<ul>\n${indexItems.join('\n')}\n</ul>`;
         const indexToc = generateToc(indexBody);
 
-        const nav = buildNav(navPages, 'index', baseUrl);
+        const nav = customNav ?? buildNav(navPages, 'index', baseUrl);
         const indexHtml = wrapHtml('Home', nav, indexBody, {
             stylesheets: resolvedStylesheets,
             toc: indexToc,
@@ -870,7 +963,7 @@ function main(): void {
         }
 
         const outputPath = path.join(output, slugify(pageName) + '.html');
-        const nav = buildNav(navPages, pageName, baseUrl);
+        const nav = customNav ?? buildNav(navPages, pageName, baseUrl);
         const body = '    <p class="missing-page">This page has not been created yet.</p>';
         const html = wrapHtml(stripBrackets(pageName), nav, body, { stylesheets: resolvedStylesheets, layout, layoutsDir: resolvedLayoutsDir, includesDir: resolvedIncludesDir, baseUrl });
 
@@ -991,10 +1084,6 @@ footer {
     background: #f6f8fa;
     border-right: 1px solid #d0d7de;
     padding: 1.5rem 1rem;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
 }
 
 .site-nav ul {
@@ -1005,27 +1094,37 @@ footer {
 
 .site-nav ul li {
     margin: 0.2rem 0;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    cursor: pointer;
 }
 
 .site-nav ul li a {
-    display: block;
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
     text-decoration: none;
     color: #24292f;
-    font-size: 0.875rem;
-    line-height: 1.4;
 }
 
 .site-nav ul li a:hover {
+    text-decoration: underline;
+}
+
+.site-nav ul li:hover {
     background: #eaeef2;
+}
+
+.site-nav ul li:hover a {
     color: #0550ae;
 }
 
-.site-nav ul li.nav-current a {
+.site-nav ul li.nav-current {
     background: #ddf4ff;
-    color: #0550ae;
     font-weight: 600;
+}
+
+.site-nav ul li.nav-current a {
+    color: #0550ae;
 }
 
 /* -- Content ------------------------------------------------------ */
@@ -1146,8 +1245,6 @@ img {
     }
 
     .site-nav {
-        position: relative;
-        height: auto;
         border-right: none;
         border-bottom: 1px solid #d0d7de;
     }
@@ -1246,10 +1343,6 @@ footer {
     background: #161b22;
     border-right: 1px solid #30363d;
     padding: 1.5rem 1rem;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
 }
 
 .site-nav ul {
@@ -1260,27 +1353,37 @@ footer {
 
 .site-nav ul li {
     margin: 0.2rem 0;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    cursor: pointer;
 }
 
 .site-nav ul li a {
-    display: block;
-    padding: 0.3rem 0.6rem;
-    border-radius: 6px;
     text-decoration: none;
     color: #c9d1d9;
-    font-size: 0.875rem;
-    line-height: 1.4;
 }
 
 .site-nav ul li a:hover {
+    text-decoration: underline;
+}
+
+.site-nav ul li:hover {
     background: #1f2937;
+}
+
+.site-nav ul li:hover a {
     color: #58a6ff;
 }
 
-.site-nav ul li.nav-current a {
+.site-nav ul li.nav-current {
     background: #1f2937;
-    color: #58a6ff;
     font-weight: 600;
+}
+
+.site-nav ul li.nav-current a {
+    color: #58a6ff;
 }
 
 /* -- Content ------------------------------------------------------ */
@@ -1403,8 +1506,6 @@ img {
     }
 
     .site-nav {
-        position: relative;
-        height: auto;
         border-right: none;
         border-bottom: 1px solid #30363d;
     }
