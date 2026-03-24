@@ -4,6 +4,10 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.2.9] - 2026-03-24
+
+- Feature: Improved default themes for static HTML publishing.
+
 ## [2.2.8] - 2026-03-24
 
 - Feature: Publishing to static HTML sites from AS Notes, including npm package for CI/CD.  

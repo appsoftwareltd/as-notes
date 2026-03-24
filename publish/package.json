@@ -1,6 +1,6 @@
 {
     "name": "@appsoftwareltd/asnotes-publish",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Convert AS Notes markdown workspaces (with wikilinks, front matter, and task tags) to static HTML sites",
     "type": "module",
     "main": "./dist/convert.js",
