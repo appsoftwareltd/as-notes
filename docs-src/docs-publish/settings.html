@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li class="nav-current"><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#general-settings">General Settings</a></li>
+          <li><a href="#journal-settings">Journal Settings</a></li>
+          <li><a href="#backlinks-panel-settings">Backlinks Panel Settings</a></li>
+          <li><a href="#pro-settings">Pro Settings</a></li>
+          <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="settings">Settings</h1>
+<p>All AS Notes settings are available in VS Code Settings (<code>Ctrl+,</code>). Search for <code>as-notes</code> to see them all.</p>
+<h2 id="general-settings">General Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.periodicScanInterval</code></td>
+<td><code>300</code></td>
+<td>Seconds between automatic background scans for file changes. Set to <code>0</code> to disable periodic scanning. Minimum effective value: <code>30</code>.</td>
+</tr>
+<tr>
+<td><code>as-notes.assetPath</code></td>
+<td><code>assets/images</code></td>
+<td>Workspace-relative folder where dropped and pasted files (images, etc.) are saved. See <a href="images-and-files.html" class="wikilink">Images and Files</a>.</td>
+</tr>
+<tr>
+<td><code>as-notes.enableLogging</code></td>
+<td><code>false</code></td>
+<td>Enable diagnostic logging to <code>.asnotes/logs/</code>. Uses rolling 10 MB files (max 5). Requires a VS Code window reload after changing. Also activated by setting the <code>AS_NOTES_DEBUG=1</code> environment variable.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="journal-settings">Journal Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.journalFolder</code></td>
+<td><code>journals</code></td>
+<td>Folder for daily journal files, relative to the workspace root. See <a href="daily-journal.html" class="wikilink">Daily Journal</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="backlinks-panel-settings">Backlinks Panel Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.backlinkGroupByChain</code></td>
+<td><code>false</code></td>
+<td>Default view mode for the Backlinks panel. <code>false</code> = flat by page, <code>true</code> = grouped by chain pattern. See <a href="backlinks.html" class="wikilink">Backlinks</a>.</td>
+</tr>
+<tr>
+<td><code>as-notes.backlinkWrapContext</code></td>
+<td><code>false</code></td>
+<td>Default context verbosity. <code>false</code> = compact (single-line), <code>true</code> = wrapped (full text).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pro-settings">Pro Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.licenceKey</code></td>
+<td><em>(empty)</em></td>
+<td>AS Notes Pro licence key (format: <code>ASNO-XXXX-XXXX-XXXX-XXXX</code>). Unlocks table commands and encrypted notes. Enter via <strong>AS Notes: Enter Licence Key</strong> in the Command Palette, or paste directly here. Stored at machine scope (not synced across devices). See <a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2>
+<p>AS Notes registers the following default keyboard shortcuts. All can be rebound in <strong>Keyboard Shortcuts</strong> (<code>Ctrl+K Ctrl+S</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Windows/Linux</th>
+<th>macOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Toggle todo</td>
+<td><code>Ctrl+Shift+Enter</code></td>
+<td><code>Cmd+Shift+Enter</code></td>
+</tr>
+<tr>
+<td>Open today's journal</td>
+<td><code>Ctrl+Alt+J</code></td>
+<td><code>Cmd+Alt+J</code></td>
+</tr>
+<tr>
+<td>Open backlinks panel</td>
+<td><code>Ctrl+Alt+B</code></td>
+<td><code>Cmd+Alt+B</code></td>
+</tr>
+<tr>
+<td>Toggle tasks panel</td>
+<td><code>Ctrl+Alt+T</code></td>
+<td><code>Cmd+Alt+T</code></td>
+</tr>
+</tbody>
+</table>
+<p>Search for <strong>AS Notes</strong> in Keyboard Shortcuts to see the full list of bindable commands.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

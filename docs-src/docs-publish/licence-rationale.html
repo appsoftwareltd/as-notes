@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Licence Rationale</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+
+    <p class="missing-page">This page has not been created yet.</p>
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

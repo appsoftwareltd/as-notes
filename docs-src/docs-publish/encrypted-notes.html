@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encrypted Notes</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li class="nav-current"><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#as-notes-pro">AS Notes Pro</a></li>
+          <li><a href="#how-encrypted-notes-work">How Encrypted Notes Work</a></li>
+          <li><a href="#setting-up-encryption">Setting Up Encryption</a></li>
+          <li><a href="#creating-an-encrypted-note">Creating an Encrypted Note</a></li>
+          <li><a href="#encrypting-and-decrypting">Encrypting and Decrypting</a></li>
+          <li><a href="#clearing-the-passphrase">Clearing the Passphrase</a></li>
+          <li><a href="#encryption-details">Encryption Details</a></li>
+          <li><a href="#git-pre-commit-hook">Git Pre-Commit Hook</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="encrypted-notes">Encrypted Notes</h1>
+<p>AS Notes Pro lets you store sensitive notes in encrypted markdown files that are protected with AES-256-GCM encryption. Encrypted files are excluded from the search index and never read as plain text by the extension.</p>
+<h2 id="as-notes-pro">AS Notes Pro</h2>
+<p>Encrypted notes are a <strong>Pro feature</strong>. To unlock them:</p>
+<ol>
+<li>Obtain a licence key from <a href="https://www.asnotes.io/pricing">asnotes.io</a></li>
+<li>Enter your key using one of these methods:
+<ul>
+<li>Run <strong>AS Notes: Enter Licence Key</strong> from the Command Palette (<code>Ctrl+Shift+P</code>) — the quickest way</li>
+<li>Or open VS Code Settings (<code>Ctrl+,</code>), search for <code>as-notes.licenceKey</code>, and paste your key there</li>
+</ul>
+</li>
+</ol>
+<p>When active, the status bar shows <strong>AS Notes (Pro)</strong>.</p>
+<h2 id="how-encrypted-notes-work">How Encrypted Notes Work</h2>
+<p>Any file with the <code>.enc.md</code> extension is treated as an encrypted note. When encrypted, the file contains a single-line marker:</p>
+<pre><code>ASNOTES_ENC_V1:&lt;base64url payload&gt;
+</code></pre>
+<p>When decrypted, it opens as normal markdown — you can read and edit it like any other note.</p>
+<p>Encrypted files are excluded from the backlink index (see <a href="backlinks.html" class="wikilink">Backlinks</a>) and wikilink autocomplete while encrypted.</p>
+<h2 id="setting-up-encryption">Setting Up Encryption</h2>
+<p>Before you can create encrypted notes, save a passphrase:</p>
+<ol>
+<li>Open the Command Palette (<code>Ctrl+Shift+P</code>)</li>
+<li>Run <strong>AS Notes: Set Encryption Key</strong></li>
+<li>Enter your passphrase</li>
+</ol>
+<p>Your passphrase is stored securely in the OS keychain (VS Code <code>SecretStorage</code>). It is <strong>never written to disk or to settings files</strong>.</p>
+<h2 id="creating-an-encrypted-note">Creating an Encrypted Note</h2>
+<ul>
+<li><strong>AS Notes: Create Encrypted Note</strong> — prompts for a filename and creates a new <code>.enc.md</code> file</li>
+<li><strong>AS Notes: Create Encrypted Journal Note</strong> — creates today's journal entry as <code>.enc.md</code> in your journal folder</li>
+</ul>
+<p>Write the note in the editor as normal markdown. The file is plain text until you encrypt it.</p>
+<h2 id="encrypting-and-decrypting">Encrypting and Decrypting</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AS Notes: Encrypt Current Note</strong></td>
+<td>Encrypts the active <code>.enc.md</code> file (reads current unsaved editor content)</td>
+</tr>
+<tr>
+<td><strong>AS Notes: Encrypt All Notes</strong></td>
+<td>Encrypts all plaintext <code>.enc.md</code> files in the workspace</td>
+</tr>
+<tr>
+<td><strong>AS Notes: Decrypt Current Note</strong></td>
+<td>Decrypts the active <code>.enc.md</code> file (reads from disk)</td>
+</tr>
+<tr>
+<td><strong>AS Notes: Decrypt All Notes</strong></td>
+<td>Decrypts all encrypted <code>.enc.md</code> files in the workspace</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Always encrypt notes before closing VS Code or committing to version control.</p>
+</blockquote>
+<h2 id="clearing-the-passphrase">Clearing the Passphrase</h2>
+<p>Run <strong>AS Notes: Clear Encryption Key</strong> to remove the stored passphrase from the OS keychain.</p>
+<h2 id="encryption-details">Encryption Details</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Algorithm</td>
+<td>AES-256-GCM</td>
+</tr>
+<tr>
+<td>Nonce</td>
+<td>12-byte random, generated fresh per encryption</td>
+</tr>
+<tr>
+<td>Key derivation</td>
+<td>PBKDF2-SHA256, 100,000 iterations</td>
+</tr>
+<tr>
+<td>Key input</td>
+<td>Your passphrase</td>
+</tr>
+<tr>
+<td>File format</td>
+<td><code>ASNOTES_ENC_V1:&lt;base64url payload&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>The random nonce means that encrypting the same content twice produces different ciphertext — this prevents pattern analysis from repeated saves.</p>
+<h2 id="git-pre-commit-hook">Git Pre-Commit Hook</h2>
+<p>AS Notes installs a Git pre-commit hook in your workspace that checks for any <code>.enc.md</code> files that are still in plaintext and blocks the commit with a warning. This helps prevent accidentally committing unencrypted sensitive notes.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

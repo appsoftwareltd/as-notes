@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wikilinks</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li class="nav-current"><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#writing-and-navigating-links">Writing and Navigating Links</a></li>
+          <li><a href="#highlighting">Highlighting</a></li>
+          <li><a href="#how-resolution-works">How Resolution Works</a></li>
+          <li><a href="#autocomplete">Autocomplete</a></li>
+          <li><a href="#rename-synchronisation">Rename Synchronisation</a></li>
+          <li><a href="#page-aliases">Page Aliases</a></li>
+          <li><a href="#nested-wikilinks">Nested Wikilinks</a></li>
+          <li><a href="#filename-sanitisation">Filename Sanitisation</a></li>
+          <li><a href="#case-insensitivity">Case Insensitivity</a></li>
+          <li><a href="#missing-links">Missing Links</a></li>
+          <li><a href="#backlinks">Backlinks</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="wikilinks">Wikilinks</h1>
+<p>Wikilinks are the core navigation primitive in AS Notes. Wrap any page name in double square brackets and AS Notes turns it into a navigable link — no folder paths, no file extensions needed.</p>
+<pre><code>[[Page Name]]
+</code></pre>
+<p>AS Notes resolves the link to the matching <code>.md</code> file anywhere in your workspace. If <code>Page Name.md</code> doesn't exist yet, navigating to it creates the file automatically.</p>
+<h2 id="writing-and-navigating-links">Writing and Navigating Links</h2>
+<ul>
+<li><strong>Write</strong> <code>[[</code> and a completion list appears immediately. Keep typing to filter by page name or alias.</li>
+<li><strong>Navigate</strong> — hold <code>Ctrl</code> (Cmd on macOS) and click any wikilink to open the target file.</li>
+<li><strong>Create</strong> — if the target file doesn't exist, navigating to it creates it. Link first, write later.</li>
+<li><strong>Hover</strong> — hover over a wikilink to see the target filename, whether it exists, and how many pages link to it.</li>
+</ul>
+<h2 id="highlighting">Highlighting</h2>
+<p>Every wikilink in a markdown file is highlighted in blue. When your cursor is inside a link, that specific link is highlighted with a brighter blue, bold, and underlined — so you always know which link you're about to interact with.</p>
+<h2 id="how-resolution-works">How Resolution Works</h2>
+<p>Wikilinks resolve globally across your workspace, not just in the current folder. Given:</p>
+<pre><code>notes/
+  Project Ideas.md
+  journal/
+    2026-03-07.md
+</code></pre>
+<p>The link <code>[[Project Ideas]]</code> resolves correctly from any file, at any depth.</p>
+<p><strong>Resolution order:</strong></p>
+<ol>
+<li><strong>Direct filename match</strong> — finds <code>Page Name.md</code> anywhere in the workspace</li>
+<li><strong>Alias match</strong> — checks page aliases declared in YAML front matter</li>
+<li><strong>Auto-create</strong> — creates the file in the same directory as the source note</li>
+</ol>
+<p><strong>When multiple files share the same name:</strong></p>
+<ol>
+<li>A file in the <strong>same directory</strong> as the source always wins</li>
+<li>Otherwise, the <strong>closest folder</strong> by directory distance wins</li>
+</ol>
+<h2 id="autocomplete">Autocomplete</h2>
+<p>Type <code>[[</code> in any markdown file to trigger the autocomplete list:</p>
+<ul>
+<li><strong>Page names</strong> — all indexed pages, with folder paths shown when names collide</li>
+<li><strong>Aliases</strong> — shown as <code>Alias → CanonicalPage</code></li>
+<li>Selecting a suggestion inserts the name and closes the brackets with <code>]]</code></li>
+<li>Typing <code>[[</code> inside an already-open <code>[[...</code> starts autocomplete for an inner (nested) link</li>
+<li>Autocomplete is suppressed inside YAML front matter</li>
+</ul>
+<h2 id="rename-synchronisation">Rename Synchronisation</h2>
+<p>When you edit a wikilink's text and move the cursor away (or switch files), AS Notes detects the change and offers to:</p>
+<ol>
+<li><strong>Rename the corresponding <code>.md</code> file</strong> (if it exists)</li>
+<li><strong>Update every matching wikilink</strong> across all markdown files in the workspace</li>
+</ol>
+<p>A single confirmation dialog covers all affected pages. You can decline — the link text change is kept but files and other links are left untouched.</p>
+<p>Rename tracking is alias-aware: editing an alias wikilink offers to update the alias in the front matter and all matching references.</p>
+<h2 id="page-aliases">Page Aliases</h2>
+<p>Define alternative names for a page using YAML front matter:</p>
+<pre><code class="language-yaml">---
+aliases:
+  - Short Name
+  - Another Name
+---
+</code></pre>
+<p>Or inline:</p>
+<pre><code class="language-yaml">---
+aliases: [Short Name, Another Name]
+---
+</code></pre>
+<p><code>[[Short Name]]</code> and <code>[[Another Name]]</code> now both navigate to that page — no extra file is created. Hover tooltips show the alias resolution (<code>Short Name → ActualPage.md</code>). Alias values are plain strings; any accidental <code>[[</code> or <code>]]</code> characters are stripped automatically.</p>
+<h2 id="nested-wikilinks">Nested Wikilinks</h2>
+<p>Wikilinks can contain other wikilinks, allowing composite page names that are themselves fully navigable:</p>
+<pre><code>[[Specific [[Topic]] Details]]
+</code></pre>
+<p>This creates <strong>two</strong> navigable targets:</p>
+<table>
+<thead>
+<tr>
+<th>You click on...</th>
+<th>You navigate to...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>[[Topic]]</code> (the inner brackets)</td>
+<td><code>Topic.md</code></td>
+</tr>
+<tr>
+<td><code>[[Specific</code> or <code>Details]]</code> (the outer portions)</td>
+<td><code>Specific [[Topic]] Details.md</code></td>
+</tr>
+</tbody>
+</table>
+<p>More deeply nested examples work the same way:</p>
+<pre><code>[[[[[[Deep]] Topic]] Notes]]
+</code></pre>
+<p>Resolves three links: <code>Deep.md</code>, <code>[[Deep]] Topic.md</code>, and <code>[[[[Deep]] Topic]] Notes.md</code>.</p>
+<p><strong>Practical use:</strong> Nested wikilinks let you build a topic hierarchy where sub-pages share their parent's name. For example:</p>
+<pre><code>See [[[[AS Notes]] Changelog]] for recent changes.
+</code></pre>
+<p>Both <code>AS Notes.md</code> and <code>[[AS Notes]] Changelog.md</code> are independently navigable from that single line.</p>
+<p>The cursor highlight always identifies the <strong>innermost</strong> link at your cursor position.</p>
+<h2 id="filename-sanitisation">Filename Sanitisation</h2>
+<p>Invalid filename characters (<code>/ ? &lt; &gt; \ : * | &quot;</code>) are replaced with <code>_</code> when a new file is created from a wikilink:</p>
+<pre><code>[[What is 1/2 + 1/4?]]  →  What is 1_2 + 1_4_.md
+</code></pre>
+<h2 id="case-insensitivity">Case Insensitivity</h2>
+<p><code>[[my page]]</code> resolves to <code>My Page.md</code> regardless of how the file was named. On case-sensitive filesystems (Linux), AS Notes does a directory scan to find the match.</p>
+<h2 id="missing-links">Missing Links</h2>
+<p>A wikilink with no matching file is still valid. It is highlighted (slightly differently) and navigating to it creates the file. See also the <a href="backlinks.html" class="wikilink">Backlinks</a> panel, which shows incoming links to pages that don't exist yet.</p>
+<h2 id="backlinks">Backlinks</h2>
+<p>Every wikilink is tracked in the index. The <a href="backlinks.html" class="wikilink">Backlinks</a> panel shows all pages that link to the current page, including nested references.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

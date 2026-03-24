@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li class="nav-current"><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#why-vs-code">Why VS Code?</a></li>
+          <li><a href="#features-at-a-glance">Features at a Glance</a></li>
+                    <li><a href="#free">Free</a></li>
+                    <li><a href="#pro">Pro</a></li>
+                    <li><a href="#task-features">Task Features</a></li>
+          <li><a href="#getting-started">Getting Started</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#licence">Licence</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="as-notes">AS Notes</h1>
+<blockquote>
+<p><strong>This documentation was written and generated using AS Notes. See <a href="publishing-a-static-site.html" class="wikilink">Publishing a Static Site</a> for how you can use AS Notes for your docs, including deploying to GitHub Pages</strong>.</p>
+</blockquote>
+<p>AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS). It brings <a href="wikilinks.html" class="wikilink">Wikilinks</a>, backlinks, daily journaling, encrypted notes, and a task panel — all without ever sending your data anywhere.</p>
+<blockquote>
+<p><strong>Install:</strong> <a href="https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes">https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes</a></p>
+</blockquote>
+<blockquote>
+<p><strong>GitHub:</strong> <a href="https://github.com/appsoftwareltd/as-notes">https://github.com/appsoftwareltd/as-notes</a></p>
+</blockquote>
+<p><img src="assets/images/as-notes-editor-screenshot.png" alt="AS Notes editor screenshot"></p>
+<h2 id="why-vs-code">Why VS Code?</h2>
+<p>Using VS Code as your notes app gives you a huge amount for free before you even start using AS Notes features:</p>
+<ul>
+<li>Cross-platform and web-based (via VS Code Workspaces)</li>
+<li>Tabs, file explorer, themes, keyboard shortcuts</li>
+<li>A vast extension library — Mermaid diagrams, Vim mode, and more, all usable alongside AS Notes</li>
+<li>AI chat (GitHub Copilot, Claude, etc.) to query and work with your notes</li>
+<li>Outliner-style indentation via <code>Ctrl+[</code> / <code>Ctrl+]</code></li>
+<li>Syntax highlighting for code embedded in your notes</li>
+</ul>
+<h2 id="features-at-a-glance">Features at a Glance</h2>
+<h3 id="free">Free</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Summary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="wikilinks.html" class="wikilink">Wikilinks</a></td>
+<td>Link between notes with <code>[[Page Name]]</code> — resolves anywhere in your workspace</td>
+</tr>
+<tr>
+<td><a href="backlinks.html" class="wikilink">Backlinks</a></td>
+<td>See every note that links to the current page</td>
+</tr>
+<tr>
+<td><a href="daily-journal.html" class="wikilink">Daily Journal</a></td>
+<td>Open today's journal with a single shortcut</td>
+</tr>
+<tr>
+<td><a href="task-management.html" class="wikilink">Task Management</a></td>
+<td>Toggle todos with a keyboard shortcut and browse them all in a panel</td>
+</tr>
+<tr>
+<td><a href="slash-commands.html" class="wikilink">Slash Commands</a></td>
+<td>Insert code blocks, dates, and task tags — type <code>/</code> to open the menu</td>
+</tr>
+<tr>
+<td><a href="images-and-files.html" class="wikilink">Images and Files</a></td>
+<td>Drag and drop images, paste from clipboard, hover to preview</td>
+</tr>
+<tr>
+<td><a href="publishing-a-static-site.html" class="wikilink">Publishing a Static Site</a></td>
+<td>Convert your notes to a static website and deploy to GitHub Pages</td>
+</tr>
+</tbody>
+</table>
+<h3 id="pro">Pro</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Summary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="slash-commands.html" class="wikilink">Slash Commands</a> (Tables)</td>
+<td>Insert and edit markdown tables directly from the slash menu</td>
+</tr>
+<tr>
+<td><a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a></td>
+<td>Store sensitive notes in AES-256-GCM encrypted <code>.enc.md</code> files</td>
+</tr>
+</tbody>
+</table>
+<p>Obtain a Pro licence key at <a href="https://www.asnotes.io/pricing">asnotes.io/pricing</a>.</p>
+<h3 id="task-features">Task Features</h3>
+<p>Task tags help you to organise and prioritise tags:</p>
+<ul class="task-list">
+<li class="task-list-item"><input type="checkbox" disabled> <span class="task-tag priority-1">Priority 1</span> <span class="task-tag waiting">Waiting</span> <span class="task-tag due-date">Due 2026-03-11</span> A very important thing I'm waiting on</li>
+</ul>
+<h2 id="getting-started">Getting Started</h2>
+<p>New here? Start with <a href="getting-started.html" class="wikilink">Getting Started</a> to install and initialise your first workspace.</p>
+<h2 id="privacy">Privacy</h2>
+<p>AS Notes is privacy-first. It never connects to external servers. All indexing, search, and backlink tracking runs entirely on your machine using an embedded SQLite database (<code>.asnotes/index.db</code>), and your notes never leave your device.</p>
+<h2 id="licence">Licence</h2>
+<p>See <a href="licence-rationale.html" class="wikilink">Licence Rationale</a> for an explanation of the source-available licence model.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backlinks</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li class="nav-current"><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#opening-the-panel">Opening the Panel</a></li>
+          <li><a href="#what-you-see">What You See</a></li>
+          <li><a href="#view-modes">View Modes</a></li>
+          <li><a href="#context-verbosity">Context Verbosity</a></li>
+          <li><a href="#alias-aware">Alias-Aware</a></li>
+          <li><a href="#forward-references">Forward References</a></li>
+          <li><a href="#live-sync">Live Sync</a></li>
+          <li><a href="#backlink-counts-in-hover-tooltips">Backlink Counts in Hover Tooltips</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="backlinks">Backlinks</h1>
+<p>The Backlinks panel shows every note in your workspace that links to a given page. It is one of the most powerful navigation tools in AS Notes — use it to understand how ideas connect across your knowledge base.</p>
+<h2 id="opening-the-panel">Opening the Panel</h2>
+<ul>
+<li>Press <code>Ctrl+Alt+B</code> (Cmd+Alt+B on macOS) to open backlinks for the <strong>currently active file</strong>.</li>
+<li><strong>Right-click any wikilink</strong> in the editor and choose <strong>View Backlinks</strong> to see backlinks for that specific page — useful for checking forward references (links to pages that don't exist yet).</li>
+</ul>
+<p>The panel opens beside your active editor.</p>
+<h2 id="what-you-see">What You See</h2>
+<p>Each backlink is displayed as a <strong>chain</strong> — the full outline context from the root of the page down to the link. A standalone mention (not nested inside another wikilink) is a chain of length one.</p>
+<p>For example, if <code>Project.md</code> contains:</p>
+<pre><code>- [[Tasks]]
+  - [[NGINX]]
+</code></pre>
+<p>…then the backlink chain for <code>NGINX</code> from <code>Project.md</code> would be:</p>
+<pre><code>Project → Tasks → NGINX
+</code></pre>
+<p>Each link in the chain is individually clickable and shows its line number (e.g. <code>[L12]</code>). Below each chain, the surrounding line text is shown with the wikilink highlighted — giving you immediate context without having to open the file.</p>
+<h2 id="view-modes">View Modes</h2>
+<p>Toggle the view mode using the button in the panel header:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Flat by page</strong> (default)</td>
+<td>All backlink instances listed alphabetically by source page name. Journal files sort chronologically.</td>
+</tr>
+<tr>
+<td><strong>Grouped by chain</strong></td>
+<td>Backlinks grouped by their chain pattern, with collapsible headers. Good for exploring concept-based relationships.</td>
+</tr>
+</tbody>
+</table>
+<p>The default mode is configured via <code>as-notes.backlinkGroupByChain</code> in <a href="settings.html" class="wikilink">Settings</a>.</p>
+<h2 id="context-verbosity">Context Verbosity</h2>
+<p>A second toggle controls how much line text is shown:</p>
+<ul>
+<li><strong>Compact</strong> (default) — single-line, truncated</li>
+<li><strong>Wrapped</strong> — full text visible</li>
+</ul>
+<p>The default is configured via <code>as-notes.backlinkWrapContext</code>.</p>
+<h2 id="alias-aware">Alias-Aware</h2>
+<p>If a page has aliases (see <a href="wikilinks.html" class="wikilink">Wikilinks</a>), the backlinks panel includes links that target any of the page's aliases, not just direct filename references.</p>
+<h2 id="forward-references">Forward References</h2>
+<p>The panel works even for pages that don't exist yet. If you have written <code>[[Future Topic]]</code> somewhere and then right-click that link and choose <strong>View Backlinks</strong>, you will see all the places it is referenced — even before <code>Future Topic.md</code> has been created.</p>
+<h2 id="live-sync">Live Sync</h2>
+<p>The panel updates automatically when you:</p>
+<ul>
+<li>Switch to a different file</li>
+<li>Save a file</li>
+<li>The index is updated (file changes, background scan)</li>
+</ul>
+<h2 id="backlink-counts-in-hover-tooltips">Backlink Counts in Hover Tooltips</h2>
+<p>When you hover over any wikilink in the editor, the tooltip shows the number of backlinks for that page. This gives you a quick sense of how central an idea is without opening the panel.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

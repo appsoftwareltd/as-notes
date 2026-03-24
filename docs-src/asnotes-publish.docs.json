@@ -1,0 +1,16 @@
+{
+    "inputDir": "./docs",
+    "defaultPublic": true,
+    "defaultAssets": true,
+    "layout": "docs",
+    "layouts": "./asnotes-publish.layouts.docs",
+    "includes": "./asnotes-publish.includes.docs",
+    "theme": "dark",
+    "themes": "./asnotes-publish.themes.docs",
+    "baseUrl": "",
+    "retina": false,
+    "includeDrafts": false,
+    "stylesheets": [],
+    "exclude": [],
+    "outputDir": "./docs-publish"
+}

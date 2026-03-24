@@ -65,11 +65,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npx @appsoftwareltd/asnotes-publish --config docs-src/asnotes-publish.notes.json
+      - run: npx @appsoftwareltd/asnotes-publish --config docs-src/asnotes-publish.docs.json
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         with:
-          path: docs-src/notes-publish
+          path: docs-src/docs-publish
 
   deploy-pages:
     needs: build-docs

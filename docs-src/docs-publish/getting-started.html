@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li class="nav-current"><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#1-install-the-extension">1. Install the Extension</a></li>
+          <li><a href="#2-open-a-folder">2. Open a Folder</a></li>
+          <li><a href="#3-initialise-the-workspace">3. Initialise the Workspace</a></li>
+          <li><a href="#4-write-your-first-note">4. Write Your First Note</a></li>
+          <li><a href="#5-explore-the-features">5. Explore the Features</a></li>
+          <li><a href="#excluding-files-from-the-index">Excluding Files from the Index</a></li>
+          <li><a href="#rebuilding-the-index">Rebuilding the Index</a></li>
+          <li><a href="#cleaning-the-workspace">Cleaning the Workspace</a></li>
+          <li><a href="#compatibility-with-other-tools">Compatibility With Other Tools</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="getting-started">Getting Started</h1>
+<p>This page gets you from zero to a working AS Notes workspace in a few minutes.</p>
+<h2 id="1-install-the-extension">1. Install the Extension</h2>
+<p>Install <strong>AS Notes</strong> from the <a href="https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes">VS Code Marketplace</a>.</p>
+<p>Open VS Code, go to the Extensions view (<code>Ctrl+Shift+X</code>), search for <strong>AS Notes</strong>, and click <strong>Install</strong>.</p>
+<h2 id="2-open-a-folder">2. Open a Folder</h2>
+<p>AS Notes works on a VS Code workspace folder — a folder containing your markdown notes. If you don't have one yet, create an empty folder and open it in VS Code (<code>File → Open Folder</code>).</p>
+<blockquote>
+<p>Want a ready-made example? Clone the <a href="https://github.com/appsoftwareltd/as-notes-demo-notes">AS Notes demo notes</a> repository and open it in VS Code.</p>
+</blockquote>
+<h2 id="3-initialise-the-workspace">3. Initialise the Workspace</h2>
+<p>AS Notes does not activate until you initialise your workspace. You will see a status bar item at the bottom of VS Code inviting you to do so.</p>
+<ol>
+<li>Open the Command Palette (<code>Ctrl+Shift+P</code> / <code>Cmd+Shift+P</code>)</li>
+<li>Run <strong>AS Notes: Initialise Workspace</strong></li>
+</ol>
+<p>This creates a <code>.asnotes/</code> directory at the workspace root, builds a SQLite index of all your markdown files, and activates all extension features. The index file is automatically added to <code>.gitignore</code>.</p>
+<p>After initialisation the status bar shows <strong>AS Notes</strong> (or <strong>AS Notes (Pro)</strong> if you have a licence key configured).</p>
+<h2 id="4-write-your-first-note">4. Write Your First Note</h2>
+<p>Create a new <code>.md</code> file and start writing. Type <code>[[</code> anywhere to trigger <a href="wikilinks.html" class="wikilink">Wikilinks</a> autocomplete — a list of all your pages appears immediately.</p>
+<h2 id="5-explore-the-features">5. Explore the Features</h2>
+<table>
+<thead>
+<tr>
+<th>What you want to do</th>
+<th>Where to look</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Link between notes</td>
+<td><a href="wikilinks.html" class="wikilink">Wikilinks</a></td>
+</tr>
+<tr>
+<td>See what links to a page</td>
+<td><a href="backlinks.html" class="wikilink">Backlinks</a></td>
+</tr>
+<tr>
+<td>Open today's journal</td>
+<td><a href="daily-journal.html" class="wikilink">Daily Journal</a></td>
+</tr>
+<tr>
+<td>Manage your todos</td>
+<td><a href="task-management.html" class="wikilink">Task Management</a></td>
+</tr>
+<tr>
+<td>Insert tables, code, dates</td>
+<td><a href="slash-commands.html" class="wikilink">Slash Commands</a></td>
+</tr>
+<tr>
+<td>Drop images into notes</td>
+<td><a href="images-and-files.html" class="wikilink">Images and Files</a></td>
+</tr>
+<tr>
+<td>Store sensitive notes</td>
+<td><a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a></td>
+</tr>
+<tr>
+<td>Publish notes as a website</td>
+<td><a href="publishing-a-static-site.html" class="wikilink">Publishing a Static Site</a></td>
+</tr>
+<tr>
+<td>Adjust extension settings</td>
+<td><a href="settings.html" class="wikilink">Settings</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="excluding-files-from-the-index">Excluding Files from the Index</h2>
+<p>When AS Notes initialises, it creates a <code>.asnotesignore</code> file at the workspace root. This file controls which files and directories are excluded from the index, using <a href="https://git-scm.com/docs/gitignore"><code>.gitignore</code> pattern syntax</a>.</p>
+<p>The default contents exclude some common tool directories:</p>
+<pre><code># Logseq metadata and backup directories
+logseq/
+
+# Obsidian metadata and trash directories
+.obsidian/
+.trash/
+</code></pre>
+<p>Edit <code>.asnotesignore</code> any time — AS Notes watches the file and re-scans automatically when it changes. Newly ignored files are removed from the index; un-ignored files are added.</p>
+<blockquote>
+<p><code>.asnotesignore</code> is version-controlled and user-editable. AS Notes will never overwrite it after initial creation.</p>
+</blockquote>
+<h2 id="rebuilding-the-index">Rebuilding the Index</h2>
+<p>If the index ever becomes stale or corrupted, run <strong>AS Notes: Rebuild Index</strong> from the Command Palette. This drops and recreates the entire index with a progress indicator.</p>
+<h2 id="cleaning-the-workspace">Cleaning the Workspace</h2>
+<p>If the extension is in a bad state (e.g. persistent errors after a crash), run <strong>AS Notes: Clean Workspace</strong> to remove the <code>.asnotes/</code> directory and reset all in-memory state. Your <code>.asnotesignore</code> file is preserved. Run <strong>AS Notes: Initialise Workspace</strong> afterwards to start fresh.</p>
+<h2 id="compatibility-with-other-tools">Compatibility With Other Tools</h2>
+<p>AS Notes workspaces are plain markdown files in plain folders — they are compatible with Obsidian and Logseq due to similar file structures. Be aware there are format and behavioural differences, but you can use the same notes folder with multiple tools.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

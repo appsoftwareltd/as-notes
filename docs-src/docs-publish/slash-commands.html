@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slash Commands</title>
+    <link rel="stylesheet" href="theme-dark.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="licence.html">Licence</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li class="nav-current"><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#using-the-menu">Using the Menu</a></li>
+          <li><a href="#available-commands">Available Commands</a></li>
+                    <li><a href="#date-and-time">Date and Time</a></li>
+                    <li><a href="#code">Code</a></li>
+                    <li><a href="#tables-pro">Tables (Pro)</a></li>
+                              <li><a href="#creating-a-table">Creating a table</a></li>
+                              <li><a href="#modifying-an-existing-table">Modifying an existing table</a></li>
+                    <li><a href="#tasks-task-lines-only">Tasks (task lines only)</a></li>
+          <li><a href="#pro-licence">Pro Licence</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="slash-commands">Slash Commands</h1>
+<p>Type <code>/</code> in any markdown file to open the slash command menu. The menu appears inline and lets you quickly insert content or run table operations without leaving the keyboard.</p>
+<h2 id="using-the-menu">Using the Menu</h2>
+<ol>
+<li>Type <code>/</code> on any line</li>
+<li>The menu appears immediately</li>
+<li>Keep typing to filter — the list narrows as you type</li>
+<li>Press <code>Enter</code> or click to run a command</li>
+<li>Press <code>Escape</code> (or type a non-matching character) to dismiss — the <code>/</code> stays in your document as-is</li>
+</ol>
+<p>Slash commands are suppressed inside fenced code blocks, inline code spans, and YAML front matter.</p>
+<h2 id="available-commands">Available Commands</h2>
+<h3 id="date-and-time">Date and Time</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Today</strong></td>
+<td>Inserts a wikilink for today's date -- e.g. <code>[[2026-03-07]]</code></td>
+</tr>
+<tr>
+<td><strong>Date Picker</strong></td>
+<td>Opens a date input pre-filled with today. Edit the date (YYYY-MM-DD format) and press Enter to insert it as a wikilink</td>
+</tr>
+</tbody>
+</table>
+<h3 id="code">Code</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Code (inline)</strong></td>
+<td>Inserts <code>`</code> <code>`</code> with the cursor placed between the backticks</td>
+</tr>
+<tr>
+<td><strong>Code (multiline)</strong></td>
+<td>Inserts a fenced code block. The cursor lands after the opening <code>```</code> — type the language identifier (e.g. <code>js</code>, <code>python</code>) then press Enter</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tables-pro">Tables <em>(Pro)</em></h3>
+<p>Table commands are labelled <strong>(Pro)</strong> on the free version. All are fully available with a Pro licence — see <a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a> for details.</p>
+<h4 id="creating-a-table">Creating a table</h4>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Table</strong></td>
+<td>Prompts for column and row count, then inserts a formatted markdown table</td>
+</tr>
+</tbody>
+</table>
+<h4 id="modifying-an-existing-table">Modifying an existing table</h4>
+<p>Place your cursor anywhere inside a table, then use:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Table: Format</strong></td>
+<td>Normalises all column widths to the longest cell in each column</td>
+</tr>
+<tr>
+<td><strong>Table: Add Column(s)</strong></td>
+<td>Prompts for count, then inserts columns after the cursor's current column</td>
+</tr>
+<tr>
+<td><strong>Table: Add Row(s)</strong></td>
+<td>Prompts for count, then inserts rows after the cursor's current row</td>
+</tr>
+<tr>
+<td><strong>Table: Remove Row (Current)</strong></td>
+<td>Removes the row at the cursor (refuses to remove the header or separator row)</td>
+</tr>
+<tr>
+<td><strong>Table: Remove Column (Current)</strong></td>
+<td>Removes the column at the cursor (refuses if only one column remains)</td>
+</tr>
+<tr>
+<td><strong>Table: Remove Row(s) Above</strong></td>
+<td>Prompts for count, removes that many data rows above the cursor (clamps to available)</td>
+</tr>
+<tr>
+<td><strong>Table: Remove Row(s) Below</strong></td>
+<td>Prompts for count, removes that many rows below the cursor (clamps to available)</td>
+</tr>
+<tr>
+<td><strong>Table: Remove Column(s) Right</strong></td>
+<td>Prompts for count, removes columns to the right of the cursor (clamps to available)</td>
+</tr>
+<tr>
+<td><strong>Table: Remove Column(s) Left</strong></td>
+<td>Prompts for count, removes columns to the left of the cursor (clamps, preserves table indentation)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tasks-task-lines-only">Tasks <em>(task lines only)</em></h3>
+<p>These commands only appear in the slash menu when the cursor is on a task line (<code>- [ ]</code> or <code>- [x]</code>). Each tag is inserted at the start of the task text — after the checkbox prefix and after any hashtags already present on the line. The cursor returns to its original position after insertion.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Task: Priority 1</strong></td>
+<td>Inserts <code>#P1</code>. If the line already has a priority tag (<code>#P1</code>–<code>#P9</code>), it is <strong>replaced</strong> rather than added alongside</td>
+</tr>
+<tr>
+<td><strong>Task: Priority 2</strong></td>
+<td>Inserts <code>#P2</code>, replacing any existing priority tag</td>
+</tr>
+<tr>
+<td><strong>Task: Priority 3</strong></td>
+<td>Inserts <code>#P3</code>, replacing any existing priority tag</td>
+</tr>
+<tr>
+<td><strong>Task: Waiting</strong></td>
+<td>Inserts <code>#W</code> at the task text start</td>
+</tr>
+<tr>
+<td><strong>Task: Due Date</strong></td>
+<td>Opens a date input pre-filled with today (YYYY-MM-DD format). On confirm, inserts <code>#D-YYYY-MM-DD</code> at the task text start</td>
+</tr>
+<tr>
+<td><strong>Task: Completion Date</strong></td>
+<td>Opens a date input pre-filled with today (YYYY-MM-DD format). On confirm, inserts <code>#C-YYYY-MM-DD</code> at the task text start</td>
+</tr>
+<tr>
+<td><strong>Convert to Kanban Card</strong> <em>(Pro)</em></td>
+<td>Marks the task as done, creates a Kanban card in the <strong>TODO</strong> lane with the task title (stripped of tags), matching priority and due date, and the <strong>Waiting</strong> flag set. Only available on unchecked tasks</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pro-licence">Pro Licence</h2>
+<p>Pro users see clean command names in the menu. Free users see the same commands with <strong>(Pro)</strong> appended.</p>
+<p>To enter your licence key, run <strong>AS Notes: Enter Licence Key</strong> from the Command Palette (<code>Ctrl+Shift+P</code>), or open VS Code Settings (<code>Ctrl+,</code>) and search for <code>as-notes.licenceKey</code>. See <a href="settings.html" class="wikilink">Settings</a> for details.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>
