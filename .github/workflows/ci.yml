@@ -52,6 +52,8 @@ jobs:
         working-directory: common
       - run: npm ci
         working-directory: publish
+      - run: npm run build
+        working-directory: publish
       - run: npm test
         working-directory: publish
 
