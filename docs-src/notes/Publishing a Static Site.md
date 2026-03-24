@@ -863,19 +863,66 @@ Vercel deploys on every push and provides a preview URL for each branch.
 
 ### 1. Connect Your Repository
 
-1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and go to **Compute** > **Workers & Pages**
+1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and go to **Compute > Workers & Pages**
 2. Click **Create application > Pages > Connect to Git**
 3. Select your repository
 
 ### 2. Configure Build Settings
 
+In **Build configuration**, set the following:
+
 | Setting | Value |
 |---|---|
-| Build command | `npx asnotes-publish --config ./asnotes-publish.json` |
-| Build output directory | `site` |
-| Node.js version | `20` (set as environment variable `NODE_VERSION`) |
+| Build command | `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json` |
+| Build output directory | The `outputDir` value from your config file (e.g. `site`) |
+| Root directory | The directory containing your config file (leave empty if at repo root) |
 
-Click **Save and Deploy**. Cloudflare Pages deploys on every push with automatic preview deployments for branches.
+Under **Variables and secrets**, add:
+
+| Variable | Value |
+|---|---|
+| `NODE_VERSION` | `20` |
+
+### Root Directory
+
+The **Root directory** setting controls the working directory for the build. Cloudflare changes to this directory before running the build command. All relative paths in your config file (inputDir, outputDir, layouts, includes, themes) resolve from there.
+
+If your config file is at the repository root, leave Root directory empty. If your config file lives in a subdirectory, set Root directory to that subdirectory.
+
+**Example: config at repo root**
+
+```
+my-notes/
+  asnotes-publish.json       # inputDir: "./notes", outputDir: "./site"
+  notes/
+    Getting Started.md
+```
+
+| Setting | Value |
+|---|---|
+| Root directory | *(empty)* |
+| Build command | `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json` |
+| Build output directory | `site` |
+
+**Example: config in a subdirectory**
+
+```
+my-repo/
+  docs-src/
+    asnotes-publish.blog.json   # inputDir: "./blog", outputDir: "./blog-publish"
+    blog/
+      Welcome Post.md
+```
+
+| Setting | Value |
+|---|---|
+| Root directory | `/docs-src` |
+| Build command | `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.blog.json` |
+| Build output directory | `blog-publish` |
+
+The `--config` path and Build output directory are both relative to the Root directory. If Root directory is wrong, the build will fail because Cloudflare cannot find the config file or its referenced directories.
+
+Click **Save and Deploy**. Cloudflare Pages deploys on every push with automatic preview deployments for branches. No `--base-url` is needed since Cloudflare Pages serves from the domain root.
 
 ## Writing a Custom Layout CSS
 

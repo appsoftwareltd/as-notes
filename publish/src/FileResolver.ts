@@ -27,11 +27,13 @@ export interface PageEntry {
  */
 export class FileResolver {
     private readonly lookup: Map<string, string>;
+    private readonly slugLookup: Map<string, string>;
     private readonly originalNames: Map<string, string>;
     private readonly missingTargets: Map<string, string>;
 
     constructor(filenames: string[]) {
         this.lookup = new Map();
+        this.slugLookup = new Map();
         this.originalNames = new Map();
         this.missingTargets = new Map();
 
@@ -40,6 +42,7 @@ export class FileResolver {
             const key = name.toLowerCase();
             this.lookup.set(key, name);
             this.originalNames.set(key, name);
+            this.slugLookup.set(slugify(name), name);
         }
     }
 
@@ -49,6 +52,12 @@ export class FileResolver {
 
         if (originalName) {
             return slugify(originalName) + '.html';
+        }
+
+        // Fallback: match by slug so that e.g. [[2026_03_01]] resolves to 2026-03-01.md
+        const slugMatch = this.slugLookup.get(slugify(pageFileName));
+        if (slugMatch) {
+            return slugify(slugMatch) + '.html';
         }
 
         // Track the missing target (deduplicate by lowercase key, keep first casing)

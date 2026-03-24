@@ -270,12 +270,31 @@ const LAYOUT_DOCS = `<!DOCTYPE html>
     <title>{{title}}</title>{{stylesheets}}{{meta}}
 </head>
 <body data-layout="docs">
-{{header}}{{nav}}
+{{header}}<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+{{nav}}
     <article class="markdown-body">
 {{toc}}
 {{content}}
     </article>
-{{footer}}</body>
+{{footer}}<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
 </html>
 `;
 
@@ -350,7 +369,7 @@ body {
 
 body {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
     min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -410,14 +429,60 @@ footer {
     color: #0366d6;
 }
 
-/* -- Sidebar nav -------------------------------------------------- */
+/* -- Nav toggle --------------------------------------------------- */
+
+.nav-toggle {
+    position: fixed;
+    top: 0.6rem;
+    right: 1.5rem;
+    z-index: 1001;
+    background: none;
+    border: 1px solid #d0d7de;
+    color: #24292e;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    line-height: 1;
+}
+
+.nav-toggle:hover {
+    background: #eaeef2;
+}
+
+/* -- Nav backdrop ------------------------------------------------- */
+
+.nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 999;
+}
+
+body.nav-open .nav-backdrop {
+    display: block;
+}
+
+/* -- Flyout sidebar nav ------------------------------------------- */
 
 .site-nav {
-    grid-column: 1;
-    grid-row: 2;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
     background: #f6f8fa;
     border-right: 1px solid #d0d7de;
     padding: 1.5rem 1rem;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+body.nav-open .site-nav {
+    transform: translateX(0);
 }
 
 .site-nav ul {
@@ -464,7 +529,7 @@ footer {
 /* -- Content ------------------------------------------------------ */
 
 article {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -472,7 +537,7 @@ article {
 }
 
 article.markdown-body {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -480,10 +545,10 @@ article.markdown-body {
 }
 
 article.blog-post {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
@@ -578,16 +643,24 @@ body[data-layout="blog"] {
 }
 
 body[data-layout="blog"] article.blog-post {
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
     padding: 2rem 3rem;
 }
 
+body[data-layout="blog"] .nav-toggle,
+body[data-layout="blog"] .nav-backdrop {
+    display: none;
+}
+
 body[data-layout="blog"] .site-nav {
+    position: static;
+    width: auto;
+    transform: none;
+    transition: none;
     border-right: none;
-    border-top: 1px solid #d0d7de;
     padding: 1.5rem;
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
@@ -597,18 +670,40 @@ body[data-layout="blog"] .site-nav ul {
     gap: 0.25rem 1rem;
 }
 
-/* -- Responsive --------------------------------------------------- */
+/* -- Desktop: static sidebar -------------------------------------- */
 
-@media (max-width: 700px) {
+@media (min-width: 701px) {
     body {
-        grid-template-columns: 1fr;
+        grid-template-columns: 260px 1fr;
+    }
+
+    .nav-toggle,
+    .nav-backdrop {
+        display: none;
     }
 
     .site-nav {
-        border-right: none;
-        border-bottom: 1px solid #d0d7de;
+        position: static;
+        transform: none;
+        transition: none;
+        z-index: auto;
+        grid-column: 1;
+        grid-row: 2;
     }
 
+    article,
+    article.markdown-body {
+        grid-column: 2;
+    }
+
+    article.blog-post {
+        grid-column: 2;
+    }
+}
+
+/* -- Mobile ------------------------------------------------------- */
+
+@media (max-width: 700px) {
     article,
     article.markdown-body,
     article.blog-post {
@@ -635,7 +730,7 @@ body {
 
 body {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
     min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -695,14 +790,60 @@ footer {
     color: #58a6ff;
 }
 
-/* -- Sidebar nav -------------------------------------------------- */
+/* -- Nav toggle --------------------------------------------------- */
+
+.nav-toggle {
+    position: fixed;
+    top: 0.6rem;
+    right: 1.5rem;
+    z-index: 1001;
+    background: none;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    line-height: 1;
+}
+
+.nav-toggle:hover {
+    background: #1f2937;
+}
+
+/* -- Nav backdrop ------------------------------------------------- */
+
+.nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+body.nav-open .nav-backdrop {
+    display: block;
+}
+
+/* -- Flyout sidebar nav ------------------------------------------- */
 
 .site-nav {
-    grid-column: 1;
-    grid-row: 2;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
     background: #161b22;
     border-right: 1px solid #30363d;
     padding: 1.5rem 1rem;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+body.nav-open .site-nav {
+    transform: translateX(0);
 }
 
 .site-nav ul {
@@ -749,7 +890,7 @@ footer {
 /* -- Content ------------------------------------------------------ */
 
 article {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -757,7 +898,7 @@ article {
 }
 
 article.markdown-body {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -765,10 +906,10 @@ article.markdown-body {
 }
 
 article.blog-post {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
@@ -865,16 +1006,24 @@ body[data-layout="blog"] {
 }
 
 body[data-layout="blog"] article.blog-post {
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
     padding: 2rem 3rem;
 }
 
+body[data-layout="blog"] .nav-toggle,
+body[data-layout="blog"] .nav-backdrop {
+    display: none;
+}
+
 body[data-layout="blog"] .site-nav {
+    position: static;
+    width: auto;
+    transform: none;
+    transition: none;
     border-right: none;
-    border-top: 1px solid #30363d;
     padding: 1.5rem;
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
@@ -884,18 +1033,40 @@ body[data-layout="blog"] .site-nav ul {
     gap: 0.25rem 1rem;
 }
 
-/* -- Responsive --------------------------------------------------- */
+/* -- Desktop: static sidebar -------------------------------------- */
 
-@media (max-width: 700px) {
+@media (min-width: 701px) {
     body {
-        grid-template-columns: 1fr;
+        grid-template-columns: 260px 1fr;
+    }
+
+    .nav-toggle,
+    .nav-backdrop {
+        display: none;
     }
 
     .site-nav {
-        border-right: none;
-        border-bottom: 1px solid #30363d;
+        position: static;
+        transform: none;
+        transition: none;
+        z-index: auto;
+        grid-column: 1;
+        grid-row: 2;
     }
 
+    article,
+    article.markdown-body {
+        grid-column: 2;
+    }
+
+    article.blog-post {
+        grid-column: 2;
+    }
+}
+
+/* -- Mobile ------------------------------------------------------- */
+
+@media (max-width: 700px) {
     article,
     article.markdown-body,
     article.blog-post {

@@ -702,7 +702,6 @@ describe('--theme and --themes flags', () => {
         const css = fs.readFileSync(path.join(outputDir, 'theme-default.css'), 'utf-8');
         expect(css).not.toContain('position: sticky');
         expect(css).not.toMatch(/[^-]height: 100vh/);
-        expect(css).not.toContain('overflow-y: auto');
         expect(css).toContain('.site-nav');
     });
 
@@ -711,7 +710,6 @@ describe('--theme and --themes flags', () => {
         const css = fs.readFileSync(path.join(outputDir, 'theme-dark.css'), 'utf-8');
         expect(css).not.toContain('position: sticky');
         expect(css).not.toMatch(/[^-]height: 100vh/);
-        expect(css).not.toContain('overflow-y: auto');
         expect(css).toContain('.site-nav');
     });
 
@@ -758,3 +756,109 @@ describe('--theme and --themes flags', () => {
         expect(output).toContain('(custom)');
     });
 });
+
+describe('retina images', () => {
+    let tmpDir: string;
+    let inputDir: string;
+    let outputDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'as-notes-retina-test-'));
+        inputDir = path.join(tmpDir, 'notes');
+        outputDir = path.join(tmpDir, 'site');
+        fs.mkdirSync(inputDir, { recursive: true });
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should strip {.retina} from alt text and add retina class', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n\n![my image {.retina}](photo.png)\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('class="retina"');
+        expect(html).toContain('alt="my image"');
+        expect(html).not.toContain('{.retina}');
+    });
+
+    it('should add retina class to all images when --retina flag is used', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n\n![photo](photo.png)\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--retina']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('class="retina"');
+    });
+
+    it('should set width to half intrinsic width for retina PNG images', () => {
+        // Create a minimal valid 200x100 PNG
+        const png = createMinimalPng(200, 100);
+        fs.writeFileSync(path.join(inputDir, 'photo.png'), png);
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n\n![my image {.retina}](photo.png)\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('width="100"');
+        expect(html).toContain('class="retina"');
+    });
+
+    it('should set width to half intrinsic width with global --retina flag', () => {
+        const png = createMinimalPng(800, 400);
+        fs.writeFileSync(path.join(inputDir, 'photo.png'), png);
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n\n![photo](photo.png)\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public', '--retina']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('width="400"');
+    });
+
+    it('should not set width when image file does not exist', () => {
+        fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n\n![my image {.retina}](missing.png)\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
+        expect(html).toContain('class="retina"');
+        expect(html).not.toMatch(/img[^>]+width="/);
+    });
+});
+
+/** Create a minimal valid PNG file with specified dimensions. */
+function createMinimalPng(width: number, height: number): Buffer {
+    const signature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+    // IHDR chunk: width(4) + height(4) + bitDepth(1) + colorType(1) + compression(1) + filter(1) + interlace(1) = 13 bytes
+    const ihdrData = Buffer.alloc(13);
+    ihdrData.writeUInt32BE(width, 0);
+    ihdrData.writeUInt32BE(height, 4);
+    ihdrData[8] = 8;   // bit depth
+    ihdrData[9] = 2;   // color type (RGB)
+    ihdrData[10] = 0;  // compression
+    ihdrData[11] = 0;  // filter
+    ihdrData[12] = 0;  // interlace
+    const ihdr = createPngChunk('IHDR', ihdrData);
+
+    // Minimal IDAT chunk (empty compressed data)
+    const idat = createPngChunk('IDAT', Buffer.from([0x08, 0xD7, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01]));
+
+    // IEND chunk
+    const iend = createPngChunk('IEND', Buffer.alloc(0));
+
+    return Buffer.concat([signature, ihdr, idat, iend]);
+}
+
+function createPngChunk(type: string, data: Buffer): Buffer {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length, 0);
+    const typeBytes = Buffer.from(type, 'ascii');
+    const combined = Buffer.concat([typeBytes, data]);
+
+    // CRC32 over type+data
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < combined.length; i++) {
+        crc ^= combined[i];
+        for (let j = 0; j < 8; j++) {
+            crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+        }
+    }
+    crc ^= 0xFFFFFFFF;
+    const crcBuf = Buffer.alloc(4);
+    crcBuf.writeUInt32BE(crc >>> 0, 0);
+
+    return Buffer.concat([length, typeBytes, data, crcBuf]);
+}

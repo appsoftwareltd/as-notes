@@ -397,12 +397,31 @@ function getBuiltInLayout(name: string): string {
     <title>{{title}}</title>{{stylesheets}}{{meta}}
 </head>
 <body data-layout="docs">
-{{header}}{{nav}}
+{{header}}<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+{{nav}}
     <article class="markdown-body">
 {{toc}}
 {{content}}
     </article>
-{{footer}}</body>
+{{footer}}<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
 </html>
 `;
     }
@@ -547,8 +566,79 @@ function addHeadingIds(md: MarkdownIt): void {
     };
 }
 
+/** Read the width of an image from its file header (PNG, JPEG, GIF, WebP, BMP). */
+function getImageWidth(filePath: string): number | undefined {
+    try {
+        const fd = fs.openSync(filePath, 'r');
+        try {
+            const header = Buffer.alloc(30);
+            fs.readSync(fd, header, 0, 30, 0);
+
+            // PNG: bytes 0-7 signature, IHDR chunk at byte 16 has width (4 bytes big-endian)
+            if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
+                return header.readUInt32BE(16);
+            }
+
+            // GIF: 'GIF8' signature, width at byte 6 (little-endian 16-bit)
+            if (header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46) {
+                return header.readUInt16LE(6);
+            }
+
+            // BMP: 'BM' signature, width at byte 18 (little-endian 32-bit)
+            if (header[0] === 0x42 && header[1] === 0x4D) {
+                return header.readInt32LE(18);
+            }
+
+            // WebP: 'RIFF' + size + 'WEBP', then VP8 chunk
+            if (header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP') {
+                // Read more bytes for VP8 header parsing
+                const webpBuf = Buffer.alloc(64);
+                fs.readSync(fd, webpBuf, 0, 64, 0);
+                const chunkType = webpBuf.toString('ascii', 12, 16);
+                if (chunkType === 'VP8 ') {
+                    // Lossy: width at byte 26-27 (little-endian, 14-bit)
+                    return webpBuf.readUInt16LE(26) & 0x3FFF;
+                } else if (chunkType === 'VP8L') {
+                    // Lossless: 1 byte signature at 21, then 14-bit width at bits 0-13
+                    const bits = webpBuf.readUInt32LE(21);
+                    return (bits & 0x3FFF) + 1;
+                } else if (chunkType === 'VP8X') {
+                    // Extended: canvas width at bytes 24-26 (24-bit little-endian + 1)
+                    return (webpBuf[24] | (webpBuf[25] << 8) | (webpBuf[26] << 16)) + 1;
+                }
+                return undefined;
+            }
+
+            // JPEG: 0xFFD8 signature, scan for SOF markers
+            if (header[0] === 0xFF && header[1] === 0xD8) {
+                const stat = fs.fstatSync(fd);
+                const size = Math.min(stat.size, 65536);
+                const buf = Buffer.alloc(size);
+                fs.readSync(fd, buf, 0, size, 0);
+                let offset = 2;
+                while (offset + 9 < size) {
+                    if (buf[offset] !== 0xFF) break;
+                    const marker = buf[offset + 1];
+                    // SOF0-SOF3, SOF5-SOF7, SOF9-SOF11, SOF13-SOF15
+                    if ((marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7) ||
+                        (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF)) {
+                        return buf.readUInt16BE(offset + 7);
+                    }
+                    const segLen = buf.readUInt16BE(offset + 2);
+                    offset += 2 + segLen;
+                }
+            }
+        } finally {
+            fs.closeSync(fd);
+        }
+    } catch {
+        // File not found or unreadable - return undefined
+    }
+    return undefined;
+}
+
 /** Retina markdown-it plugin: transforms {.retina} attribute on images. */
-function retinaPlugin(md: MarkdownIt, opts: { globalRetina: boolean; pageRetina: boolean }): void {
+function retinaPlugin(md: MarkdownIt, opts: { globalRetina: boolean; pageRetina: boolean; pageDir: string; inputDir: string }): void {
     const defaultRender = md.renderer.rules.image || function (tokens, idx, options, _env, self) {
         return self.renderToken(tokens, idx, options);
     };
@@ -564,11 +654,29 @@ function retinaPlugin(md: MarkdownIt, opts: { globalRetina: boolean; pageRetina:
         // Check for {.retina} marker in alt text
         if (altText.includes('{.retina}')) {
             isRetina = true;
-            token.content = altText.replace(/\s*\{\.retina\}\s*/g, '').trim();
+            const cleaned = altText.replace(/\s*\{\.retina\}\s*/g, '').trim();
+            token.content = cleaned;
+            // Also strip from children (markdown-it builds alt from children)
+            if (token.children) {
+                for (const child of token.children) {
+                    if (child.content.includes('{.retina}')) {
+                        child.content = child.content.replace(/\s*\{\.retina\}\s*/g, '').trim();
+                    }
+                }
+            }
         }
 
         if (isRetina && isImageFile(srcAttr)) {
             token.attrSet('class', ((token.attrGet('class') || '') + ' retina').trim());
+
+            // Auto-set width to half intrinsic width for retina display
+            if (!token.attrGet('width') && !srcAttr.startsWith('http://') && !srcAttr.startsWith('https://') && !srcAttr.startsWith('data:')) {
+                const absPath = path.resolve(opts.pageDir, decodeURIComponent(srcAttr));
+                const intrinsicWidth = getImageWidth(absPath);
+                if (intrinsicWidth && intrinsicWidth > 1) {
+                    token.attrSet('width', String(Math.round(intrinsicWidth / 2)));
+                }
+            }
         }
 
         return defaultRender(tokens, idx, options, env, self);
@@ -883,7 +991,9 @@ function main(): void {
         });
         pageMd.use(taskTagPlugin);
         addHeadingIds(pageMd);
-        retinaPlugin(pageMd, { globalRetina: retina, pageRetina });
+        const pageRelPath = pageSourcePath.get(pageName) || pageName + '.md';
+        const pageDir = path.dirname(path.join(input, pageRelPath));
+        retinaPlugin(pageMd, { globalRetina: retina, pageRetina, pageDir, inputDir: input });
 
         // Strip front matter before rendering
         const strippedMarkdown = frontMatterService.stripFrontMatter(meta.content);
@@ -892,7 +1002,6 @@ function main(): void {
         // Asset discovery, path rewriting, and copying (Iteration 2, 12J)
         const assetsEnabled = meta.fields.assets !== undefined ? meta.fields.assets : defaultAssets;
         if (assetsEnabled) {
-            const pageRelPath = pageSourcePath.get(pageName) || pageName + '.md';
             const refs = discoverAssetRefs(htmlBody, pageRelPath, input);
             htmlBody = rewriteAssetPaths(htmlBody, refs, baseUrl);
             allAssetRefs.push(...refs);
@@ -1045,7 +1154,7 @@ body {
 
 body {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
     min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -1105,14 +1214,60 @@ footer {
     color: #0366d6;
 }
 
-/* -- Sidebar nav -------------------------------------------------- */
+/* -- Nav toggle --------------------------------------------------- */
+
+.nav-toggle {
+    position: fixed;
+    top: 0.6rem;
+    right: 1.5rem;
+    z-index: 1001;
+    background: none;
+    border: 1px solid #d0d7de;
+    color: #24292e;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    line-height: 1;
+}
+
+.nav-toggle:hover {
+    background: #eaeef2;
+}
+
+/* -- Nav backdrop ------------------------------------------------- */
+
+.nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 999;
+}
+
+body.nav-open .nav-backdrop {
+    display: block;
+}
+
+/* -- Flyout sidebar nav ------------------------------------------- */
 
 .site-nav {
-    grid-column: 1;
-    grid-row: 2;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
     background: #f6f8fa;
     border-right: 1px solid #d0d7de;
     padding: 1.5rem 1rem;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+body.nav-open .site-nav {
+    transform: translateX(0);
 }
 
 .site-nav ul {
@@ -1159,7 +1314,7 @@ footer {
 /* -- Content ------------------------------------------------------ */
 
 article {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -1167,7 +1322,7 @@ article {
 }
 
 article.markdown-body {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -1175,10 +1330,10 @@ article.markdown-body {
 }
 
 article.blog-post {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
@@ -1266,18 +1421,74 @@ img {
     font-style: italic;
 }
 
-/* -- Responsive --------------------------------------------------- */
+/* -- Blog layout (single column, nav below content) --------------- */
 
-@media (max-width: 700px) {
+body[data-layout="blog"] {
+    display: block;
+}
+
+body[data-layout="blog"] article.blog-post {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 3rem;
+}
+
+body[data-layout="blog"] .nav-toggle,
+body[data-layout="blog"] .nav-backdrop {
+    display: none;
+}
+
+body[data-layout="blog"] .site-nav {
+    position: static;
+    width: auto;
+    transform: none;
+    transition: none;
+    border-right: none;
+    padding: 1.5rem;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+body[data-layout="blog"] .site-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+}
+
+/* -- Desktop: static sidebar -------------------------------------- */
+
+@media (min-width: 701px) {
     body {
-        grid-template-columns: 1fr;
+        grid-template-columns: 260px 1fr;
+    }
+
+    .nav-toggle,
+    .nav-backdrop {
+        display: none;
     }
 
     .site-nav {
-        border-right: none;
-        border-bottom: 1px solid #d0d7de;
+        position: static;
+        transform: none;
+        transition: none;
+        z-index: auto;
+        grid-column: 1;
+        grid-row: 2;
     }
 
+    article,
+    article.markdown-body {
+        grid-column: 2;
+    }
+
+    article.blog-post {
+        grid-column: 2;
+    }
+}
+
+/* -- Mobile ------------------------------------------------------- */
+
+@media (max-width: 700px) {
     article,
     article.markdown-body,
     article.blog-post {
@@ -1304,7 +1515,7 @@ body {
 
 body {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
     min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -1364,14 +1575,60 @@ footer {
     color: #58a6ff;
 }
 
-/* -- Sidebar nav -------------------------------------------------- */
+/* -- Nav toggle --------------------------------------------------- */
+
+.nav-toggle {
+    position: fixed;
+    top: 0.6rem;
+    right: 1.5rem;
+    z-index: 1001;
+    background: none;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    line-height: 1;
+}
+
+.nav-toggle:hover {
+    background: #1f2937;
+}
+
+/* -- Nav backdrop ------------------------------------------------- */
+
+.nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+body.nav-open .nav-backdrop {
+    display: block;
+}
+
+/* -- Flyout sidebar nav ------------------------------------------- */
 
 .site-nav {
-    grid-column: 1;
-    grid-row: 2;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
     background: #161b22;
     border-right: 1px solid #30363d;
     padding: 1.5rem 1rem;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+body.nav-open .site-nav {
+    transform: translateX(0);
 }
 
 .site-nav ul {
@@ -1418,7 +1675,7 @@ footer {
 /* -- Content ------------------------------------------------------ */
 
 article {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -1426,7 +1683,7 @@ article {
 }
 
 article.markdown-body {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
     max-width: 900px;
@@ -1434,10 +1691,10 @@ article.markdown-body {
 }
 
 article.blog-post {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     padding: 2rem 3rem;
-    max-width: 720px;
+    max-width: 1000px;
     margin: 0 auto;
 }
 
@@ -1527,18 +1784,74 @@ img {
     font-style: italic;
 }
 
-/* -- Responsive --------------------------------------------------- */
+/* -- Blog layout (single column, nav below content) --------------- */
 
-@media (max-width: 700px) {
+body[data-layout="blog"] {
+    display: block;
+}
+
+body[data-layout="blog"] article.blog-post {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 3rem;
+}
+
+body[data-layout="blog"] .nav-toggle,
+body[data-layout="blog"] .nav-backdrop {
+    display: none;
+}
+
+body[data-layout="blog"] .site-nav {
+    position: static;
+    width: auto;
+    transform: none;
+    transition: none;
+    border-right: none;
+    padding: 1.5rem;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+body[data-layout="blog"] .site-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+}
+
+/* -- Desktop: static sidebar -------------------------------------- */
+
+@media (min-width: 701px) {
     body {
-        grid-template-columns: 1fr;
+        grid-template-columns: 260px 1fr;
+    }
+
+    .nav-toggle,
+    .nav-backdrop {
+        display: none;
     }
 
     .site-nav {
-        border-right: none;
-        border-bottom: 1px solid #30363d;
+        position: static;
+        transform: none;
+        transition: none;
+        z-index: auto;
+        grid-column: 1;
+        grid-row: 2;
     }
 
+    article,
+    article.markdown-body {
+        grid-column: 2;
+    }
+
+    article.blog-post {
+        grid-column: 2;
+    }
+}
+
+/* -- Mobile ------------------------------------------------------- */
+
+@media (max-width: 700px) {
     article,
     article.markdown-body,
     article.blog-post {

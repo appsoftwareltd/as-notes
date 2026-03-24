@@ -148,5 +148,23 @@ describe('FileResolver', () => {
             resolverFn('MissingViaFn', {});
             expect(resolver.getMissingTargets()).toEqual(new Set(['MissingViaFn']));
         });
+
+        it('should resolve by slug fallback when underscores match hyphens', () => {
+            const resolver = new FileResolver(['2026-03-01.md']);
+            expect(resolver.resolve('2026_03_01')).toBe('2026-03-01.html');
+            expect(resolver.getMissingTargets()).toEqual(new Set());
+        });
+
+        it('should resolve by slug fallback when spaces match hyphens', () => {
+            const resolver = new FileResolver(['my-page.md']);
+            expect(resolver.resolve('my page')).toBe('my-page.html');
+            expect(resolver.getMissingTargets()).toEqual(new Set());
+        });
+
+        it('should not false-match slug fallback for genuinely missing pages', () => {
+            const resolver = new FileResolver(['2026-03-01.md']);
+            resolver.resolve('2026_04_01');
+            expect(resolver.getMissingTargets()).toEqual(new Set(['2026_04_01']));
+        });
     });
 });
