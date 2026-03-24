@@ -43,6 +43,7 @@ import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
 import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
+import { toggleFrontMatterField, cycleFrontMatterField, publishToHtml, configurePublish } from './PublishService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
 import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, formatOutlinerPaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, getMaxOutlinerIndent } from './OutlinerService.js';
 import { KanbanStore } from './KanbanStore.js';
@@ -127,6 +128,12 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.renameKanbanBoard',
     'as-notes.convertTaskToKanbanCard',
     'as-notes.insertTemplate',
+    'as-notes.togglePublic',
+    'as-notes.cycleLayout',
+    'as-notes.toggleRetina',
+    'as-notes.toggleAssets',
+    'as-notes.publishToHtml',
+    'as-notes.configurePublish',
 ];
 
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
@@ -1109,6 +1116,39 @@ async function enterFullMode(
         vscode.commands.registerCommand('as-notes.insertTemplate', () =>
             insertTemplate(nrUri),
         ),
+    );
+
+    // ── Publishing commands ────────────────────────────────────────────
+
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.togglePublic', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) { toggleFrontMatterField(editor, 'public', true); }
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.cycleLayout', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) { cycleFrontMatterField(editor, 'layout', ['docs', 'blog', 'minimal']); }
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleRetina', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) { toggleFrontMatterField(editor, 'retina', true); }
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.toggleAssets', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) { toggleFrontMatterField(editor, 'assets', true); }
+        }),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.publishToHtml', () => publishToHtml(notesRootPaths?.root ?? '')),
+    );
+    fullModeDisposables.push(
+        vscode.commands.registerCommand('as-notes.configurePublish', () => configurePublish(notesRootPaths?.root ?? '')),
     );
 
     // ── Table commands (Pro) ───────────────────────────────────────────

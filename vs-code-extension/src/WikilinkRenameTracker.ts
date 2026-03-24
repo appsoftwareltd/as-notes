@@ -4,7 +4,7 @@ import { WikilinkFileService } from './WikilinkFileService.js';
 import type { IndexService, LinkRow } from './IndexService.js';
 import type { IndexScanner } from './IndexScanner.js';
 import { sanitiseFileName } from './PathUtils.js';
-import { FrontMatterService } from './FrontMatterService.js';
+import { FrontMatterService } from 'as-notes-common';
 import { toNotesRelativePath } from './NotesRootService.js';
 
 /**

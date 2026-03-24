@@ -1,0 +1,283 @@
+/* AS Notes default theme */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+/* -- Layout grid -------------------------------------------------- */
+
+body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #24292e;
+    background: #ffffff;
+}
+
+/* -- Header / footer ---------------------------------------------- */
+
+header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+}
+
+footer {
+    grid-column: 1 / -1;
+    grid-row: 3;
+}
+
+.site-header {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    background: #f6f8fa;
+    border-bottom: 1px solid #d0d7de;
+}
+
+.site-header .site-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #24292e;
+    text-decoration: none;
+}
+
+.site-header .site-title:hover {
+    color: #0366d6;
+}
+
+.site-header .site-logo {
+    flex-shrink: 0;
+}
+
+.site-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #d0d7de;
+    background: #f6f8fa;
+    font-size: 0.85rem;
+    color: #586069;
+    text-align: center;
+}
+
+.site-footer a {
+    color: #0366d6;
+}
+
+/* -- Sidebar nav -------------------------------------------------- */
+
+.site-nav {
+    grid-column: 1;
+    grid-row: 2;
+    background: #f6f8fa;
+    border-right: 1px solid #d0d7de;
+    padding: 1.5rem 1rem;
+}
+
+.site-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.site-nav ul li {
+    margin: 0.2rem 0;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.site-nav ul li a {
+    text-decoration: none;
+    color: #24292f;
+}
+
+.site-nav ul li a:hover {
+    text-decoration: underline;
+}
+
+.site-nav ul li:hover {
+    background: #eaeef2;
+}
+
+.site-nav ul li:hover a {
+    color: #0550ae;
+}
+
+.site-nav ul li.nav-current {
+    background: #ddf4ff;
+    font-weight: 600;
+}
+
+.site-nav ul li.nav-current a {
+    color: #0550ae;
+}
+
+/* -- Content ------------------------------------------------------ */
+
+article {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 900px;
+    overflow-x: auto;
+}
+
+article.markdown-body {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 900px;
+    overflow-x: auto;
+}
+
+article.blog-post {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 2rem 3rem;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* -- Typography --------------------------------------------------- */
+
+h1, h2, h3, h4 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+a {
+    color: #0366d6;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* -- Code --------------------------------------------------------- */
+
+code {
+    background: #f6f8fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 85%;
+}
+
+pre {
+    background: #f6f8fa;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+/* -- Images ------------------------------------------------------- */
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* -- Table of contents -------------------------------------------- */
+
+.toc {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 12px 20px;
+    margin-bottom: 24px;
+}
+
+.toc summary {
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.toc ul {
+    margin: 8px 0 0 0;
+}
+
+.toc li {
+    margin: 4px 0;
+}
+
+/* -- Blog date ---------------------------------------------------- */
+
+.page-date {
+    display: block;
+    color: #586069;
+    font-size: 0.9em;
+    margin-bottom: 16px;
+}
+
+/* -- Missing page ------------------------------------------------- */
+
+.missing-page {
+    color: #cb2431;
+    font-style: italic;
+}
+
+/* -- Blog layout (single column, nav below content) --------------- */
+
+body[data-layout="blog"] {
+    display: block;
+}
+
+body[data-layout="blog"] article.blog-post {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 2rem 3rem;
+}
+
+body[data-layout="blog"] .site-nav {
+    border-right: none;
+    border-top: 1px solid #d0d7de;
+    padding: 1.5rem;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+body[data-layout="blog"] .site-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+}
+
+/* -- Responsive --------------------------------------------------- */
+
+@media (max-width: 700px) {
+    body {
+        grid-template-columns: 1fr;
+    }
+
+    .site-nav {
+        border-right: none;
+        border-bottom: 1px solid #d0d7de;
+    }
+
+    article,
+    article.markdown-body,
+    article.blog-post {
+        padding: 1.5rem;
+    }
+}

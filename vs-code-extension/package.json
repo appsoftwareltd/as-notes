@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.2.7",
+    "version": "2.2.8",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -35,7 +35,7 @@
         "theme": "dark"
     },
     "activationEvents": [
-        "onLanguage:markdown"
+        "*"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -173,6 +173,30 @@
             {
                 "command": "as-notes.insertTemplate",
                 "title": "AS Notes: Insert Template"
+            },
+            {
+                "command": "as-notes.togglePublic",
+                "title": "AS Notes: Toggle Public"
+            },
+            {
+                "command": "as-notes.cycleLayout",
+                "title": "AS Notes: Cycle Layout"
+            },
+            {
+                "command": "as-notes.toggleRetina",
+                "title": "AS Notes: Toggle Retina"
+            },
+            {
+                "command": "as-notes.toggleAssets",
+                "title": "AS Notes: Toggle Assets"
+            },
+            {
+                "command": "as-notes.publishToHtml",
+                "title": "AS Notes: Publish to HTML"
+            },
+            {
+                "command": "as-notes.configurePublish",
+                "title": "AS Notes: Configure Publish Settings"
             }
         ],
         "keybindings": [

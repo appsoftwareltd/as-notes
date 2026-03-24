@@ -1,0 +1,46 @@
+{
+    "name": "@appsoftwareltd/asnotes-publish",
+    "version": "1.0.2",
+    "description": "Convert AS Notes markdown workspaces (with wikilinks, front matter, and task tags) to static HTML sites",
+    "type": "module",
+    "main": "./dist/convert.js",
+    "bin": {
+        "asnotes-publish": "./dist/convert.js"
+    },
+    "files": [
+        "dist/"
+    ],
+    "scripts": {
+        "build": "node build.mjs",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "lint": "tsc --noEmit",
+        "convert": "node dist/convert.js"
+    },
+    "keywords": [
+        "markdown",
+        "wikilinks",
+        "static-site-generator",
+        "notes",
+        "publishing",
+        "html",
+        "as-notes"
+    ],
+    "author": "App Software Ltd",
+    "license": "Elastic-2.0",
+    "homepage": "https://www.asnotes.io",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/appsoftwareltd/as-notes.git",
+        "directory": "publish"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "as-notes-common": "file:../common",
+        "esbuild": "^0.24.0",
+        "markdown-it": "^14.1.1",
+        "typescript": "^5.7.0",
+        "vitest": "^3.0.0"
+    }
+}
