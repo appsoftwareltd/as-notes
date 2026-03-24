@@ -218,12 +218,35 @@ function stripBrackets(text: string): string {
     return text.replace(/\[\[|\]\]/g, '');
 }
 
-function buildNav(pages: PageEntry[], currentPage: string, baseUrl: string): string {
+/** Render a page name as wikilink-aware HTML. Names containing [[ ]] are
+ *  rendered through markdown-it so nested wikilinks produce separate <a> tags. */
+function renderPageName(md: MarkdownIt, name: string, baseUrl: string): string {
+    if (!name.includes('[[')) {
+        return escapeHtml(name);
+    }
+    const wikilinkText = `[[${name}]]`;
+    let html = md.renderInline(wikilinkText);
+    if (baseUrl) {
+        html = html.replace(/href="([^"]*\.html(?:#[^"]*)?)"/g, (match, href) => {
+            if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('/')) {
+                return match;
+            }
+            return `href="${baseUrl}/${href}"`;
+        });
+    }
+    return html;
+}
+
+function buildNav(pages: PageEntry[], currentPage: string, baseUrl: string, md?: MarkdownIt): string {
     const items = pages.map(p => {
         const isCurrent = p.name === currentPage ? ' class="nav-current"' : '';
-        const displayName = p.name === 'index' ? 'Home' : stripBrackets(p.title || p.name);
+        const rawName = p.name === 'index' ? 'Home' : (p.title || p.name);
+        if (md && rawName.includes('[[')) {
+            const rendered = renderPageName(md, rawName, baseUrl);
+            return `        <li${isCurrent}>${rendered}</li>`;
+        }
         const href = baseUrl ? baseUrl + '/' + p.href : p.href;
-        return `        <li${isCurrent}><a href="${href}">${escapeHtml(displayName)}</a></li>`;
+        return `        <li${isCurrent}><a href="${href}">${escapeHtml(stripBrackets(rawName))}</a></li>`;
     });
 
     return `    <nav class="site-nav">\n      <ul>\n${items.join('\n')}\n      </ul>\n    </nav>`;
@@ -812,16 +835,18 @@ function main(): void {
     // Add heading IDs for TOC support (Iteration 6D)
     addHeadingIds(md);
 
+    // Markdown-it instance for nav rendering (wikilink-aware page names)
+    const navMd = new MarkdownIt({ html: true });
+    wikilinkPlugin(navMd, {
+        wikilinkService,
+        resolver: resolver.createResolverFn(),
+    });
+
     // Custom navigation from nav.md (Iteration 12J)
     let customNav: string | undefined;
     const navMdPath = path.join(input, 'nav.md');
     if (fs.existsSync(navMdPath)) {
         const navContent = fs.readFileSync(navMdPath, 'utf-8');
-        const navMd = new MarkdownIt({ html: true });
-        wikilinkPlugin(navMd, {
-            wikilinkService,
-            resolver: resolver.createResolverFn(),
-        });
         let navHtml = navMd.render(frontMatterService.stripFrontMatter(navContent));
         // Prepend baseUrl to resolved wikilink hrefs (they come out as e.g. "my-page.html")
         if (baseUrl) {
@@ -903,7 +928,7 @@ function main(): void {
         // Generate TOC (Iteration 6D)
         const toc = generateToc(htmlBody);
 
-        const nav = customNav ?? buildNav(navPages, pageName, baseUrl);
+        const nav = customNav ?? buildNav(navPages, pageName, baseUrl, navMd);
         const html = wrapHtml(title, nav, htmlBody, {
             stylesheets: resolvedStylesheets,
             description: meta.fields.description,
@@ -938,14 +963,18 @@ function main(): void {
         const indexItems = navPages
             .filter(p => p.name !== 'index')
             .map(p => {
-                const displayName = escapeHtml(stripBrackets(p.title || p.name));
+                const rawName = p.title || p.name;
+                if (rawName.includes('[[')) {
+                    const rendered = renderPageName(navMd, rawName, baseUrl);
+                    return `<li>${rendered}</li>`;
+                }
                 const href = baseUrl ? baseUrl + '/' + p.href : p.href;
-                return `<li><a href="${href}">${displayName}</a></li>`;
+                return `<li><a href="${href}">${escapeHtml(stripBrackets(rawName))}</a></li>`;
             });
         const indexBody = `<h1 id="home">Home</h1>\n<ul>\n${indexItems.join('\n')}\n</ul>`;
         const indexToc = generateToc(indexBody);
 
-        const nav = customNav ?? buildNav(navPages, 'index', baseUrl);
+        const nav = customNav ?? buildNav(navPages, 'index', baseUrl, navMd);
         const indexHtml = wrapHtml('Home', nav, indexBody, {
             stylesheets: resolvedStylesheets,
             toc: indexToc,
@@ -963,7 +992,7 @@ function main(): void {
         }
 
         const outputPath = path.join(output, slugify(pageName) + '.html');
-        const nav = customNav ?? buildNav(navPages, pageName, baseUrl);
+        const nav = customNav ?? buildNav(navPages, pageName, baseUrl, navMd);
         const body = '    <p class="missing-page">This page has not been created yet.</p>';
         const html = wrapHtml(stripBrackets(pageName), nav, body, { stylesheets: resolvedStylesheets, layout, layoutsDir: resolvedLayoutsDir, includesDir: resolvedIncludesDir, baseUrl });
 

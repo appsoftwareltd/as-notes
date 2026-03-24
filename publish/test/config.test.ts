@@ -242,6 +242,33 @@ describe('auto-generated index page', () => {
         expect(html).toContain('Home');
         expect(html).toContain('index.html');
     });
+
+    it('should render nested wikilinks as separate links in auto-generated nav', () => {
+        fs.writeFileSync(path.join(inputDir, 'Plant.md'), '---\npublic: true\n---\n# Plant\n');
+        fs.writeFileSync(path.join(inputDir, '[[Plant]] Foods.md'), '---\npublic: true\n---\n# Plant Foods\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        const html = fs.readFileSync(path.join(outputDir, 'plant.html'), 'utf-8');
+        const nav = html.match(/<nav[^>]*>([\s\S]*?)<\/nav>/)?.[1] || '';
+        // The nav item for "[[Plant]] Foods" should contain two separate <a> tags
+        expect(nav).toContain('href="plant.html"');
+        expect(nav).toContain('href="plant-foods.html"');
+        // Both links should be in the same <li>
+        const plantFoodsLi = nav.match(/<li[^>]*>.*?plant-foods\.html.*?<\/li>/s)?.[0] || '';
+        expect(plantFoodsLi).toContain('href="plant.html"');
+        expect(plantFoodsLi).toContain('href="plant-foods.html"');
+    });
+
+    it('should render nested wikilinks as separate links in auto-generated index', () => {
+        fs.writeFileSync(path.join(inputDir, 'Plant.md'), '---\npublic: true\n---\n# Plant\n');
+        fs.writeFileSync(path.join(inputDir, '[[Plant]] Foods.md'), '---\npublic: true\n---\n# Plant Foods\n');
+        run(['--input', inputDir, '--output', outputDir, '--default-public']);
+        const html = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf-8');
+        const article = html.match(/<article[^>]*>([\s\S]*?)<\/article>/)?.[1] || '';
+        // Index listing for "[[Plant]] Foods" should have two separate links
+        const plantFoodsLi = article.match(/<li[^>]*>.*?plant-foods\.html.*?<\/li>/s)?.[0] || '';
+        expect(plantFoodsLi).toContain('href="plant.html"');
+        expect(plantFoodsLi).toContain('href="plant-foods.html"');
+    });
 });
 
 describe('.enc.md exclusion', () => {
