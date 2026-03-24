@@ -855,7 +855,7 @@ Both themes output formatted, human-editable CSS (`theme-{name}.css`). They use 
 | `--base-url <path>` | Base URL prefix for all links |
 | `--default-public` | Publish all pages unless `public: false` |
 | `--default-assets` | Copy all assets unless `assets: false` |
-| `--retina` | Generate retina-compatible image markup |
+| `--retina` | Enable retina image sizing (auto-sets `width` to half intrinsic dimensions) |
 | `--include-drafts` | Include pages with `draft: true` |
 | `--exclude <dirname>` | Exclude directories from scanning (repeatable) |
 
