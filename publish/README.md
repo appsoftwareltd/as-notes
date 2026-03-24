@@ -1,3 +1,6 @@
-# AS Notes HTML Conversion
+# AS Notes Publish
 
-`node dist/convert.js --input ../docs-src/pages --output ../docs`
+See the following pages for usage instructions:
+
+- <https://github.com/appsoftwareltd/as-notes>
+- <https://www.asnotes.com>

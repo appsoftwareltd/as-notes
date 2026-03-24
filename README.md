@@ -912,6 +912,7 @@ Update `version` in `publish/package.json`.
 ```bash
 cd publish
 npm run build
+npm login
 npm publish
 ```
 
