@@ -48,6 +48,12 @@ This document explains the internal architecture, algorithms, and design decisio
   - [Default vs active](#default-vs-active)
   - [Why segments prevent decoration conflicts](#why-segments-prevent-decoration-conflicts)
   - [Debug logging](#debug-logging)
+- [Inline editor (syntax shadowing)](#inline-editor-syntax-shadowing)
+  - [Three-state visibility model](#three-state-visibility-model)
+  - [Architecture](#architecture)
+  - [Outliner mode awareness](#outliner-mode-awareness)
+  - [Conflict detection](#conflict-detection)
+  - [Settings](#settings)
 - [Click navigation](#click-navigation)
   - [DocumentLinkProvider and command URIs](#documentlinkprovider-and-command-uris)
   - [File resolution](#file-resolution)
@@ -1312,6 +1318,50 @@ Diagnostic logging is provided by `LogService` (`src/LogService.ts`), a pure Nod
 | `IndexService` | `ensureSqlModule` (first vs cached load, timer), `initDatabase` (new/existing + file size, schema creation), `resetSchema` (close old DB, WASM cache reset, fresh initSqlJs timer, create new DB), `clearAllData` (timer), `close`, `saveToFile` (timer + byte count), `indexFileContent` (path → pageId), `getTotalLinkCount` (single COUNT query) |
 | `IndexScanner` | `fullScan` (file count, progress every 500 files, timer, total indexed + links via `getTotalLinkCount()`), `staleScan` (disk/index counts, new/stale/deleted/unchanged summary, timer) |
 | `extension.ts` | `enterFullMode` (DB init, stale scan, complete), `rebuildIndex` (resetSchema, fullScan, save, success with counts; errors at ERROR level), `exitFullMode` (start/complete), `cleanWorkspace` (confirmed), `startPeriodicScan` (each tick start, changes detected or no changes) |
+
+---
+
+## Inline editor (syntax shadowing)
+
+The inline editor provides Typora-like WYSIWYG rendering of standard Markdown syntax directly in the VS Code editor. It is based on [markdown-inline-editor-vscode](https://github.com/SeardnaSchmid/markdown-inline-editor-vscode) by SeardnaSchmid (MIT licence), integrated as a full code copy in `src/inline-editor/`.
+
+### Three-state visibility model
+
+Each Markdown construct uses a three-state visibility model:
+
+| State | When | Effect |
+|---|---|---|
+| **Rendered** | Cursor is not on the line | Syntax characters are hidden; styled output is shown (e.g. **bold** without `**`) |
+| **Ghost** | Cursor is on the line but outside the construct | Syntax characters are shown at reduced opacity (configurable via `as-notes.inlineEditor.decorations.ghostFaintOpacity`) |
+| **Raw** | Cursor is inside the construct (or text is selected) | Full Markdown source is shown |
+
+The filtering logic lives in `decorator/visibility-model.ts` (`filterDecorationsForEditor`). It processes each `DecorationRange` from the parser against the current cursor/selection positions to decide which state applies.
+
+### Architecture
+
+| Component | File | Responsibility |
+|---|---|---|
+| `InlineEditorManager` | `InlineEditorManager.ts` | Lifecycle orchestration, wiring providers/commands/listeners |
+| `MarkdownParser` | `parser.ts` | Remark-based AST parsing to extract `DecorationRange[]` and `ScopeRange[]` |
+| `MarkdownParseCache` | `markdown-parse-cache.ts` | LRU cache (10 documents) of parse results |
+| `Decorator` | `decorator.ts` | Orchestrates decoration lifecycle, applies filtered results to editor |
+| `DecorationTypeRegistry` | `decorator/decoration-type-registry.ts` | Caches VS Code `TextEditorDecorationType` instances |
+| Visibility model | `decorator/visibility-model.ts` | Three-state filtering logic |
+| Hover providers | `image-hover-provider.ts`, `link-hover-provider.ts`, `code-block-hover-provider.ts` | Rich hover popups for images, links, code blocks |
+| Link provider | `link-provider.ts` | Clickable links in rendered mode |
+| Checkbox toggle | `decorator/checkbox-toggle.ts` | Click-to-toggle `[ ]`/`[x]` (two-state, complements AS Notes' three-state keyboard toggle) |
+
+### Outliner mode awareness
+
+When the `as-notes.outlinerMode` setting is active, bullet markers (`-`, `*`, `+`) and checkbox syntax (`- [ ]`, `- [x]`) are never hidden or ghosted by the inline editor. This is enforced in `filterDecorationsForEditor` via the `outlinerAlwaysRawTypes` set, which skips `listItem`, `checkboxUnchecked`, and `checkboxChecked` decoration types when `outlinerMode` is true.
+
+### Conflict detection
+
+On activation, `InlineEditorManager` checks whether the standalone Markdown Inline Editor extension (original or fork) is installed. If detected, it shows a warning with an option to disable the conflicting extension, preventing issues such as duplicate hover popups and double checkbox toggles.
+
+### Settings
+
+All settings are under the `as-notes.inlineEditor.*` namespace. The toggle is also available as the `AS Notes: Toggle Inline Editor` command and as an eye icon in the editor title bar (visible for Markdown files).
 
 ---
 
