@@ -4,6 +4,8 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.3.0] - 2026-03-25
+
 - Feature: Inline Markdown editor (Typora-like syntax shadowing). Bold, italic, headings, links, images, code blocks, tables, emoji, Mermaid diagrams, and LaTeX math are rendered inline with a three-state visibility model (rendered/ghost/raw). Toggle via command palette or editor title bar eye icon. Based on markdown-inline-editor-vscode by SeardnaSchmid (MIT).
 - Feature: Detects conflicting Markdown Inline Editor extensions and offers to disable them.
 - Feature: Outliner mode awareness -- bullet markers and checkbox syntax always remain visible when outliner mode is active.
