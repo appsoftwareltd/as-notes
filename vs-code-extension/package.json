@@ -197,6 +197,15 @@
             {
                 "command": "as-notes.configurePublish",
                 "title": "AS Notes: Configure Publish Settings"
+            },
+            {
+                "command": "as-notes.toggleInlineEditor",
+                "title": "AS Notes: Toggle Inline Editor",
+                "icon": "$(eye)"
+            },
+            {
+                "command": "as-notes.navigateToAnchor",
+                "title": "AS Notes: Navigate to Anchor"
             }
         ],
         "keybindings": [
@@ -334,6 +343,122 @@
                     "type": "boolean",
                     "default": false,
                     "description": "When enabled, new notes created via wikilink navigation are placed in the current editing file's directory instead of the notes folder. Ignored when the source file is in the journal folder."
+                },
+                "as-notes.inlineEditor.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "scope": "window",
+                    "description": "Enable the inline Markdown editor (Typora-like syntax shadowing). When enabled, Markdown syntax is hidden and content is rendered inline."
+                },
+                "as-notes.inlineEditor.decorations.ghostFaintOpacity": {
+                    "type": "number",
+                    "default": 0.3,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Opacity for ghost/faint syntax markers when the cursor is on the same line (0 = invisible, 1 = fully visible)."
+                },
+                "as-notes.inlineEditor.decorations.frontmatterDelimiterOpacity": {
+                    "type": "number",
+                    "default": 0.3,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Opacity for YAML frontmatter delimiter lines (---) when not actively editing them."
+                },
+                "as-notes.inlineEditor.decorations.codeBlockLanguageOpacity": {
+                    "type": "number",
+                    "default": 0.3,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Opacity for the language identifier on code block opening fences."
+                },
+                "as-notes.inlineEditor.defaultBehaviors.diffView.applyDecorations": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Apply inline editor decorations in diff/compare views. When false, diff views show raw Markdown."
+                },
+                "as-notes.inlineEditor.links.singleClickOpen": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Open links with a single click instead of Ctrl+Click."
+                },
+                "as-notes.inlineEditor.emojis.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Render emoji shortcodes (e.g. :smile:) as emoji characters inline."
+                },
+                "as-notes.inlineEditor.math.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Render LaTeX/math expressions ($...$, $$...$$) inline using KaTeX."
+                },
+                "as-notes.inlineEditor.mentions.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable GitHub-style @mention and #issue reference detection and styling."
+                },
+                "as-notes.inlineEditor.mentions.linksEnabled": {
+                    "type": "boolean",
+                    "description": "Force mention/issue links on or off. When unset, auto-detects from git remote."
+                },
+                "as-notes.inlineEditor.colors.heading1": {
+                    "type": "string",
+                    "description": "Hex colour for H1 headings (e.g. #e06c75). Leave empty to use theme default."
+                },
+                "as-notes.inlineEditor.colors.heading2": {
+                    "type": "string",
+                    "description": "Hex colour for H2 headings."
+                },
+                "as-notes.inlineEditor.colors.heading3": {
+                    "type": "string",
+                    "description": "Hex colour for H3 headings."
+                },
+                "as-notes.inlineEditor.colors.heading4": {
+                    "type": "string",
+                    "description": "Hex colour for H4 headings."
+                },
+                "as-notes.inlineEditor.colors.heading5": {
+                    "type": "string",
+                    "description": "Hex colour for H5 headings."
+                },
+                "as-notes.inlineEditor.colors.heading6": {
+                    "type": "string",
+                    "description": "Hex colour for H6 headings."
+                },
+                "as-notes.inlineEditor.colors.link": {
+                    "type": "string",
+                    "description": "Hex colour for link text."
+                },
+                "as-notes.inlineEditor.colors.listMarker": {
+                    "type": "string",
+                    "description": "Hex colour for list markers (-, *, +)."
+                },
+                "as-notes.inlineEditor.colors.inlineCode": {
+                    "type": "string",
+                    "description": "Hex colour for inline code text."
+                },
+                "as-notes.inlineEditor.colors.inlineCodeBackground": {
+                    "type": "string",
+                    "description": "Hex background colour for inline code."
+                },
+                "as-notes.inlineEditor.colors.emphasis": {
+                    "type": "string",
+                    "description": "Hex colour for bold/italic text."
+                },
+                "as-notes.inlineEditor.colors.blockquote": {
+                    "type": "string",
+                    "description": "Hex colour for blockquote markers."
+                },
+                "as-notes.inlineEditor.colors.image": {
+                    "type": "string",
+                    "description": "Hex colour for image placeholder text."
+                },
+                "as-notes.inlineEditor.colors.horizontalRule": {
+                    "type": "string",
+                    "description": "Hex colour for horizontal rule lines."
+                },
+                "as-notes.inlineEditor.colors.checkbox": {
+                    "type": "string",
+                    "description": "Hex colour for checkbox symbols."
                 }
             }
         },
@@ -381,6 +506,13 @@
                     "id": "as-notes-tasks",
                     "name": "Tasks",
                     "when": "as-notes.fullMode"
+                },
+                {
+                    "type": "webview",
+                    "id": "as-notes.mermaidRenderer",
+                    "name": "Mermaid Renderer",
+                    "when": "as-notes.fullMode",
+                    "visibility": "hidden"
                 }
             ]
         },
@@ -394,6 +526,11 @@
             "editor/title": [
                 {
                     "command": "as-notes.showBacklinks",
+                    "when": "as-notes.fullMode && editorLangId == markdown",
+                    "group": "navigation"
+                },
+                {
+                    "command": "as-notes.toggleInlineEditor",
                     "when": "as-notes.fullMode && editorLangId == markdown",
                     "group": "navigation"
                 }
@@ -451,6 +588,7 @@
         "@tailwindcss/postcss": "^4.2.1",
         "@types/node": "^20.11.0",
         "@types/sql.js": "^1.4.9",
+        "@types/unist": "^3.0.3",
         "@types/vscode": "^1.85.0",
         "as-notes-common": "file:../common",
         "esbuild": "^0.24.0",
@@ -461,8 +599,16 @@
         "vitest": "^3.0.0"
     },
     "dependencies": {
+        "cheerio": "1.2.0",
         "ignore": "^7.0.5",
+        "katex": "^0.16.11",
+        "mathjax-full": "^3.2.2",
+        "mermaid": "10.9.5",
+        "remark-gfm": "4.0.1",
+        "remark-parse": "11.0.0",
         "sql.js": "^1.14.0",
+        "unified": "11.0.5",
+        "unist-util-visit": "5.1.0",
         "yaml": "^2.7.1"
     }
 }

@@ -53,6 +53,7 @@ import { KanbanSidebarProvider } from './KanbanSidebarProvider.js';
 import { CalendarPanelProvider } from './CalendarPanelProvider.js';
 import type { Priority } from './KanbanTypes.js';
 import { computeNotesRootPaths, toNotesRelativePath, isInsideNotesRoot, type NotesRootPaths } from './NotesRootService.js';
+import { InlineEditorManager } from './inline-editor/InlineEditorManager.js';
 const ASNOTES_DIR = '.asnotes';
 const INDEX_DB = 'index.db';
 const IGNORE_FILE = '.asnotesignore';
@@ -134,6 +135,8 @@ const FULL_MODE_COMMAND_IDS: string[] = [
     'as-notes.toggleAssets',
     'as-notes.publishToHtml',
     'as-notes.configurePublish',
+    'as-notes.toggleInlineEditor',
+    'as-notes.navigateToAnchor',
 ];
 
 /** Ignore service for .asnotesignore pattern matching — alive while in full mode. */
@@ -2206,6 +2209,15 @@ async function enterFullMode(
             }
         }),
     );
+
+    // Inline editor (Typora-like syntax shadowing)
+    const inlineEditorManager = new InlineEditorManager(
+        context,
+        markdownSelector,
+        nrp?.root,
+        ignoreService ? (rel) => ignoreService!.isIgnored(rel) : undefined,
+    );
+    fullModeDisposables.push(inlineEditorManager);
 
     // Add all full-mode disposables to context
     for (const d of fullModeDisposables) {

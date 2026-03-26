@@ -21,6 +21,12 @@ copyFileSync(
     resolve(__dirname, 'dist/sql-wasm.wasm'),
 );
 
+// Copy third-party licence notice to dist/
+copyFileSync(
+    resolve(__dirname, 'LICENCE-THIRD-PARTY.md'),
+    resolve(__dirname, 'dist/LICENCE-THIRD-PARTY.md'),
+);
+
 // ── sql.js WASM cache-reset plugin ────────────────────────────────────────
 // sql.js caches the very first initSqlJs() promise in a closure variable
 // `initSqlJsPromise` and returns it for every subsequent call.  This means

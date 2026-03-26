@@ -227,6 +227,36 @@ The extension is aware of existing fence pairs: if the backticks are already bal
 
 In outliner mode, pressing Enter on a closing `` ``` `` line that belongs to a bullet code block inserts a new bullet at the parent's indentation.
 
+### Inline Editor (Syntax Shadowing)
+
+AS Notes includes a built-in inline Markdown editor that renders formatting directly in the text editor, similar to Typora. Standard Markdown syntax characters (`**`, `##`, `[]()`, etc.) are replaced with their visual equivalents as you write.
+
+**Three-state visibility:**
+
+| State | When | What you see |
+|---|---|---|
+| **Rendered** | Cursor is elsewhere | Clean formatted text (syntax hidden) |
+| **Ghost** | Cursor is on the line | Syntax characters at reduced opacity |
+| **Raw** | Cursor is inside the construct | Full Markdown source |
+
+**Supported constructs:**
+
+Bold, italic, strikethrough, headings (H1-H6), inline code, links, images, blockquotes, horizontal rules, unordered/task lists, code blocks (with language labels), YAML frontmatter, GFM tables, emoji shortcodes (`:smile:` etc.), Mermaid diagrams (inline SVG), LaTeX/math (KaTeX/MathJax), GitHub mentions and issue references.
+
+**Toggle:** Use the **AS Notes: Toggle Inline Editor** command or click the eye icon in the editor title bar. The toggle state is persisted per workspace.
+
+**Outliner mode awareness:** When outliner mode is active, bullet markers and checkbox syntax are styled inline (bullets render as styled bullets, checkboxes render with bullet and checkbox graphic) alongside the outliner structure.
+
+| Setting | Default | Description |
+|---|---|---|
+| `as-notes.inlineEditor.enabled` | `true` | Enable/disable inline rendering |
+| `as-notes.inlineEditor.decorations.ghostFaintOpacity` | `0.3` | Opacity for ghost-state syntax characters |
+| `as-notes.inlineEditor.links.singleClickOpen` | `false` | Open links with a single click (instead of Ctrl+Click) |
+
+See [Settings](#settings) for the full list of inline editor settings.
+
+> Based on [markdown-inline-editor-vscode](https://github.com/SeardnaSchmid/markdown-inline-editor-vscode) by SeardnaSchmid (MIT licence).
+
 ## AS Notes Pro Features
 
 A **Pro licence** unlocks premium features. When a valid key is active the status bar shows **AS Notes (Pro)**.
