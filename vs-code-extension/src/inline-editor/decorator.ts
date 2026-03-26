@@ -671,17 +671,12 @@ export class Decorator {
       return new Map();
     }
 
-    const outlinerMode = workspace
-      .getConfiguration('as-notes')
-      .get<boolean>('outlinerMode', false);
-
     return filterDecorationsForEditor(
       this.activeEditor,
       decorations,
       scopes,
       originalText,
       (startPos, endPos, text) => this.createRange(startPos, endPos, text),
-      outlinerMode,
     );
   }
 

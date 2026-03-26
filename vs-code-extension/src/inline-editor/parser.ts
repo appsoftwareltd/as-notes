@@ -2023,10 +2023,17 @@ export class MarkdownParser {
         endPos: markerEnd,
         type: "orderedListItem",
       });
+    } else {
+      // For unordered lists: emit a separate bullet decoration for the marker
+      decorations.push({
+        startPos: markerStart,
+        endPos: markerEnd,
+        type: "listItem",
+      });
     }
-    // For unordered lists: no listItem (bullet); single checkbox decoration covers marker + checkbox
+    // Checkbox decoration covers only the checkbox characters
     decorations.push({
-      startPos: isOrderedList ? checkboxStart : markerStart,
+      startPos: checkboxStart,
       endPos: checkboxEnd,
       type: isChecked ? "checkboxChecked" : "checkboxUnchecked",
     });

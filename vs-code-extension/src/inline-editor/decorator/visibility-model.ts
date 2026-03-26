@@ -18,7 +18,6 @@ export function filterDecorationsForEditor(
   scopes: ScopeEntry[],
   originalText: string,
   rangeFactory: RangeFactory,
-  outlinerMode = false,
 ): Map<DecorationType, FilteredDecoration[]> {
   const selectedRanges: Range[] = [];
   const cursorPositions: Position[] = [];
@@ -43,12 +42,6 @@ export function filterDecorationsForEditor(
   ]);
 
   // Types whose markers are only shown when the cursor/selection overlaps them.
-  // In outliner mode, these are always raw (never decorated).
-  const outlinerAlwaysRawTypes = new Set<DecorationType>([
-    'listItem',
-    'checkboxUnchecked',
-    'checkboxChecked',
-  ]);
   const selectionOnlyMarkerTypes = new Set<DecorationType>([
     'blockquote',
     'listItem',
@@ -127,10 +120,6 @@ export function filterDecorationsForEditor(
     }
 
     if (selectionOnlyMarkerTypes.has(decoration.type)) {
-      // Outliner mode: bullet/checkbox markers are always raw
-      if (outlinerMode && outlinerAlwaysRawTypes.has(decoration.type)) {
-        continue;
-      }
       if (selectionOrCursorOverlaps(range)) {
         // Raw state: show actual marker characters
         continue;
