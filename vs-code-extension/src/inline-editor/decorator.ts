@@ -726,20 +726,6 @@ export class Decorator {
     const ghostFaintRanges = (filteredDecorations.get('ghostFaint') as Range[] | undefined) || [];
     this.activeEditor.setDecorations(this.decorationTypes.getGhostFaintDecorationType(), ghostFaintRanges);
 
-    // DEBUG: Temporary diagnostic logging for ghost faint and heading decorations
-    if (process.env.AS_NOTES_DEBUG) {
-      const headingTypes = ['heading', 'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6'];
-      for (const ht of headingTypes) {
-        const ranges = filteredDecorations.get(ht as DecorationType);
-        if (ranges && ranges.length > 0) {
-          console.log(`[inline-editor] ${ht}: ${ranges.length} ranges applied`);
-        }
-      }
-      if (ghostFaintRanges.length > 0) {
-        console.log(`[inline-editor] ghostFaint: ${ghostFaintRanges.length} ranges, lines: ${ghostFaintRanges.map(r => (r as Range).start.line).join(',')}`);
-      }
-    }
-
     // Fire optional test hook (E2E only — undefined in production).
     if (this.onApply) {
       const nonEmptyTypeCount = [...filteredDecorations.values()].filter(r => r.length > 0).length;

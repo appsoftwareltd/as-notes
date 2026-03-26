@@ -292,15 +292,12 @@ function createHeadingDecoration(level: number, color?: string | ThemeColor) {
   const config = HEADING_CONFIG[level - 1];
   if (!config) throw new Error(`Invalid heading level: ${level}`);
   const options: Record<string, unknown> = {
-    // CSS injection via two vectors for font-size (VS Code has no fontSize API).
-    // textDecoration: works in older VS Code builds where the value is inserted
-    //   as raw CSS: text-decoration: none; font-size: 180%;
-    // letterSpacing: works in newer VS Code builds that sanitise textDecoration.
-    //   letter-spacing: -0.5px; font-size: 180%;
-    // Whichever vector the current VS Code processes as raw CSS will apply.
-    textDecoration: `none; font-size: ${config.size}`,
-    letterSpacing: `-0.5px; font-size: ${config.size}`,
-    ...(config.bold ? { fontWeight: 'bold' } : {}),
+    // CSS injection for font-size (VS Code has no fontSize API).
+    // The semicolon in the value terminates text-decoration and starts font-size.
+    // font-weight is also injected here because using the `fontWeight` property
+    // alongside `textDecoration` causes VS Code to sanitise the CSS, breaking
+    // the font-size injection.
+    textDecoration: `none; font-size: ${config.size};${config.bold ? ' font-weight: bold;' : ''}`,
   };
   if (color !== undefined) {
     options.color = color;
