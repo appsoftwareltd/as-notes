@@ -126,8 +126,20 @@ export class Decorator {
   private mermaidUpdateToken = 0;
   private mermaidHoverIndicatorDecorationType = MermaidHoverIndicatorDecorationType();
 
-  constructor(parseCache: MarkdownParseCache) {
+  /** Absolute path of the AS Notes root directory (with native separators). */
+  private readonly notesRootPath: string | undefined;
+
+  /** Callback to check whether a workspace-relative path is .asnotesignored. */
+  private readonly isIgnored: ((relativePath: string) => boolean) | undefined;
+
+  constructor(
+    parseCache: MarkdownParseCache,
+    notesRootPath?: string,
+    isIgnored?: (relativePath: string) => boolean,
+  ) {
     this.parseCache = parseCache;
+    this.notesRootPath = notesRootPath;
+    this.isIgnored = isIgnored;
     this.decorationTypes = new DecorationTypeRegistry({
       getGhostFaintOpacity: () => this.getGhostFaintOpacity(),
       getFrontmatterDelimiterOpacity: () => this.getFrontmatterDelimiterOpacity(),
@@ -409,21 +421,47 @@ export class Decorator {
   }
 
   /**
-   * Checks if the document is a markdown file.
-   * 
-   * @private
-   * @returns {boolean} True if document is markdown
+   * Checks whether the active editor should receive inline decorations.
+   *
+   * A file must:
+   * 1. Have a `.md` or `.markdown` extension (not `.enc.md`).
+   * 2. Reside inside the AS Notes root directory (when one is configured).
+   * 3. Not match any `.asnotesignore` pattern.
    */
   private isMarkdownDocument(): boolean {
     if (!this.activeEditor) {
       return false;
     }
-    // 'skill'         (#58): SKILL.md files assigned languageId 'skill' by the SKILL extension.
-    // 'markdoc'       (#61): Markdoc files assigned languageId 'markdoc' by the Markdoc language server.
-    // 'mdc'           (#61): Nuxt Content .mdc files assigned languageId 'mdc' by vscode-mdc.
-    // 'juliamarkdown' (#61): Julia Markdown files (VS Code built-in identifier).
-    // 'rmarkdown'     (#61): R Markdown files assigned languageId 'rmarkdown' by vscode-R.
-    return ['markdown', 'md', 'mdx', 'skill', 'markdoc', 'mdc', 'juliamarkdown', 'rmarkdown'].includes(this.activeEditor.document.languageId);
+
+    const fsPath = this.activeEditor.document.uri.fsPath;
+    const lower = fsPath.toLowerCase();
+
+    // Must be a .md or .markdown file, but not an encrypted note
+    if (lower.endsWith('.enc.md')) {
+      return false;
+    }
+    if (!lower.endsWith('.md') && !lower.endsWith('.markdown')) {
+      return false;
+    }
+
+    // Must be inside the notes root
+    if (this.notesRootPath) {
+      const normFsPath = fsPath.replace(/\\/g, '/');
+      const normRoot = this.notesRootPath.replace(/\\/g, '/');
+      if (!normFsPath.startsWith(normRoot + '/') && normFsPath !== normRoot) {
+        return false;
+      }
+
+      // Must not be .asnotesignored
+      if (this.isIgnored) {
+        const relativePath = normFsPath.slice(normRoot.length + 1);
+        if (relativePath && this.isIgnored(relativePath)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   /**

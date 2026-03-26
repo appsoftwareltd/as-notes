@@ -2211,7 +2211,12 @@ async function enterFullMode(
     );
 
     // Inline editor (Typora-like syntax shadowing)
-    const inlineEditorManager = new InlineEditorManager(context, markdownSelector);
+    const inlineEditorManager = new InlineEditorManager(
+        context,
+        markdownSelector,
+        nrp?.root,
+        ignoreService ? (rel) => ignoreService!.isIgnored(rel) : undefined,
+    );
     fullModeDisposables.push(inlineEditorManager);
 
     // Add all full-mode disposables to context

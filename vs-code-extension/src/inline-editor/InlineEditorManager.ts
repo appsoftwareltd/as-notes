@@ -27,6 +27,8 @@ export class InlineEditorManager implements vscode.Disposable {
     constructor(
         context: vscode.ExtensionContext,
         markdownSelector: vscode.DocumentSelector,
+        notesRootPath?: string,
+        isIgnored?: (relativePath: string) => boolean,
     ) {
         // Mermaid renderer needs context for webview
         initMermaidRenderer(context);
@@ -36,7 +38,7 @@ export class InlineEditorManager implements vscode.Disposable {
 
         const parser = new MarkdownParser();
         this.parseCache = new MarkdownParseCache(parser);
-        this.decorator = new Decorator(this.parseCache);
+        this.decorator = new Decorator(this.parseCache, notesRootPath, isIgnored);
 
         const diffViewApplyDecorations = config.diffView.applyDecorations();
         this.decorator.updateDiffViewDecorationSetting(!diffViewApplyDecorations);
@@ -180,22 +182,29 @@ export class InlineEditorManager implements vscode.Disposable {
 
     private static readonly CONFLICTING_EXTENSIONS = [
         'SeardnaSchmid.markdown-inline-editor-vscode',
+        'seardnaschmid.markdown-inline-editor-vscode',
         'CodeSmith.markdown-inline-editor-vscode',
+        'codesmith.markdown-inline-editor-vscode',
     ];
 
     private static warnConflictingExtensions(): void {
         for (const id of InlineEditorManager.CONFLICTING_EXTENSIONS) {
             const ext = vscode.extensions.getExtension(id);
             if (ext) {
+                const name = ext.packageJSON?.displayName ?? id;
                 vscode.window.showWarningMessage(
-                    `AS Notes includes built-in inline Markdown rendering. The "${ext.packageJSON?.displayName ?? id}" extension may cause conflicts (duplicate decorations, double checkbox toggles). Consider disabling it.`,
+                    `AS Notes includes built-in inline Markdown rendering. The "${name}" extension is installed and will cause conflicts (duplicate decorations, checkbox toggle issues). You can disable that extension, or disable the AS Notes inline editor instead.`,
                     'Disable Extension',
+                    'Disable Inline Editor',
                 ).then(action => {
                     if (action === 'Disable Extension') {
                         vscode.commands.executeCommand(
                             'workbench.extensions.disableExtension',
                             id,
                         );
+                    } else if (action === 'Disable Inline Editor') {
+                        vscode.workspace.getConfiguration('as-notes.inlineEditor')
+                            .update('enabled', false, vscode.ConfigurationTarget.Workspace);
                     }
                 });
                 break; // only warn once

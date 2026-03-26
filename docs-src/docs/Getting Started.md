@@ -42,6 +42,7 @@ Create a new `.md` file and start writing. Type `[[` anywhere to trigger [[Wikil
 | Store sensitive notes | [[Encrypted Notes]] |
 | Publish notes as a website | [[Publishing a Static Site]] |
 | Adjust extension settings | [[Settings]] |
+| Inline formatting preview | [[Inline Editor]] |
 
 ## Excluding Files from the Index
 

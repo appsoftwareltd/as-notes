@@ -245,7 +245,7 @@ Bold, italic, strikethrough, headings (H1-H6), inline code, links, images, block
 
 **Toggle:** Use the **AS Notes: Toggle Inline Editor** command or click the eye icon in the editor title bar. The toggle state is persisted per workspace.
 
-**Outliner mode awareness:** When outliner mode is active, bullet markers and checkbox syntax are never hidden, ensuring the outliner structure is always visible.
+**Outliner mode awareness:** When outliner mode is active, bullet markers and checkbox syntax are styled inline (bullets render as styled bullets, checkboxes render with bullet and checkbox graphic) alongside the outliner structure.
 
 | Setting | Default | Description |
 |---|---|---|
