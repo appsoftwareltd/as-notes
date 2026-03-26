@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.2.9",
+    "version": "2.3.0",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -512,7 +512,7 @@
                     "id": "as-notes.mermaidRenderer",
                     "name": "Mermaid Renderer",
                     "when": "as-notes.fullMode",
-                    "visibility": "hidden"
+                    "visibility": "collapsed"
                 }
             ]
         },
