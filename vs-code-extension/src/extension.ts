@@ -179,6 +179,9 @@ let backlinkPanelProvider: BacklinkPanelProvider | undefined;
 /** Calendar panel provider instance -- alive while in full mode. */
 let calendarPanelProvider: CalendarPanelProvider | undefined;
 
+/** Inline editor manager instance -- alive while in full mode. */
+let inlineEditorManager: InlineEditorManager | undefined;
+
 /** Log service instance — alive while in full mode. */
 let logService: LogService = NO_OP_LOGGER;
 
@@ -529,6 +532,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                 vscode.window.showInformationMessage(`AS Notes: Licence activated - ${tierLabel} \u2714`);
             }
             updateFullModeStatusBar();
+            inlineEditorManager?.refreshLicenceGate();
         }).catch((err) => {
             clearTimeout(progressTimer);
             console.warn('as-notes: licence validation failed:', err);
@@ -567,6 +571,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     verifyLicenceFromSettings(context).then((state) => {
         licenceState = state;
         updateFullModeStatusBar();
+        inlineEditorManager?.refreshLicenceGate();
     }).catch((err) => {
         console.warn('as-notes: failed to verify licence from settings:', err);
     });
@@ -580,6 +585,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                 showLicenceWarning();
             }
             updateFullModeStatusBar();
+            inlineEditorManager?.refreshLicenceGate();
         }).catch((err) => {
             console.warn('as-notes: periodic licence check failed:', err);
         });
@@ -2211,13 +2217,19 @@ async function enterFullMode(
     );
 
     // Inline editor (Typora-like syntax shadowing)
-    const inlineEditorManager = new InlineEditorManager(
+    inlineEditorManager = new InlineEditorManager(
         context,
         markdownSelector,
         nrp?.root,
         ignoreService ? (rel) => ignoreService!.isIgnored(rel) : undefined,
+        () => hasProEditor(),
     );
     fullModeDisposables.push(inlineEditorManager);
+
+    // Apply licence gate now that the manager exists and licenceState may
+    // already be populated (verifyLicenceFromSettings can resolve before
+    // enterFullMode completes).
+    inlineEditorManager.refreshLicenceGate();
 
     // Add all full-mode disposables to context
     for (const d of fullModeDisposables) {
@@ -2259,6 +2271,7 @@ function disposeFullMode(): void {
     taskPanelProvider = undefined;
     searchPanelProvider = undefined;
     backlinkPanelProvider = undefined;
+    inlineEditorManager = undefined;
 }
 
 /**

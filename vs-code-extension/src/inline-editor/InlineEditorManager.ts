@@ -20,16 +20,24 @@ import { initMermaidRenderer, disposeMermaidRenderer } from './mermaid/mermaid-r
  */
 export class InlineEditorManager implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
+    private readonly providerDisposables: vscode.Disposable[] = [];
     private readonly decorator: Decorator;
     private readonly parseCache: MarkdownParseCache;
     private readonly linkClickHandler: LinkClickHandler;
+    private readonly markdownSelector: vscode.DocumentSelector;
+    private readonly hasProLicence: (() => boolean) | undefined;
+    private providersRegistered = false;
 
     constructor(
         context: vscode.ExtensionContext,
         markdownSelector: vscode.DocumentSelector,
         notesRootPath?: string,
         isIgnored?: (relativePath: string) => boolean,
+        hasProLicence?: () => boolean,
     ) {
+        this.markdownSelector = markdownSelector;
+        this.hasProLicence = hasProLicence;
+
         // Mermaid renderer needs context for webview
         initMermaidRenderer(context);
 
@@ -44,39 +52,20 @@ export class InlineEditorManager implements vscode.Disposable {
         this.decorator.updateDiffViewDecorationSetting(!diffViewApplyDecorations);
         this.decorator.setActiveEditor(vscode.window.activeTextEditor);
 
-        // Check if inline editor is enabled
-        const inlineEditorEnabled = vscode.workspace
-            .getConfiguration('as-notes.inlineEditor')
-            .get<boolean>('enabled', true);
-        if (!inlineEditorEnabled) {
-            this.decorator.toggleDecorations(); // starts enabled, so toggle to disable
-        }
-
-        // Link provider
-        const linkProvider = new MarkdownLinkProvider(this.parseCache);
-        this.disposables.push(
-            vscode.languages.registerDocumentLinkProvider(markdownSelector, linkProvider),
-        );
-
-        // Hover providers
-        this.disposables.push(
-            vscode.languages.registerHoverProvider(
-                markdownSelector,
-                new MarkdownImageHoverProvider(this.parseCache),
-            ),
-            vscode.languages.registerHoverProvider(
-                markdownSelector,
-                new MarkdownLinkHoverProvider(this.parseCache),
-            ),
-            vscode.languages.registerHoverProvider(
-                markdownSelector,
-                new CodeBlockHoverProvider(this.parseCache),
-            ),
-        );
-
-        // Link click handler
+        // Link click handler (created once, enabled/disabled dynamically)
         this.linkClickHandler = new LinkClickHandler(this.parseCache);
-        this.linkClickHandler.setEnabled(config.links.singleClickOpen());
+
+        // Initial state: start based on shouldBeActive(). The licence callback
+        // may return false during startup if verification hasn't completed yet;
+        // enterFullMode() calls refreshLicenceGate() immediately after creation
+        // to correct the state once the licence is known.
+        if (!this.shouldBeActive()) {
+            this.decorator.toggleDecorations(); // starts enabled, so toggle to disable
+            this.linkClickHandler.setEnabled(false);
+        } else {
+            this.linkClickHandler.setEnabled(config.links.singleClickOpen());
+            this.registerProviders();
+        }
 
         // Toggle command
         this.disposables.push(
@@ -142,13 +131,7 @@ export class InlineEditorManager implements vscode.Disposable {
         this.disposables.push(
             vscode.workspace.onDidChangeConfiguration((e) => {
                 if (e.affectsConfiguration('as-notes.inlineEditor.enabled')) {
-                    const enabled = vscode.workspace
-                        .getConfiguration('as-notes.inlineEditor')
-                        .get<boolean>('enabled', true);
-                    const currentlyEnabled = this.decorator.isEnabled();
-                    if (enabled !== currentlyEnabled) {
-                        this.decorator.toggleDecorations();
-                    }
+                    this.refreshLicenceGate();
                 }
                 if (e.affectsConfiguration('as-notes.inlineEditor.defaultBehaviors.diffView.applyDecorations')) {
                     const apply = config.diffView.applyDecorations();
@@ -187,6 +170,70 @@ export class InlineEditorManager implements vscode.Disposable {
         'codesmith.markdown-inline-editor-vscode',
     ];
 
+    /** Whether the inline editor should be active (setting enabled AND pro licence). */
+    private shouldBeActive(): boolean {
+        const settingEnabled = vscode.workspace
+            .getConfiguration('as-notes.inlineEditor')
+            .get<boolean>('enabled', true);
+        return settingEnabled && (!this.hasProLicence || this.hasProLicence());
+    }
+
+    /** Register hover, link, and document-link providers. */
+    private registerProviders(): void {
+        if (this.providersRegistered) { return; }
+        this.providersRegistered = true;
+
+        const linkProvider = new MarkdownLinkProvider(this.parseCache);
+        this.providerDisposables.push(
+            vscode.languages.registerDocumentLinkProvider(this.markdownSelector, linkProvider),
+        );
+        this.providerDisposables.push(
+            vscode.languages.registerHoverProvider(
+                this.markdownSelector,
+                new MarkdownImageHoverProvider(this.parseCache),
+            ),
+            vscode.languages.registerHoverProvider(
+                this.markdownSelector,
+                new MarkdownLinkHoverProvider(this.parseCache),
+            ),
+            vscode.languages.registerHoverProvider(
+                this.markdownSelector,
+                new CodeBlockHoverProvider(this.parseCache),
+            ),
+        );
+    }
+
+    /** Dispose hover, link, and document-link providers. */
+    private disposeProviders(): void {
+        if (!this.providersRegistered) { return; }
+        for (const d of this.providerDisposables) {
+            d.dispose();
+        }
+        this.providerDisposables.length = 0;
+        this.providersRegistered = false;
+    }
+
+    /**
+     * Re-evaluate whether the inline editor should be active based on the
+     * current setting and licence state. Enables or disables decorations and
+     * registers or disposes providers accordingly.
+     *
+     * Call this after licence state changes or when the enabled setting changes.
+     */
+    refreshLicenceGate(): void {
+        const active = this.shouldBeActive();
+
+        if (active && !this.decorator.isEnabled()) {
+            this.decorator.toggleDecorations();
+            this.linkClickHandler.setEnabled(config.links.singleClickOpen());
+            this.registerProviders();
+        } else if (!active && this.decorator.isEnabled()) {
+            this.decorator.toggleDecorations();
+            this.linkClickHandler.setEnabled(false);
+            this.disposeProviders();
+        }
+    }
+
     private static warnConflictingExtensions(): void {
         for (const id of InlineEditorManager.CONFLICTING_EXTENSIONS) {
             const ext = vscode.extensions.getExtension(id);
@@ -216,6 +263,7 @@ export class InlineEditorManager implements vscode.Disposable {
         for (const d of this.disposables) {
             d.dispose();
         }
+        this.disposeProviders();
         this.decorator.dispose();
         this.linkClickHandler.dispose();
         disposeMermaidRenderer();
