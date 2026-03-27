@@ -83,9 +83,65 @@ Emoji shortcodes like `:smile:` or `:seedling:` are rendered as their emoji char
 
 Mermaid diagram code blocks (` ```mermaid `) are rendered as inline SVG diagrams. Hover over the code block for a preview.
 
+The examples below are rendered from `mermaid` code blocks in the markdown document from which this document is generated.
+
+````
+```mermaid
+graph TD
+    A[Buy Plant] --> B{Is it alive?}
+    B -->|Yes| C[Water it]
+    B -->|No| D[Try again]
+    C --> E{Still alive?}
+    E -->|Yes| C
+    E -->|No| D
+```
+
+```mermaid
+flowchart LR
+    Sun --> Leaves --> Photosynthesis --> Growth
+    Water --> Roots --> Growth
+```
+````
+
+```mermaid
+graph TD
+    A[Buy Plant] --> B{Is it alive?}
+    B -->|Yes| C[Water it]
+    B -->|No| D[Try again]
+    C --> E{Still alive?}
+    E -->|Yes| C
+    E -->|No| D
+```
+
+```mermaid
+flowchart LR
+    Sun --> Leaves --> Photosynthesis --> Growth
+    Water --> Roots --> Growth
+```
+
 ### Math / LaTeX
 
 Inline math (`$...$`) and display math (`$$...$$`) are rendered using KaTeX/MathJax. Enable or disable via the `as-notes.inlineEditor.defaultBehaviors.math` setting.
+
+The following code renders the math blocks below:
+
+```
+Inline math: the growth rate is $G = k \cdot L \cdot W$ where $L$ is light and $W$ is water.
+
+Display math block:
+
+$$
+\frac{dP}{dt} = rP\left(1 - \frac{P}{K}\right)
+$$
+```
+
+Inline math: the growth rate is $G = k \cdot L \cdot W$ where $L$ is light and $W$ is water.
+
+Display math block:
+
+$$
+\frac{dP}{dt} = rP\left(1 - \frac{P}{K}\right)
+$$
 
 ### GitHub Mentions and Issues
 
