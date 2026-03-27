@@ -11,14 +11,18 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 
 |||
 |--|--|
-|Install | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)|
+|Install | [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes) / [Open VSX](https://open-vsx.org/extension/appsoftwareltd/as-notes)|
 |Pro Features | [asnotes.io/pricing](https://www.asnotes.io)|
 |Docs | [docs.asnotes.io](https://docs.asnotes.io)|
 |Blog | [blog.asnotes.io](https://blog.asnotes.io)|
 
 ## What is AS Notes?
 
-AS Notes brings [[wikilink]] style note-taking (and much more) directly into VS Code. Capture ideas, link concepts, and stay focused - without ever leaving your editor.
+> **AS Notes brings markdown and `[[wikilink]]` editing for notes, documentation, blogs and wikis directly into [VS Code](https://code.visualstudio.com/) compatible editors (e.g. [Antigravity](https://antigravity.google/), [Cursor](https://cursor.com/), [Windsurf](https://windsurf.com/)).**
+
+Further, AS Notes provides productivity tooling that turns your favourite IDE into a personal knowledge management system (PKMS), including a backlinks view, task management, journals, a kanban board, markdown editing tools, mermaid, LaTeX math support and Jekyll / Hugo like publishing.
+
+**Capture ideas, link concepts, write, and stay focused - without ever leaving your editor.**
 
 (1 minute introduction video)
 
@@ -30,30 +34,32 @@ AS Notes brings [[wikilink]] style note-taking (and much more) directly into VS 
 
 ## Why VS Code?
 
-Many of us spend a lot of time in VS Code and using VS Code as your main notes application gives you so much for free, even before using **AS Notes** features:
+Many of us use VS Code like compatible editors daily, and even where we use a separate tool for notes and knowledge management, we often still write documentation, blogs and wikis in our IDE. AS Notes provides the tools to do everything in your IDE.
 
-- Cross platform + Web (via Workspaces)
-- UI features such as Tabs, File Explorer, Themes
-- Huge extension library that can be used along side AS Notes (Mermaid diagramming, Vim etc)
-- AI Chat (GitHub CoPilot / Claude etc.) you can use to work with your notes
-- Multiline editing Outliner functionality via `Ctrl + [ / ]`
-- Code highlighting
+Some key benefits of managing notes in VS Code in addition to those that AS Notes provides directly:
+
+- Cross platform compatibility + Web (via Workspaces)
+- Acceptenance in restricted work envrionments that other knowledge management tools may not have
+- Huge extension library that can be used along side AS Notes to extend the capabilities even further
+- Built in AI Agent Harness (GitHub CoPilot / Claude etc.) you can use to work with your notes
+- State of the art text editing and UI features
+- Syntax highlighting
 - And all of the many features that VS Code has
 
-## Features
+## AS Notes Features
 
 ### General
 
-- Privacy focused - does not send your data anywhere
+- Privacy focused - AS Notes does not send your data or telemetry anywhere
 - Version control friendly (Git & GitOps)
 - Lightweight indexing of your notes (local sqlite3 WASM)
 
 - Performant on large (~20k markdown files) knowledge bases
 
-### Wikilinks
+### Wikilinking
 
 - Logseq / Roam / Obsidian style `[[wikilinks]]` with nested link support e.g. `[[[[AS Notes]] Page]]`
-- Links resolve to the target page anywhere in your workspace
+- Links resolve to the target page anywhere in your workspace. Nested wikilinks can resolve multiple targets
 - Renaming a link updates the target file and all matching references
 - Automatic wikilink / file rename tracking
 
@@ -61,7 +67,7 @@ Many of us spend a lot of time in VS Code and using VS Code as your main notes a
 
 ### Task Management
 
-Toggle markdown TODOs with a keyboard shortcut:
+Toggle markdown TODOs with `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS):
 
 ```
 - [ ] Marker for todo added
@@ -69,9 +75,7 @@ Toggle markdown TODOs with a keyboard shortcut:
 Marker for todo removed
 ```
 
-`Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS)
-
-<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/todopanel.png" alt="AS Notes todo panel" style="max-height:130px; margin-top: 10px; margin-bottom: 10px;">
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/task-management-panel.png" alt="AS Notes todo panel" style="max-height:260px; margin-top: 10px; margin-bottom: 10px;">
 
 #### Task Metadata Tags
 
@@ -86,17 +90,17 @@ Add structured hashtag metadata anywhere in a task line to categorise and organi
 | `#D-YYYY-MM-DD` | Due date — e.g. `#D-2026-03-15` |
 | `#C-YYYY-MM-DD` | Completion date — e.g. `#C-2026-03-15` |
 
-Tags can be placed anywhere on the task line:
+Example usage:
 
 ```markdown
 - [ ] #P1 Fix the critical production bug
-- [ ] #P2 #W Waiting on design sign-off for the new dashboard #D-2026-03-20
-- [ ] #D-2026-03-10 Submit the quarterly report
+- [ ] #P2 #W Waiting on design sign-off for the new dashboard
+- [x] #D-2026-03-10 Submit the quarterly report
 ```
 
 Multiple tags can be combined. Only one priority tag is used — if more than one is present, the first wins.
 
-#### Task Managemnt
+#### Task Management
 
 The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all tasks across your entire workspace.
 
@@ -106,8 +110,8 @@ The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all task
 |---|---|
 | **Page** | Tasks grouped alphabetically by source page |
 | **Priority** | Tasks grouped by priority level (P1 → P2 → P3 → No Priority), sorted by due date within each group |
-| **Due Date** | Tasks grouped into buckets: Overdue / Today / This Week / Later / No Due Date |
-| **Completion Date** | Tasks grouped into buckets: Completed Today / This Week / Earlier / No Completion Date |
+| **Due Date** | Tasks grouped by due date |
+| **Completion Date** | Tasks grouped by completion date |
 
 **Filters:**
 
@@ -117,13 +121,17 @@ The **AS Notes** activity bar icon opens the Tasks sidebar, which shows all task
 
 ### Backlinks Panel
 
-`Ctrl+Alt+B` (Windows/Linux) / `Cmd+Alt+B` (macOS)
+The backlinks panel shows references to page. References are captured by page mention, outliner style indentation under another wikilink or nesting in another wikilink. Backlink tracking capture surrounding context, works for forward references (pages that have wikilinks but have not been created yet) and are updated live on changes to the index.
 
-<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/backlinks.png" alt="AS Notes backlinks panel" style="max-height:400px; margin-top: 10px">
+Open the backlinks editor tab alongside your current tab using: `Ctrl+Alt+B` (Windows/Linux) / `Cmd+Alt+B` (macOS)
+
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/as-notes-backlink-panel.png" alt="AS Notes backlinks panel" style="max-height:400px; margin-top: 10px">
 
 ### Kanban Board
 
 AS Notes has a built in Kanban board backed by markdown files that can be used and edited just like any other page under AS Notes.
+
+Use the Kanban board for tracking long running projects. Standard tasks can be used in Kanban card files just like any other note in AS Notes.
 
 ### Daily Journal
 
@@ -137,47 +145,69 @@ A **Calendar** panel in the sidebar shows the current month with journal indicat
 
 ### Slash Commands
 
-Type `/` in any markdown file to open a quick command menu. The following commands are available:
+Type `/` in any markdown file to open a quick command menu. Keep typing to filter the list, press Enter to run a command, or press Escape to dismiss and leave the `/` in place. Slash commands are suppressed inside fenced code blocks, inline code spans, and YAML front matter.
+
+#### Standard Commands
 
 | Command | Action |
 |---|---|
 | **Today** | Inserts a wikilink for today's date, e.g. `[[2026-03-06]]` |
-| **Date Picker** | Opens a date input box pre-filled with today's date — edit the date or press Enter to insert it as a wikilink |
+| **Date Picker** | Opens a date input box pre-filled with today's date. Edit the date or press Enter to insert it as a wikilink |
 | **Code (inline)** | Inserts `` ` `` `` ` `` with the cursor placed between the backticks |
 | **Code (multiline)** | Inserts a fenced code block with the cursor after the opening ` ``` ` -- type the language identifier (e.g. `js`) then press Enter |
+
+#### Publishing Commands *(front matter)*
+
+These commands toggle or cycle publishing-related fields in the file's YAML front matter. See [Publishing a Static Site](#publishing-a-static-site) for details.
+
+| Command | Action |
+|---|---|
+| **Public** | Toggles `public: true` / `public: false` in front matter |
+| **Layout** | Cycles `layout` through `docs`, `blog`, and `minimal` in front matter |
+| **Retina** | Toggles `retina: true` / `retina: false` in front matter |
+| **Assets** | Toggles `assets: true` / `assets: false` in front matter |
+
+#### Kanban Card Commands *(kanban card files only)*
+
+The following command only appears when editing a kanban card file (`kanban/card_*.md`).
+
+| Command | Action |
+|---|---|
+| **Card: Entry Date** | Inserts a `## entry YYYY-MM-DD` heading at the cursor, pre-filled with today's date |
+
+#### Task Commands *(task lines only)*
+
+These commands only appear when the cursor is on a task line (`- [ ]` or `- [x]`). Tags are inserted after the checkbox and after any existing hashtags already on the line.
+
+| Command | Action |
+|---|---|
+| **Task: Priority 1** | Inserts `#P1` at the start of the task text. Replaces any existing priority tag (`#P1`--`#P9`) on the line |
+| **Task: Priority 2** | Inserts `#P2`, replacing any existing priority tag |
+| **Task: Priority 3** | Inserts `#P3`, replacing any existing priority tag |
+| **Task: Waiting** | Toggles `#W` at the start of the task text (inserts if absent, removes if present) |
+| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Inserts `#D-YYYY-MM-DD` at the start of the task text. Replaces any existing due date tag |
+| **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Inserts `#C-YYYY-MM-DD` at the start of the task text. Replaces any existing completion date tag |
+| **Convert to Kanban Card** *(Pro)* | Marks the task as done, creates a Kanban card in the **TODO** lane with the task title (stripped of tags), matching priority and due date, and the **Waiting** flag set. Only available on unchecked tasks |
+
+Priority and waiting tags toggle: issuing the same tag again removes it. Issuing a different priority replaces the existing one. Due date and completion date tags replace any existing tag of the same type.
+
+#### Pro Commands
+
+Pro commands are available with a Pro licence. Free users see them listed with **(Pro)** appended in the menu.
+
+| Command | Action |
+|---|---|
 | **Template** | Opens a quick-pick list of templates from the templates folder and inserts the selected template at the cursor. Supports placeholders (see [Templates](#templates)) |
 | **Table** | Prompts for column and row count, then inserts a formatted markdown table |
+| **Table: Format** | Normalises all column widths in the surrounding table to the longest cell content |
 | **Table: Add Column(s)** | Prompts for count, then adds columns after the cursor's current column in the surrounding table |
 | **Table: Add Row(s)** | Prompts for count, then adds rows after the cursor's current row in the surrounding table |
-| **Table: Format** | Normalises all column widths in the surrounding table to the longest cell content |
 | **Table: Remove Row (Current)** | Removes the row at the cursor (refuses header/separator) |
 | **Table: Remove Column (Current)** | Removes the column at the cursor (refuses single-column tables) |
 | **Table: Remove Row(s) Above** | Prompts for count, then removes data rows above the cursor (clamps to available) |
 | **Table: Remove Row(s) Below** | Prompts for count, then removes rows below the cursor (clamps to available) |
 | **Table: Remove Column(s) Right** | Prompts for count, then removes columns to the right of the cursor (clamps to available) |
 | **Table: Remove Column(s) Left** | Prompts for count, then removes columns to the left of the cursor (clamps to available, preserves indent) |
-
-Table commands are labelled **(Pro)** for free users. Template and table commands are Pro features -- free users see them listed with **(Pro)** appended.
-
-#### Task Commands *(task lines only)*
-
-The following commands only appear in the slash menu when the cursor is on a task line (`- [ ]` or `- [x]`). Tags are inserted after the checkbox and after any existing hashtags already on the line.
-
-| Command | Action |
-|---|---|
-| **Task: Priority 1** | Inserts `#P1` at the start of the task text. Replaces any existing priority tag (`#P1`–`#P9`) on the line |
-| **Task: Priority 2** | Inserts `#P2`, replacing any existing priority tag |
-| **Task: Priority 3** | Inserts `#P3`, replacing any existing priority tag |
-| **Task: Waiting** | Toggles `#W` at the start of the task text (inserts if absent, removes if present) |
-| **Task: Due Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#D-YYYY-MM-DD` at the start of the task text. Replaces any existing due date tag |
-| **Task: Completion Date** | Opens a date input pre-filled with today (YYYY-MM-DD). Confirms and inserts `#C-YYYY-MM-DD` at the start of the task text. Replaces any existing completion date tag |
-| **Convert to Kanban Card** *(Pro)* | Marks the task as done, creates a Kanban card in the **TODO** lane with the task title (stripped of tags), matching priority and due date, and the **Waiting** flag set. Only available on unchecked tasks |
-
-Priority and waiting tags toggle: issuing the same tag again removes it. Issuing a different priority replaces the existing one. Due date and completion date tags replace any existing tag of the same type.
-
-The menu appears inline as you type and supports filtering — just keep typing to narrow the list. Press Escape or any non-matching key to dismiss and keep the `/` as-is.
-
-Slash commands are suppressed inside fenced code blocks, inline code spans, and YAML front matter.
 
 ### File Drag & Drop / Copy + Paste
 
@@ -194,6 +224,8 @@ The setting is applied automatically when AS Notes initialises or the value chan
 **Tips:**
 
 - **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing - useful for placing the link precisely within your text.
+
+### Inline Editor Markdown Styling, Mermaid and LaTeX Rendering
 
 ### Image Hover Preview
 
