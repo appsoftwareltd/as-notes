@@ -1,3 +1,7 @@
+﻿---
+order: 1
+---
+
 # Getting Started
 
 This page gets you from zero to a working AS Notes workspace in a few minutes.
@@ -10,7 +14,7 @@ Open VS Code, go to the Extensions view (`Ctrl+Shift+X`), search for **AS Notes*
 
 ## 2. Open a Folder
 
-AS Notes works on a VS Code workspace folder — a folder containing your markdown notes. If you don't have one yet, create an empty folder and open it in VS Code (`File → Open Folder`).
+AS Notes works with markdown files and assets in a VS Code workspace folder, or a subdirectory within a workspace. If you don't have one yet, create an empty folder and open it in VS Code (`File → Open Folder`).
 
 > Want a ready-made example? Clone the [AS Notes demo notes](https://github.com/appsoftwareltd/as-notes-demo-notes) repository and open it in VS Code.
 
@@ -25,24 +29,13 @@ This creates a `.asnotes/` directory at the workspace root, builds a SQLite inde
 
 After initialisation the status bar shows **AS Notes** (or **AS Notes (Pro)** if you have a licence key configured).
 
+Look for the AS Notes sidebar icon to view Search, Calendar, Kanban Boards and Tasks
+
 ## 4. Write Your First Note
 
-Create a new `.md` file and start writing. Type `[[` anywhere to trigger [[Wikilinks]] autocomplete — a list of all your pages appears immediately.
+Create a new `.md` file and start writing. Type `[[` anywhere to trigger [[Wikilinks]] autocomplete - a list of all your pages appears immediately.
 
-## 5. Explore the Features
-
-| What you want to do | Where to look |
-|---|---|
-| Link between notes | [[Wikilinks]] |
-| See what links to a page | [[Backlinks]] |
-| Open today's journal | [[Daily Journal]] |
-| Manage your todos | [[Task Management]] |
-| Insert tables, code, dates | [[Slash Commands]] |
-| Drop images into notes | [[Images and Files]] |
-| Store sensitive notes | [[Encrypted Notes]] |
-| Publish notes as a website | [[Publishing a Static Site]] |
-| Adjust extension settings | [[Settings]] |
-| Inline formatting preview | [[Inline Editor]] |
+Try adding a task `- [ ] task text` and try toggling the task state from the task management side panel.
 
 ## Excluding Files from the Index
 
@@ -59,7 +52,7 @@ logseq/
 .trash/
 ```
 
-Edit `.asnotesignore` any time — AS Notes watches the file and re-scans automatically when it changes. Newly ignored files are removed from the index; un-ignored files are added.
+Edit `.asnotesignore` any time - AS Notes watches the file and re-scans automatically when it changes. Newly ignored files are removed from the index; un-ignored files are added.
 
 > `.asnotesignore` is version-controlled and user-editable. AS Notes will never overwrite it after initial creation.
 
@@ -73,4 +66,4 @@ If the extension is in a bad state (e.g. persistent errors after a crash), run *
 
 ## Compatibility With Other Tools
 
-AS Notes workspaces are plain markdown files in plain folders — they are compatible with Obsidian and Logseq due to similar file structures. Be aware there are format and behavioural differences, but you can use the same notes folder with multiple tools.
+AS Notes workspaces are plain markdown files in plain folders - they are compatible with Obsidian and Logseq due to similar file structures. Be aware there are format and behavioural differences, but you can use the same notes folder with multiple tools.

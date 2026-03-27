@@ -1,3 +1,7 @@
+﻿---
+order: 4
+---
+
 # Task Management
 
 AS Notes has two complementary tools for managing todos: a keyboard shortcut to toggle todo state on any line, and a Tasks panel that shows all open todos across your entire notes workspace.

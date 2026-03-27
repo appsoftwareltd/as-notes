@@ -1,3 +1,7 @@
+﻿---
+order: 6
+---
+
 # Kanban Board
 
 The **AS Notes Kanban** sidebar and editor panel let you manage work visually with cards organised into lanes.

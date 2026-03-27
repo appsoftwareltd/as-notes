@@ -1,3 +1,7 @@
+﻿---
+order: 8
+---
+
 # Images and Files
 
 AS Notes makes it easy to work with images and other files in your markdown notes — drag them in, paste from the clipboard, or hover to preview.

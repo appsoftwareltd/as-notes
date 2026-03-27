@@ -1,3 +1,7 @@
+﻿---
+order: 3
+---
+
 # Backlinks
 
 The Backlinks panel shows every note in your workspace that links to a given page. It is one of the most powerful navigation tools in AS Notes — use it to understand how ideas connect across your knowledge base.

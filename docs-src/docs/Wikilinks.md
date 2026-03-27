@@ -1,3 +1,7 @@
+﻿---
+order: 2
+---
+
 # Wikilinks
 
 Wikilinks are the core navigation primitive in AS Notes. Wrap any page name in double square brackets and AS Notes turns it into a navigable link — no folder paths, no file extensions needed.

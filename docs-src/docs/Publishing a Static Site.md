@@ -1,3 +1,7 @@
+﻿---
+order: 10
+---
+
 # Publishing a Static Site
 
 AS Notes includes a built-in HTML conversion tool that turns your markdown notes into a static website. It supports filtering, layouts, themes, asset pipelines, retina images, SEO metadata, sitemaps, and RSS feeds. You can deploy to GitHub Pages, Netlify, Vercel, Cloudflare Pages, or any static hosting.

@@ -1,3 +1,7 @@
+﻿---
+order: 12
+---
+
 # Settings
 
 All AS Notes settings are available in VS Code Settings (`Ctrl+,`). Search for `as-notes` to see them all.
@@ -10,7 +14,7 @@ All AS Notes settings are available in VS Code Settings (`Ctrl+,`). Search for `
 | `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable periodic scanning. Minimum effective value: `30`. |
 | `as-notes.assetPath` | `assets/images` | Folder where dropped and pasted files are saved by VS Code's built-in markdown editor, relative to the AS Notes root directory. See [[Images and Files]]. |
 | `as-notes.wikilinkColour` | *(empty)* | Hex colour for wikilinks in the editor (e.g. `#3794ff`). Leave empty to use your theme's link colour. |
-| `as-notes.outlinerMode` | `false` | Enable Outliner Mode for markdown files. When enabled, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents it, and Shift+Tab outdents it. Only applies to lines beginning with `- `. |
+| `as-notes.outlinerMode` | `false` | Enable Outliner Mode for markdown files. When enabled, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents it, and Shift+Tab outdents it. Only applies to lines beginning with `-`. |
 | `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires a VS Code window reload after changing. Also activated by the `AS_NOTES_DEBUG=1` environment variable. |
 
 ## Notes and Templates Settings

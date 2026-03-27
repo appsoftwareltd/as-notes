@@ -1,3 +1,7 @@
+﻿---
+order: 0
+---
+
 # AS Notes
 
 > **This documentation was written and generated using AS Notes. See [[Publishing a Static Site]] for how you can use AS Notes for your docs, including deploying to GitHub Pages**.
@@ -9,6 +13,10 @@ AS Notes is a VS Code extension that turns your editor into a Personal Knowledge
 > **GitHub:** [https://github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
 
 ![AS Notes editor screenshot](../assets/images/as-notes-editor-screenshot.png)
+
+## Getting Started
+
+If you've already installed AS Notes and want to get started, see [[Getting Started]].
 
 ## Why VS Code?
 
@@ -49,10 +57,6 @@ Obtain a Pro licence key at [asnotes.io/pricing](https://www.asnotes.io/pricing)
 Task tags help you to organise and prioritise tags:
 
 - [ ] #P1 #W #D-2026-03-11 A very important thing I'm waiting on
-
-## Getting Started
-
-New here? Start with [[Getting Started]] to install and initialise your first workspace.
 
 ## Privacy
 

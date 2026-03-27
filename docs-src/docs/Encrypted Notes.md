@@ -1,3 +1,7 @@
+﻿---
+order: 11
+---
+
 # Encrypted Notes
 
 AS Notes Pro lets you store sensitive notes in encrypted markdown files that are protected with AES-256-GCM encryption. Encrypted files are excluded from the search index and never read as plain text by the extension.

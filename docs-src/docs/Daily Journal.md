@@ -1,3 +1,7 @@
+﻿---
+order: 5
+---
+
 # Daily Journal
 
 The daily journal gives you a dedicated markdown file for each day, opened with a single keyboard shortcut.
