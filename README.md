@@ -18,11 +18,11 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 
 ## What is AS Notes?
 
-> **AS Notes brings markdown and `[[wikilink]]` editing for notes, documentation, blogs and wikis directly into [VS Code](https://code.visualstudio.com/) and compatible editors (e.g. [Antigravity](https://antigravity.google/), [Cursor](https://cursor.com/), [Windsurf](https://windsurf.com/)).**
-
-Further, AS Notes provides productivity tooling that turns your favourite IDE into a personal knowledge management system (PKMS), including a backlinks view, task management, journals, a kanban board, markdown editing tools, mermaid, LaTeX math support and Jekyll / Hugo like publishing.
+**AS Notes brings markdown and `[[wikilink]]` editing for notes, documentation, blogs and wikis directly into [VS Code](https://code.visualstudio.com/) and compatible editors (e.g. [Antigravity](https://antigravity.google/), [Cursor](https://cursor.com/), [Windsurf](https://windsurf.com/)).**
 
 **Capture ideas, link concepts, write, and stay focused - without ever leaving your editor.**
+
+AS Notes provides productivity tooling that turns your favourite IDE into a personal knowledge management system (PKMS), including a backlinks view, task management, journals, a kanban board, markdown editing tools, mermaid, LaTeX math support and Jekyll / Hugo like publishing.
 
 (1 minute introduction video)
 
