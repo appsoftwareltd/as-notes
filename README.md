@@ -129,6 +129,33 @@ Open the backlinks editor tab alongside your current tab using: `Ctrl+Alt+B` (Wi
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/as-notes-backlink-panel.png" alt="AS Notes backlinks panel" style="max-height:400px; margin-top: 10px">
 
+#### View modes
+
+The panel supports two view modes, toggled via a button in the panel header:
+
+- **Flat by page** (default) - all backlink instances sorted alphabetically by source page name. Gives a linear timeline view where journal files sort chronologically.
+- **Grouped by chain** - backlinks grouped by their chain pattern (the sequence of page names), with collapsible headers. Useful for concept-based exploration.
+
+The default mode is configured via `as-notes.backlinkGroupByChain` (default `false`).
+
+A separate toggle controls **context verbosity** - compact (single-line, truncated) or wrapped (full text visible). Default configured via `as-notes.backlinkWrapContext` (default `false`).
+
+#### Chain-first display
+
+- **Pattern grouping** - backlinks are grouped by their chain pattern (e.g. all `[[Project]] → [[Tasks]] → [[NGINX]]` from different files appear in one group).
+- **Standalone mentions** - direct `[[wikilink]]` references appear as single-link chains, sorted first.
+- **Outline context** - if a wikilink is indented below another wikilink, the full hierarchy is shown as a chain (e.g. `Page A → Page B → Page C`), with each link clickable.
+- **Per-link line numbers** - each chain link shows its line number (e.g. `[L12]`) for precise navigation.
+- **Line context** - each chain instance shows the surrounding line text with the wikilink highlighted, giving immediate context without opening the file.
+- **Case-insensitive grouping** - `[[server]]` and `[[Server]]` produce the same chain pattern.
+
+#### Context menu - View Backlinks
+
+Right-click any wikilink in the editor to open backlinks for that specific page:
+
+- Works with aliases - if the wikilink targets an alias, backlinks for the canonical page are shown.
+- Works with forward references - pages that don't exist yet still show any incoming links.
+
 ### Kanban Board
 
 AS Notes has a built in Kanban board backed by markdown files that can be used and edited just like any other page under AS Notes.
@@ -144,6 +171,10 @@ Journal files are created as `YYYY-MM-DD.md` in a dedicated `journals/` folder (
 A **Calendar** panel in the sidebar shows the current month with journal indicators. Click any day to open its journal entry. See [Calendar](#calendar) for details.
 
 > **Note:** Daily journal requires an initialised workspace (`.asnotes/` directory). See [Getting started](#getting-started).
+
+### Compatibility With Other Markdown PKMS
+
+AS Notes can work alongside knowledge bases created in Obsidian or Logseq due to similar file structures. Be aware there are format and behavioural differences differences however.
 
 ### Slash Commands
 
@@ -227,35 +258,11 @@ The setting is applied automatically when AS Notes initialises or the value chan
 
 - **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing - useful for placing the link precisely within your text.
 
-### Inline Editor Markdown Styling, Mermaid and LaTeX Rendering (Pro)
-
-AS Notes Pro includes optional inline markdown styling, Mermaid diagram and LaTeX rendering inside VS Code (or compatible editor) editor tabs.
-
-<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/asnotes-inline-editor-markdown-styling-mermaid-andlatex-rendering.png" alt="Inline Editor Markdown Styling, Mermaid and LaTeX Rendering" style="max-height:400px; margin-top: 10px">
-
-See [Inline Editor Markdown Styling, Mermaid and LaTeX Rendering](https://docs.asnotes.io/inline-markdown-editing-mermaid-and-latex-rendering.html) for further information.
-
 ### Image Hover Preview
 
 Hover over any image link in a markdown file to see a preview of the image inline. The standard implementation is provided by VS Code's built-in markdown extension and requires no configuration - it works with both standard `![alt](path)` links and dropped/pasted images. An enhanced image display is included with inline markdown editor mode.
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/image-preview.png" alt="AS Notes Image Preview" style="max-height:300px; margin-top: 10px; margin-bottom: 10px;">
-
-### Compatibility With Other Markdown PKMS
-
-AS Notes can work alongside knowledge bases created in Obsidian or Logseq due to similar file structures. Be aware there are format and behavioural differences differences however.
-
-### Outliner Mode
-
-Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `-` and custom keybindings keep you in flow:
-
-| Key | Action |
-|---|---|
-| **Enter** | Inserts a new bullet at the same indentation. Todo lines (`- [ ]`) continue as unchecked todos. |
-| **Tab** | Indents the bullet one level (capped at one level deeper than the bullet above). |
-| **Shift+Tab** | Outdents the bullet one level. |
-| **Ctrl+Shift+Enter** | Cycles: plain bullet → `- [ ]` → `- [x]` → plain bullet. |
-| **Ctrl+V / Cmd+V** | Multi-line paste: each clipboard line becomes a separate bullet. |
 
 #### Code Block Completion
 
@@ -267,9 +274,26 @@ The extension is aware of existing fence pairs: if the backticks are already bal
 
 In outliner mode, pressing Enter on a closing `` ``` `` line that belongs to a bullet code block inserts a new bullet at the parent's indentation.
 
-### Inline Editor (Syntax Shadowing)
+## AS Notes Pro Features
 
-AS Notes includes a built-in inline Markdown editor that renders formatting directly in the text editor, similar to Typora. Standard Markdown syntax characters (`**`, `##`, `[]()`, etc.) are replaced with their visual equivalents as you write.
+A **Pro licence** unlocks premium features. When a valid key is active the status bar shows **AS Notes (Pro)**.
+
+To obtain a licence key, visit [asnotes.io](https://www.asnotes.io/pricing)
+
+**Entering your licence key:**
+
+- Run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`) — the quickest way.
+- Or open VS Code Settings (`Ctrl+,`), search for `as-notes.licenceKey`, and paste your key there.
+
+### Inline Editor Markdown Styling, Mermaid and LaTeX Rendering (Pro)
+
+AS Notes Pro includes optional inline markdown Typora like styling, Mermaid diagram and LaTeX rendering inside VS Code (or compatible editor) editor tabs. Standard Markdown syntax characters (`**`, `##`, `[]()`, etc.) are replaced with their visual equivalents as you write.
+
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/asnotes-inline-editor-markdown-styling-mermaid-andlatex-rendering.png" alt="Inline Editor Markdown Styling, Mermaid and LaTeX Rendering" style="max-height:400px; margin-top: 10px">
+
+See [Inline Editor Markdown Styling, Mermaid and LaTeX Rendering](https://docs.asnotes.io/inline-markdown-editing-mermaid-and-latex-rendering.html) for further information.
+
+AS Notes includes a built-in inline Markdown editor that renders formatting directly in the text editor, similar to Typora.
 
 **Three-state visibility:**
 
@@ -295,20 +319,7 @@ Bold, italic, strikethrough, headings (H1-H6), inline code, links, images, block
 
 See [Settings](#settings) for the full list of inline editor settings.
 
-> Based on [markdown-inline-editor-vscode](https://github.com/SeardnaSchmid/markdown-inline-editor-vscode) by SeardnaSchmid (MIT licence).
-
-## AS Notes Pro Features
-
-A **Pro licence** unlocks premium features. When a valid key is active the status bar shows **AS Notes (Pro)**.
-
-To obtain a licence key, visit [asnotes.io](https://www.asnotes.io/pricing)
-
-**Entering your licence key:**
-
-- Run **AS Notes: Enter Licence Key** from the Command Palette (`Ctrl+Shift+P`) — the quickest way.
-- Or open VS Code Settings (`Ctrl+,`), search for `as-notes.licenceKey`, and paste your key there.
-
-### Templates
+### Templates (Pro)
 
 Create reusable note templates as markdown files in a dedicated templates folder (default: `templates/`). Insert them anywhere via the `/Template` slash command.
 
@@ -340,11 +351,7 @@ All table operations in the slash command menu (`/`) are Pro features. Free user
 
 See [Slash Commands](#slash-commands) for the full list of table commands.
 
-### Create Note
-
-Run **AS Notes: Create Note** from the Command Palette to create a new note. You will be prompted for a title and the file is created in the configured notes folder (default: `notes/`).
-
-### Encrypted notes
+### Encrypted notes (Pro)
 
 Pro users can store sensitive notes in encrypted files. Any file with the `.enc.md` extension is treated as an encrypted note - it is excluded from the search index and never read as plain text by the extension.
 
@@ -372,9 +379,17 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 - `AS Notes: Encrypt Current Note` - encrypt the active `.enc.md` file (reads unsaved editor content)
 - `AS Notes: Decrypt Current Note` - decrypt the active `.enc.md` file (reads from disk)
 
-## VS Code Marketplace
+### Outliner Mode
 
-[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
+Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `-` and custom keybindings keep you in flow:
+
+| Key | Action |
+|---|---|
+| **Enter** | Inserts a new bullet at the same indentation. Todo lines (`- [ ]`) continue as unchecked todos. |
+| **Tab** | Indents the bullet one level (capped at one level deeper than the bullet above). |
+| **Shift+Tab** | Outdents the bullet one level. |
+| **Ctrl+Shift+Enter** | Cycles: plain bullet → `- [ ]` → `- [x]` → plain bullet. |
+| **Ctrl+V / Cmd+V** | Multi-line paste: each clipboard line becomes a separate bullet. |
 
 ## Getting started
 
@@ -440,365 +455,7 @@ Edit `.asnotesignore` at any time. AS Notes watches the file and automatically r
 
 > **Note:** `.asnotesignore` is a user-editable, version-controlled file. AS Notes will never overwrite it after initial creation.
 
-## Features
-
-### Wikilink highlighting
-
-Every `[[wikilink]]` in a markdown file is highlighted in blue. When your cursor is inside a link, that specific link is highlighted with a brighter blue, bold, and underlined - so you always know which link you're about to interact with.
-
-### Nested wikilinks
-
-Links can contain other links:
-
-```markdown
-[[Specific [[Topic]] Details]]
-[[Specific [[[[Topic]] Variant]] Details]]
-```
-
-This creates **three** navigable targets:
-
-| You click on... | You navigate to... |
-|---|---|
-| `[[Topic]]` | `Topic.md` |
-| `[[Specific` or `Details]]` (the outer portions) | `Specific [[Topic]] Details.md` |
-| `[[[[Topic]] Variant]]` (the outer portions) | `[[Topic]] Variant.md` |
-
-Nesting works to arbitrary depth. The extension always identifies the innermost link under your cursor for highlighting, hover, and click targets.
-
-### Click navigation
-
-**Ctrl+Click** (Cmd+Click on macOS) on any wikilink to open the target `.md` file. Links resolve globally across the workspace (see [Subfolder link resolution](#subfolder-link-resolution)).
-
-### Auto-create missing pages
-
-Navigating to a page that doesn't exist creates it automatically in the configured notes folder (default: `notes/`). You can write forward-references before the target page exists.
-
-When `as-notes.createNotesInCurrentDirectory` is enabled, new pages are created in the current editing file's directory instead, unless the source file is in the journal folder (in which case the notes folder is always used).
-
-### Hover tooltips
-
-Hover over any wikilink to see:
-
-- The target filename (e.g. `My Page.md`)
-- Whether the file already exists or will be created on click
-- The number of backlinks (other pages that link to this target)
-
-### Link rename synchronisation
-
-When you edit a wikilink's text and move your cursor away (or switch files), AS Notes detects the change and offers to:
-
-1. **Rename the corresponding `.md` file** (if it exists)
-2. **Update every matching link** across all markdown files in the workspace
-
-A single confirmation dialog covers all affected nesting levels. For example, editing `[[Inner]]` inside `[[Outer [[Inner]] text]]` offers to rename both the inner and outer pages.
-
-You can decline - the link text change is kept but files and other links are left untouched.
-
-### Case-insensitive file matching
-
-`[[my page]]` resolves to `My Page.md` regardless of OS. On case-sensitive filesystems (Linux), a directory scan finds the match. On Windows and macOS the filesystem handles it natively.
-
-### Filename sanitisation
-
-Invalid filename characters (`/ ? < > \ : * | "`) are replaced with `_`:
-
-```markdown
-[[What is 1/2 + 1/4?]]  →  What is 1_2 + 1_4_.md
-```
-
-### Page aliases
-
-Define alternative names for a page using YAML front matter at the top of any markdown file:
-
-```yaml
 ---
-aliases:
-  - Short Name
-  - Another Name
----
-```
-
-Or inline array style:
-
-```yaml
----
-aliases: [Short Name, Another Name]
----
-```
-
-Linking to `[[Short Name]]` or `[[Another Name]]` navigates to the page that declares those aliases - no extra file is created.
-
-- **Hover tooltips** show alias resolution: `Short Name.md → ActualPage.md`
-- **Rename tracking** is alias-aware - editing an alias link offers to update front matter and all matching references
-- **Backlink counts** include both direct and alias references
-- Alias values are plain strings; accidental `[[` / `]]` brackets are stripped automatically
-
-### Subfolder link resolution
-
-Wikilinks resolve globally across the workspace, not just in the current directory. The extension uses the persistent index to find matching files anywhere in the folder tree.
-
-**Resolution order:**
-
-1. **Direct filename match** - `[[My Page]]` finds `My Page.md` anywhere in the workspace
-2. **Alias match** - if no file matches, check page aliases
-3. **Auto-create** - if nothing matches, create the file in the same directory as the source
-
-**Disambiguation** - when multiple files share the same name (e.g. `notes/Topic.md` and `archive/Topic.md`):
-
-1. A file in the **same directory** as the source always wins
-2. Otherwise, the **closest folder** is preferred (measured by directory distance)
-
-### Wikilink autocomplete
-
-Type `[[` in any markdown file to trigger autocomplete, listing all indexed pages and aliases. The list filters as you type.
-
-- **Page suggestions** show the page name (without `.md`), with folder paths for disambiguation when names collide
-- **Alias suggestions** show the alias with an arrow to the canonical page (e.g. `→ ActualPage`)
-- **Auto-close** - selecting a suggestion inserts the name and appends `]]`
-- **Nested wikilinks** - `[[` inside an unclosed `[[...` starts a new autocompletion for the inner link
-- Completions are **suppressed inside front matter** blocks
-
-### Persistent index
-
-AS Notes maintains a SQLite database (`.asnotes/index.db`) that indexes all markdown files in the workspace. The index tracks:
-
-- **Pages** - file paths, filenames, titles (extracted from the first `# heading`)
-- **Links** - every wikilink in every file, with line, column, nesting depth, and parent references
-- **Aliases** - alternative names declared in YAML front matter, with sanitised filenames
-- **Backlinks** - reverse lookups for hover tooltips (including alias references)
-
-The index is kept up-to-date automatically:
-
-- On file save, create, delete, or rename
-- On editor switch (captures unsaved edits)
-- Via a configurable periodic background scan
-
-### Todo toggle
-
-Press **Ctrl+Shift+Enter** (Cmd+Shift+Enter on macOS) on any line in a markdown file to cycle through todo states:
-
-| Current state | After toggle |
-|---|---|
-| `buy milk` | `- [ ] buy milk` |
-| `- [ ] buy milk` | `- [x] buy milk` |
-| `- [x] buy milk` | `buy milk` |
-
-- **List-aware:** `- some text` becomes `- [ ] some text` (no re-wrapping)
-- **Indentation preserved:** works correctly on indented/nested lines
-- **Multi-cursor:** each cursor's line is toggled independently
-- **Configurable keybinding:** search for "AS Notes: Toggle Todo" in **Keyboard Shortcuts** (`Ctrl+K Ctrl+S`)
-
-### Tasks panel
-
-The **AS Notes Tasks** panel appears in the Explorer sidebar when the workspace is initialised. It provides a tree view of all todo items across your markdown files, grouped by page.
-
-- **Show TODO only** (default: on) - filters the list to show only unchecked (`- [ ]`) tasks. Toggle this with the filter icon in the panel title bar or via the **AS Notes: Toggle Show TODO Only** command.
-- **Click to navigate** - clicking a task opens the file and scrolls to the exact line.
-- **Inline toggle** - each task has a check button that toggles its done/todo state directly from the panel, without stealing focus from your active editor.
-- **Keyboard shortcut** - press `Ctrl+Alt+T` (Cmd+Alt+T on macOS) to toggle the task panel's visibility.
-- **Live sync** - the panel refreshes automatically on file save, edit, create, delete, rename, todo toggle, and periodic background scans.
-
-### Backlinks panel
-
-The **Backlinks** panel shows all incoming links to a target page. Open it with `Ctrl+Alt+B` (Cmd+Alt+B on macOS) for the active file, or right-click any wikilink and choose **"View Backlinks"** to see backlinks for that specific page (including forward references to pages that don't exist yet).
-
-Every backlink is displayed as a **chain** - the full outline context path from root to the link. A standalone mention (with no outline nesting) is simply a chain of length 1.
-
-#### View modes
-
-The panel supports two view modes, toggled via a button in the panel header:
-
-- **Flat by page** (default) - all backlink instances sorted alphabetically by source page name. Gives a linear timeline view where journal files sort chronologically.
-- **Grouped by chain** - backlinks grouped by their chain pattern (the sequence of page names), with collapsible headers. Useful for concept-based exploration.
-
-The default mode is configured via `as-notes.backlinkGroupByChain` (default `false`).
-
-A separate toggle controls **context verbosity** - compact (single-line, truncated) or wrapped (full text visible). Default configured via `as-notes.backlinkWrapContext` (default `false`).
-
-#### Chain-first display
-
-- **Pattern grouping** - backlinks are grouped by their chain pattern (e.g. all `[[Project]] → [[Tasks]] → [[NGINX]]` from different files appear in one group).
-- **Standalone mentions** - direct `[[wikilink]]` references appear as single-link chains, sorted first.
-- **Outline context** - if a wikilink is indented below another wikilink, the full hierarchy is shown as a chain (e.g. `Page A → Page B → Page C`), with each link clickable.
-- **Per-link line numbers** - each chain link shows its line number (e.g. `[L12]`) for precise navigation.
-- **Line context** - each chain instance shows the surrounding line text with the wikilink highlighted, giving immediate context without opening the file.
-- **Case-insensitive grouping** - `[[server]]` and `[[Server]]` produce the same chain pattern.
-
-#### Context menu - View Backlinks
-
-Right-click any wikilink in the editor to open backlinks for that specific page:
-
-- Works with aliases - if the wikilink targets an alias, backlinks for the canonical page are shown.
-- Works with forward references - pages that don't exist yet still show any incoming links.
-
----
-
-**Common features:**
-
-- **Alias-aware** - includes links that target the page via its aliases, not just direct filename references.
-- **Live sync** - the panel auto-updates when you switch files, save, or when the index changes.
-- **Editor-side display** - opens beside your active editor, giving you a spacious view of backlink context.
-- **Collapsible groups** - click a chain group header to expand or collapse its instances.
-
-### Daily journal
-
-Press **Ctrl+Alt+J** (Cmd+Alt+J on macOS) to create or open today's daily journal. The extension creates a dated markdown file in a dedicated journal folder - one file per day.
-
-- **Filename format:** `YYYY-MM-DD.md` (e.g. `2026-03-02.md`)
-- **Journal folder:** defaults to `journals/` (configurable via `as-notes.journalFolder`)
-- **Template-based:** new files are created from `Journal.md` in the templates folder (`templates/` by default). All template placeholders are supported. Edit `Journal.md` to customise future pages.
-- **Auto-setup:** the journal folder and default `Journal.md` template are created on workspace initialisation
-- **Instant indexing:** new journal files are indexed immediately for wikilink completion and backlinks
-- **Idempotent:** pressing the shortcut again on the same day opens the existing file
-
-> **Migrating from an earlier version or another PKMS?** If you have existing journal files in the `YYYY_MM_DD.md` format (e.g. from Logseq), run the command `AS Notes: DANGER (Back up first): Rename 'YYYY_MM_DD.md' journal files to 'YYYY-MM-DD.md' format` from the command palette (`Ctrl+Shift+P`) to batch-rename them.
-
-### Calendar
-
-The **Calendar** panel appears in the AS Notes sidebar, showing a month grid for quick journal navigation.
-
-- **Month view** - displays the current month on activation, with Monday as the start of the week
-- **Today highlight** - the current day is visually prominent (accent colour circle)
-- **Journal indicators** - days with existing journal files show a small green dot beneath the date
-- **Click to open** - click any day to open (or create) the daily journal for that date, including future dates for pre-planning
-- **Month navigation** - arrow buttons step through months
-- **Keyboard shortcut** - press `Ctrl+Alt+C` (Cmd+Alt+C on macOS) to focus the calendar panel
-- **Live sync** - the dot indicators update automatically when journal files are created, deleted, or renamed
-
-### Kanban board
-
-The **AS Notes Kanban** sidebar and editor panel let you manage work visually with cards organised into lanes.
-
-#### Boards
-
-A workspace can contain any number of named boards, stored as plain files in a `kanban/` directory at the AS Notes root. Each board has its own lanes and set of cards.
-
-- **Create a board** — run **AS Notes: Create Kanban Board** from the Command Palette and enter a name. The first board is selected automatically on activation.
-- **Switch board** — type in the board-switcher field in the sidebar to filter and select from existing boards. The editor panel opens automatically.
-- **Rename board** — click **Rename** in the sidebar board header, or run **AS Notes: Rename Kanban Board**.
-- **Delete board** — click **Delete** in the sidebar board header, or run **AS Notes: Delete Kanban Board**. Requires confirmation; all cards and assets are removed.
-
-#### Lanes
-
-Each board starts with three lanes: **TODO**, **DOING**, and **DONE**. TODO and DONE are protected and cannot be removed or renamed.
-
-In the editor panel:
-
-- **Add lane** — click **+ Lane** in the board header.
-- **Rename lane** — click the pencil icon on any non-protected lane header.
-- **Remove lane** — click the × button; if the lane contains cards a confirmation is shown and cards are deleted along with it.
-- **Reorder lanes** — drag a lane header to a new position.
-
-#### Cards
-
-Cards are the primary unit of work. Each card is stored as a **Markdown file** with YAML front-matter for structured fields (title, lane, priority, assignee, labels, due date) and a Markdown body for free-form description. This means every card is a readable `.md` file you can open, edit, and diff with standard tools.
-
-- **Create card** — click **+ Card** in any lane, or run **AS Notes: New Kanban Card**.
-- **Move card** — drag a card between lanes, or use the lane drop-down in the card editor.
-- **Open card editor** — click a card to open an inline modal with all fields editable.
-- **Delete card** — click the trash icon in the card editor.
-- **Open card file** — click the **Open File** button in the card editor to open the Markdown file directly.
-
-**Priority levels:** P1 · P2 · P3 · P4 · P5 · none
-
-#### Entries (comments)
-
-Each card has a log of timestamped entries. Type in the entry field at the bottom of the card modal and press **Add Entry** (or **Ctrl+Enter**). Entries show the author name (optional) and date in reverse-chronological order.
-
-#### Assets
-
-Files can be attached to a card. In the card editor, drag and drop a file onto the attachment area, or click **Add Files**. Images render as thumbnails; other files show as named links. Clicking a file opens it in VS Code. Assets are stored in `kanban/<board>/assets/<card-id>/`.
-
-A size warning is shown for files exceeding `as-notes.kanbanAssetSizeWarningMB` (default: 10 MB).
-
-#### Storage format
-
-All kanban data is plain-text, version-control friendly, and human-readable. Board configuration uses YAML; cards are Markdown files with YAML front-matter:
-
-```
-kanban/
-  <board-slug>/
-    board.yaml              ← board name, lanes, users, labels
-    card_YYYYMMDD_HHmmssfff_<id>_<slug>.md   ← card (front-matter + body)
-    assets/
-      <card-id>/
-        <filename>
-```
-
-A typical card file looks like:
-
-```markdown
----
-title: Implement search
-lane: doing
-priority: p2
-assignee: gareth
-labels:
-  - backend
-  - v2
-dueDate: "2026-03-20"
-created: "2026-03-12T10:00:00.000Z"
-updated: "2026-03-13T09:15:00.000Z"
----
-Acceptance criteria:
-- Full-text index across all notes
-- Results ranked by relevance
-
-## entry 2026-03-13T09:00:00.000Z
-Started on the indexing module today.
-```
-
-Front-matter holds the structured fields; the Markdown body is the card description. Entries (timestamped comments) are appended as `## entry <ISO-timestamp>` sections, keeping the entire card history in one diffable file.
-
-#### Commands
-
-| Command | Description |
-|---|---|
-| **AS Notes: Open Kanban Board** | Open the editor panel for the current board |
-| **AS Notes: New Kanban Card** | Open the editor panel with the create-card modal pre-opened |
-| **AS Notes: Switch Kanban Board** | Switch to a board by slug (used internally by the sidebar) |
-| **AS Notes: Select Kanban Board** | Pick a board from a quick-pick list |
-| **AS Notes: Create Kanban Board** | Create a new board |
-| **AS Notes: Rename Kanban Board** | Rename the current board |
-| **AS Notes: Delete Kanban Board** | Delete the current board and all its data |
-| **AS Notes: Convert Task to Kanban Card** | Mark the current task done and create a Kanban card from it *(Pro)* |
-
-## Settings
-
-| Setting | Default | Description |
-|---|---|---|
-| `as-notes.rootDirectory` | *(empty)* | Relative path from the workspace root to the AS Notes root directory (e.g. `docs` or `notes`). Leave empty to use the workspace root. All AS Notes data (`.asnotes/`, journals, templates, notes, kanban, `.asnotesignore`) lives within this directory. See [Using AS Notes in a subdirectory](#using-as-notes-in-a-subdirectory) below. |
-| `as-notes.periodicScanInterval` | `300` | Seconds between automatic background scans for file changes. Set to `0` to disable. Minimum: `30`. |
-| `as-notes.journalFolder` | `journals` | Folder for daily journal files, relative to the AS Notes root directory. |
-| `as-notes.notesFolder` | `notes` | Folder for new notes, relative to the AS Notes root directory. Used when creating pages via wikilink navigation and the Create Note / Create Encrypted Note commands. |
-| `as-notes.createNotesInCurrentDirectory` | `false` | When enabled, new notes created via wikilink navigation are placed in the current editing file's directory instead of the notes folder. Ignored when the source file is in the journal folder. |
-| `as-notes.templateFolder` | `templates` | Folder for note templates, relative to the AS Notes root directory. Templates are markdown files inserted via the `/Template` slash command. |
-| `as-notes.licenceKey` | *(empty)* | AS Notes Pro licence key (format: `ASNO-XXXX-XXXX-XXXX-XXXX`). Enter via **AS Notes: Enter Licence Key** in the Command Palette or directly in Settings. Scope: machine (not synced). |
-| `as-notes.enableLogging` | `false` | Enable diagnostic logging to `.asnotes/logs/`. Rolling 10 MB files, max 5. Requires reload after changing. Also activated by setting the `AS_NOTES_DEBUG=1` environment variable. |
-
-## Supported file types
-
-The extension activates for files with `.md` and `.markdown` extensions.
-
-## Wikilink syntax
-
-A wikilink is any text enclosed in double square brackets:
-
-```markdown
-See [[Page Name]] for details.
-```
-
-The text between the brackets becomes both the display text and the page name. The target file is `Page Name.md` in the same directory.
-
-### Nesting rules
-
-Wikilinks can be nested by adding more bracket pairs:
-
-```markdown
-[[Outer [[Inner]] text]]
-```
-
-The parser uses a stack-based bracket matching algorithm. Each pair of `[[` and `]]` that balances correctly forms a valid wikilink. See [docs/TECHNICAL.md](docs/TECHNICAL.md) for a detailed explanation of the parsing algorithm and edge cases.
 
 ## Troubleshooting
 
@@ -841,7 +498,7 @@ npm test         # Run unit tests
 npm run lint     # Type-check
 ```
 
-### HTML Conversion
+### Publishing to HTML from AS Notes (HTML Conversion)
 
 The converter is published as an npm package:
 
@@ -849,88 +506,7 @@ The converter is published as an npm package:
 npx asnotes-publish --config ./asnotes-publish.json
 ```
 
-For development from source:
-
-```bash
-cd publish
-npm install
-npm run build
-npm run convert -- --input ../docs-src/pages --output ../docs --default-public
-```
-
-The conversion:
-
-- Scans the input directory recursively for `.md` files
-- Resolves `[[wikilinks]]` to relative `.html` links
-- Generates a sidebar `<nav>` on each page (docs and blog layouts)
-- Filters pages by `public: true` front matter (or all pages with `--default-public`)
-- Always excludes `.enc.md` (encrypted) files from output
-- Creates placeholder pages for missing wikilink targets
-- Wipes the output directory before each run
-- Generates `sitemap.xml` and `feed.xml`
-
-**Config file** (recommended):
-
-Create `asnotes-publish.json` in your notes root:
-
-```json
-{
-    "inputDir": "./pages",
-    "outputDir": "../docs",
-    "defaultPublic": true,
-    "layout": "docs",
-    "theme": "default",
-    "baseUrl": "",
-    "includes": "./includes"
-}
-```
-
-Then run with `--config`:
-
-```bash
-npm run convert -- --config ../asnotes-publish.json
-```
-
-**Layouts:**
-
-| Layout | Description |
-|---|---|
-| `docs` (default) | Sidebar navigation + content area with TOC |
-| `blog` | Sidebar navigation + narrower centered content + date metadata |
-| `minimal` | Single-column, no navigation |
-
-Custom layouts can be placed in the includes directory as `{layoutName}.html` with `{{content}}`, `{{nav}}`, `{{toc}}`, `{{title}}`, `{{header}}`, `{{footer}}`, `{{stylesheets}}`, `{{meta}}`, `{{date}}`, `{{base-url}}` tokens.
-
-**Themes:**
-
-| Theme | Description |
-|---|---|
-| `default` | Light theme with CSS Grid sidebar layout |
-| `dark` | Dark theme with CSS Grid sidebar layout |
-
-Both themes output formatted, human-editable CSS (`theme-{name}.css`). They use a 220px sidebar with sticky positioning, responsive collapse to single-column below 700px.
-
-**CLI flags:**
-
-| Flag | Description |
-|---|---|
-| `--config <path>` | Load settings from a publish config JSON file |
-| `--input <dir>` | Input directory containing `.md` files |
-| `--output <dir>` | Output directory for generated HTML |
-| `--layout <name>` | Layout template: `docs`, `blog`, `minimal` (default: `docs`) |
-| `--layouts <path>` | Directory containing editable layout templates |
-| `--theme <name>` | Built-in CSS theme: `default`, `dark` |
-| `--includes <path>` | Directory for custom headers and footers |
-| `--stylesheet <url>` | Additional stylesheet (repeatable). CDN URLs or relative paths |
-| `--asset <file>` | Copy a local file into the output directory (repeatable) |
-| `--base-url <path>` | Base URL prefix for all links |
-| `--default-public` | Publish all pages unless `public: false` |
-| `--default-assets` | Copy all assets unless `assets: false` |
-| `--retina` | Enable retina image sizing (auto-sets `width` to half intrinsic dimensions) |
-| `--include-drafts` | Include pages with `draft: true` |
-| `--exclude <dirname>` | Exclude directories from scanning (repeatable) |
-
-In CI, the `build-docs` job runs the same steps automatically on push/PR to `main` (see `.github/workflows/ci.yml`).
+See [Publishing a Static Site](https://docs.asnotes.io/publishing-a-static-site.html) for full documenation
 
 ### Debugging
 

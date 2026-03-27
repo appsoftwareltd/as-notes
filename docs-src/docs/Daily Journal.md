@@ -52,3 +52,15 @@ Because journal filenames follow a consistent `YYYY-MM-DD` pattern, the [[Backli
 ## Inserting Today's Date as a Wikilink
 
 You can also insert a wikilink for today's date anywhere in your notes using the [[Slash Commands]] menu — type `/` and choose **Today**.
+
+## Calendar
+
+The **Calendar** panel appears in the AS Notes sidebar, showing a month grid for quick journal navigation.
+
+- **Month view** - displays the current month on activation, with Monday as the start of the week
+- **Today highlight** - the current day is visually prominent (accent colour circle)
+- **Journal indicators** - days with existing journal files show a small green dot beneath the date
+- **Click to open** - click any day to open (or create) the daily journal for that date, including future dates for pre-planning
+- **Month navigation** - arrow buttons step through months
+- **Keyboard shortcut** - press `Ctrl+Alt+C` (Cmd+Alt+C on macOS) to focus the calendar panel
+- **Live sync** - the dot indicators update automatically when journal files are created, deleted, or renamed
