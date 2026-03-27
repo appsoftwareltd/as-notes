@@ -4,6 +4,8 @@ import MarkdownIt from 'markdown-it';
 import { WikilinkService, wikilinkPlugin, FrontMatterService, type FrontMatterFields } from 'as-notes-common';
 import { FileResolver, slugify, type PageEntry } from './FileResolver.js';
 import { taskTagPlugin } from './TaskTagPlugin.js';
+import { mermaidPlugin } from './MermaidPlugin.js';
+import { mathPlugin } from './MathPlugin.js';
 
 interface PublishConfig {
     inputDir?: string;
@@ -990,6 +992,8 @@ function main(): void {
             resolver: resolver.createResolverFn(),
         });
         pageMd.use(taskTagPlugin);
+        pageMd.use(mermaidPlugin);
+        pageMd.use(mathPlugin);
         addHeadingIds(pageMd);
         const pageRelPath = pageSourcePath.get(pageName) || pageName + '.md';
         const pageDir = path.dirname(path.join(input, pageRelPath));
@@ -1037,9 +1041,18 @@ function main(): void {
         // Generate TOC (Iteration 6D)
         const toc = generateToc(htmlBody);
 
+        // Detect mermaid/math content for script/CSS injection
+        const hasMermaid = htmlBody.includes('<pre class="mermaid">');
+        const hasMath = htmlBody.includes('class="katex"');
+
+        // Per-page stylesheets: add KaTeX CSS if math is present
+        const pageStylesheets = hasMath
+            ? [...resolvedStylesheets, 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css']
+            : resolvedStylesheets;
+
         const nav = customNav ?? buildNav(navPages, pageName, baseUrl, navMd);
-        const html = wrapHtml(title, nav, htmlBody, {
-            stylesheets: resolvedStylesheets,
+        let html = wrapHtml(title, nav, htmlBody, {
+            stylesheets: pageStylesheets,
             description: meta.fields.description,
             date: meta.fields.date,
             toc,
@@ -1048,6 +1061,16 @@ function main(): void {
             includesDir: resolvedIncludesDir,
             baseUrl,
         });
+
+        // Inject mermaid script before </body> if page has mermaid diagrams
+        if (hasMermaid) {
+            const mermaidTheme = theme === 'dark' ? 'dark' : 'default';
+            const mermaidScript = `<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.5/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });
+</script>`;
+            html = html.replace('</body>', mermaidScript + '\n</body>');
+        }
 
         fs.writeFileSync(outputPath, html, 'utf-8');
         console.log(`  ${pageName}.md -> ${slugify(pageName)}.html`);
@@ -1421,6 +1444,15 @@ img {
     font-style: italic;
 }
 
+/* -- Mermaid diagrams --------------------------------------------- */
+
+pre.mermaid {
+    background: none;
+    border: none;
+    text-align: center;
+    padding: 16px 0;
+}
+
 /* -- Blog layout (single column, nav below content) --------------- */
 
 body[data-layout="blog"] {
@@ -1782,6 +1814,15 @@ img {
 .missing-page {
     color: #f85149;
     font-style: italic;
+}
+
+/* -- Mermaid diagrams --------------------------------------------- */
+
+pre.mermaid {
+    background: none;
+    border: none;
+    text-align: center;
+    padding: 16px 0;
 }
 
 /* -- Blog layout (single column, nav below content) --------------- */

@@ -39,6 +39,7 @@
         "@types/node": "^20.11.0",
         "as-notes-common": "file:../common",
         "esbuild": "^0.24.0",
+        "katex": "^0.16.11",
         "markdown-it": "^14.1.1",
         "typescript": "^5.7.0",
         "vitest": "^3.0.0"
