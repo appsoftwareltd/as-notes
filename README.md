@@ -65,6 +65,8 @@ Some key benefits of managing notes in VS Code in addition to those that AS Note
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/wikilinks.png" alt="AS Notes backlinks wikilinks" style="max-height:200px; margin-top: 10px">
 
+See [Wikilinks documentation](https://docs.asnotes.io/wikilinks.html) for further information on wikilinks.
+
 ### Task Management
 
 Toggle markdown TODOs with `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS):
@@ -225,11 +227,17 @@ The setting is applied automatically when AS Notes initialises or the value chan
 
 - **Drag position indicator:** Hold **Shift** while dragging a file to see a cursor position guide before releasing - useful for placing the link precisely within your text.
 
-### Inline Editor Markdown Styling, Mermaid and LaTeX Rendering
+### Inline Editor Markdown Styling, Mermaid and LaTeX Rendering (Pro)
+
+AS Notes Pro includes optional inline markdown styling, Mermaid diagram and LaTeX rendering inside VS Code (or compatible editor) editor tabs.
+
+<img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/asnotes-inline-editor-markdown-styling-mermaid-andlatex-rendering.png" alt="Inline Editor Markdown Styling, Mermaid and LaTeX Rendering" style="max-height:400px; margin-top: 10px">
+
+See [Inline Editor Markdown Styling, Mermaid and LaTeX Rendering](https://docs.asnotes.io/inline-markdown-editing-mermaid-and-latex-rendering.html) for further information.
 
 ### Image Hover Preview
 
-Hover over any image link in a markdown file to see a preview of the image inline. This is provided by VS Code's built-in markdown extension and requires no configuration - it works with both standard `![alt](path)` links and dropped/pasted images.
+Hover over any image link in a markdown file to see a preview of the image inline. The standard implementation is provided by VS Code's built-in markdown extension and requires no configuration - it works with both standard `![alt](path)` links and dropped/pasted images. An enhanced image display is included with inline markdown editor mode.
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/image-preview.png" alt="AS Notes Image Preview" style="max-height:300px; margin-top: 10px; margin-bottom: 10px;">
 

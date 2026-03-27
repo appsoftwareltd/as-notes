@@ -1,4 +1,4 @@
-# Inline Editor
+# Inline Markdown Editing, Mermaid and LaTeX Rendering
 
 AS Notes includes a built-in inline Markdown editor that renders formatting directly in the text editor, similar to Typora. Standard Markdown syntax characters are replaced with their visual equivalents as you write, giving you a clean reading experience without switching between edit and preview modes.
 
