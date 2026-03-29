@@ -4,9 +4,11 @@ order: 0
 
 # AS Notes
 
-> **This documentation was written and generated using AS Notes. See [[Publishing a Static Site]] for how you can use AS Notes for your docs, including deploying to GitHub Pages**.
+AS Notes brings markdown and [[wikilink]] editing for notes, documentation, blogs and wikis directly into VS Code and compatible editors (e.g. Antigravity, Cursor, Windsurf).
 
-AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS). It brings [[Wikilinks]], backlinks, daily journaling, encrypted notes, and a task panel — all without ever sending your data anywhere.
+**Capture ideas, link concepts, write, and stay focused - without ever leaving your editor.**
+
+> **This documentation was written and generated using AS Notes. See [[Publishing a Static Site]] for how you can use AS Notes for your docs, including deploying to GitHub Pages**.
 
 > **Install:** [https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 
@@ -49,14 +51,13 @@ Using VS Code as your notes app gives you a huge amount for free before you even
 |---|---|
 | [[Slash Commands]] (Tables) | Insert and edit markdown tables directly from the slash menu |
 | [[Encrypted Notes]] | Store sensitive notes in AES-256-GCM encrypted `.enc.md` files |
+| [[Inline Markdown Editing Mermaid and LaTeX Rendering]] | Inline markdown editor styling and presentation including Lermaid diagrams and LaTex math |
 
 Obtain a Pro licence key at [asnotes.io/pricing](https://www.asnotes.io/pricing).
 
-### Task Features
+## Development Roadmap
 
-Task tags help you to organise and prioritise tags:
-
-- [ ] #P1 #W #D-2026-03-11 A very important thing I'm waiting on
+See our [[Development Roadmap]] to see what's coming next.
 
 ## Privacy
 
