@@ -1,12 +1,12 @@
 ﻿---
-order: 14
+order: 100
 ---
 
 # Licence
 
 Elastic License 2.0
 
-URL: https://www.elastic.co/licensing/elastic-license
+URL: <https://www.elastic.co/licensing/elastic-license>
 
 ## Acceptance
 
@@ -98,8 +98,7 @@ case, also for the purposes of your internal business operations.
 
 ---
 
-Copyright (c) 2026 App Software Ltd (https://www.appsoftware.com)
-
+Copyright (c) 2026 App Software Ltd (<https://www.appsoftware.com>)
 
 ## Why Open Source?
 

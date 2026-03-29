@@ -1,8 +1,12 @@
+---
+order: 90
+---
+
 # Development Roadmap
 
 This roadmap outlines the planned development trajectory for AS Notes. Layers are delivered sequentially - a layer begins once its predecessor is complete. Work items within a layer may be developed in parallel.
 
-Updated [[2026-03-29]]
+Last Update: [[2026-03-29]]
 
 ```mermaid
 flowchart TD
