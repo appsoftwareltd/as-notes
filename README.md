@@ -15,6 +15,7 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 |Pro Features | [asnotes.io/pricing](https://www.asnotes.io?attr=src_readme)|
 |Docs | [docs.asnotes.io](https://docs.asnotes.io)|
 |Blog | [blog.asnotes.io](https://blog.asnotes.io)|
+|Roadmap / Project Board| [docs.asnotes.io/development-roadmap](https://docs.asnotes.io/development-roadmap.html) / [github.com](https://github.com/orgs/appsoftwareltd/projects/16)|
 
 ## What is AS Notes?
 
