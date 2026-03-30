@@ -99,6 +99,37 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         return this.pendingEdit?.docKey === docKey;
     }
 
+    /**
+     * Returns true when the pageName change is a nesting or un-nesting
+     * operation rather than a genuine rename.
+     *
+     * Covers two cases:
+     * 1. Full nesting/un-nesting: one pageName contains the other as `[[...]]`
+     *    e.g. `[[A]]` wrapped to `[[[[A]] B]]`, or the reverse.
+     * 2. Partial bracket manipulation: the user is mid-edit adding/removing
+     *    brackets. After stripping leading `[` and trailing `]` from both
+     *    names, the core page name is identical.
+     *    e.g. pageName "Demo" vs "[Demo" from intermediate `[[[Demo]]`.
+     */
+    static isNestingChange(oldPageName: string, newPageName: string): boolean {
+        // Full nesting/un-nesting
+        if (newPageName.includes(`[[${oldPageName}]]`) ||
+            oldPageName.includes(`[[${newPageName}]]`)) {
+            return true;
+        }
+
+        // Partial bracket manipulation: same core name after stripping
+        // leading [ and trailing ] characters
+        const strip = (s: string) => s.replace(/^\[+/, '').replace(/\]+$/, '');
+        const strippedOld = strip(oldPageName);
+        const strippedNew = strip(newPageName);
+        if (strippedOld.length > 0 && strippedOld === strippedNew) {
+            return true;
+        }
+
+        return false;
+    }
+
     // ── Change detection ───────────────────────────────────────────────
 
     private onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
@@ -283,6 +314,11 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             const oldLink = oldMap.get(key);
 
             if (oldLink && oldLink.page_name !== curr.pageName) {
+                // Skip nesting/un-nesting: wrapping or unwrapping a wikilink
+                // inside another is not a rename.
+                if (WikilinkRenameTracker.isNestingChange(oldLink.page_name, curr.pageName)) {
+                    continue;
+                }
                 renames.push({
                     oldPageName: oldLink.page_name,
                     newPageName: curr.pageName,
@@ -306,7 +342,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             (b.endPosition - b.startPosition) - (a.endPosition - a.startPosition),
         );
 
-        await this.promptAndPerformRenames(document, renames);
+        await this.promptAndPerformRenames(document, renames, relativePath);
     }
 
     // ── Rename execution ───────────────────────────────────────────────
@@ -322,6 +358,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     private async promptAndPerformRenames(
         document: vscode.TextDocument,
         renames: DetectedRename[],
+        relativePath: string,
     ): Promise<void> {
         // Classify each rename as alias or direct
         interface ClassifiedRename extends DetectedRename {
@@ -366,7 +403,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 const oldFileExists = await this.fileService.fileExists(oldUri);
 
                 if (oldFileExists) {
-                    const newUri = this.fileService.resolveTargetUri(document.uri, newFileName);
+                    const newUri = this.fileService.resolveTargetUri(oldUri, newFileName);
                     fileRenames.push({ oldUri, newUri, label: `${oldFileName}.md → ${newFileName}.md` });
                     renameDescriptions.push(`"${oldFileName}.md" → "${newFileName}.md"`);
                 } else {
@@ -381,6 +418,9 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
         const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
         if (choice !== 'Yes') {
+            // Re-index the document so any new/changed wikilinks are captured
+            const filename = relativePath.split('/').pop() ?? '';
+            this.indexService.indexFileContent(relativePath, filename, document.getText(), Date.now());
             return;
         }
 
