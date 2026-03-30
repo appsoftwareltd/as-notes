@@ -1592,7 +1592,16 @@ If `resolveAlias(oldPageName)` returns the same page whose filename is `oldPageN
 
 **Workspace-wide link update:**
 
-`updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and creates a `WorkspaceEdit` that replaces every `[[oldPageName]]` with `[[newPageName]]`. After applying the edit, it saves modified files.
+`updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and now uses a split write strategy:
+
+1. **Already-open documents** are updated through a `WorkspaceEdit` so their live editor buffers stay authoritative.
+2. **Closed documents** are rewritten directly on disk using `workspace.fs.writeFile()` after a raw `fs.readFile()` pass.
+
+This avoids VS Code opening newly-dirty tabs for files that were closed before the rename, which in turn avoids working-copy save conflicts on those reference files.
+
+**Index-driven candidate narrowing:**
+
+Rename refactors no longer have to discover rewrite candidates by scanning the entire workspace up front. `IndexService.findPagesLinkingToPageNames(...)` queries the `links` table for distinct source pages whose indexed `page_name` matches one of the renamed targets. `updateLinksInWorkspace()` now accepts those candidate URIs and only opens that bounded set of files when a candidate set is provided. The actual rewrite still parses the real file text before editing, so the index narrows the search space but does not become the edit source of truth.
 
 **Notification progress:**
 
@@ -1631,8 +1640,12 @@ This selection logic is isolated in `WikilinkExplorerMergeService.ts` so the amb
 The user-confirmed refactor work that follows explorer renames is now extracted into `WikilinkExplorerRenameRefactorService.ts`. That helper applies the same notification UX as in-editor renames:
 
 1. Accepted merge operations show `AS Notes: Applying rename updates` while the merge, delete, and target re-index complete.
-2. Accepted workspace-wide reference updates show `AS Notes: Updating wikilink references` while link replacement and stale-scan refresh complete.
+2. Accepted workspace-wide reference updates show `AS Notes: Updating wikilink references` while index-driven candidate rewrite and targeted file re-indexing complete.
 3. Declined explorer prompts do not show progress notifications.
+
+For explorer renames, the old broad `staleScan()` follow-up has been replaced with targeted re-indexing of the files actually edited by the refactor. That removes a second whole-tree pass from the common rename path.
+
+`updateLinksInWorkspace()` no longer auto-saves affected open editors after applying workspace edits. Instead, both the in-editor and explorer rename flows now use `reindexWorkspaceUri(...)`: if an affected file is currently open, it is re-indexed from the live editor buffer via `indexFileContent(...)`; otherwise it falls back to `indexScanner.indexFile(...)`. `WikilinkRenameTracker` still re-indexes the initiating document from `document.getText()` when its URI is stable, and remaps any old source candidate URI to the post-rename or post-merge target before follow-up indexing. Combined with the direct-to-disk rewrite path for closed files, this avoids save conflicts on both open reference files and files that were previously closed, as well as attempts to reopen a source file that has just been renamed or deleted.
 
 ### Re-entrancy guard
 

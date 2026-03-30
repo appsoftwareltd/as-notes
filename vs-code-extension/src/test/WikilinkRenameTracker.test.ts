@@ -41,6 +41,7 @@ vi.mock('vscode', () => {
             fs: {
                 rename: vi.fn().mockResolvedValue(undefined),
                 delete: vi.fn().mockResolvedValue(undefined),
+                readFile: vi.fn().mockResolvedValue(new Uint8Array()),
             },
             applyEdit: vi.fn().mockResolvedValue(true),
             openTextDocument: vi.fn().mockResolvedValue({ getText: () => '', lineCount: 0, lineAt: () => ({ text: '' }) }),
@@ -388,7 +389,7 @@ describe('WikilinkRenameTracker — promptAndPerformRenames', () => {
         );
     });
 
-    it('does not re-index when the user accepts the rename', async () => {
+    it('re-indexes the initiating document buffer when the user accepts the rename', async () => {
         const { tracker, document, indexService } = makeMocks();
 
         // User clicks Yes
@@ -405,9 +406,83 @@ describe('WikilinkRenameTracker — promptAndPerformRenames', () => {
         await (tracker as unknown as { promptAndPerformRenames: Function })
             .promptAndPerformRenames(document, renames, 'referencing.md');
 
-        // On accept, the normal rename flow handles indexing — indexFileContent
-        // should NOT have been called in the decline path
-        expect(indexService.indexFileContent).not.toHaveBeenCalled();
+        expect(indexService.indexFileContent).toHaveBeenCalledWith(
+            '/notes/referencing.md',
+            'referencing.md',
+            '[[NewName]]',
+            expect.any(Number),
+        );
+    });
+
+    it('does not try to re-open the old source URI after the source page itself is renamed', async () => {
+        const oldUri = { fsPath: '/notes/sub/OldName.md', toString: () => 'file:///notes/sub/OldName.md' };
+        const newUri = { fsPath: '/notes/sub/NewName.md', toString: () => 'file:///notes/sub/NewName.md' };
+        vi.mocked(vscode.Uri.joinPath).mockImplementation((base: { fsPath: string }, child: string) => ({
+            fsPath: `${base.fsPath}/${child}`,
+            toString: () => `file://${base.fsPath}/${child}`,
+        }) as never);
+
+        const document = {
+            uri: oldUri,
+            getText: vi.fn(() => '[[NewName]]'),
+            lineCount: 1,
+            lineAt: vi.fn(() => ({ text: '[[NewName]]' })),
+        };
+
+        const fileService = {
+            resolveTargetUri: vi.fn().mockReturnValue(newUri),
+            resolveTargetUriCaseInsensitive: vi.fn().mockImplementation(async (_uri: unknown, pageFileName: string) => {
+                if (pageFileName === 'OldName') {
+                    return { uri: oldUri, viaAlias: false };
+                }
+                return { uri: newUri, viaAlias: false };
+            }),
+            fileExists: vi.fn().mockImplementation(async (uri: unknown) => {
+                const uriStr = (uri as { toString(): string }).toString();
+                return uriStr.includes('OldName');
+            }),
+            resolveNewFileTargetUri: vi.fn(),
+        };
+
+        const indexService = {
+            isOpen: true,
+            getPageByPath: vi.fn().mockReturnValue({ id: 1 }),
+            getLinksForPage: vi.fn().mockReturnValue([]),
+            findPagesLinkingToPageNames: vi.fn().mockReturnValue([{ id: 1, path: 'sub/OldName.md', filename: 'OldName.md', title: 'OldName', mtime: 0, indexed_at: 0 }]),
+            resolveAlias: vi.fn().mockReturnValue(undefined),
+            indexFileContent: vi.fn(),
+            updateRename: vi.fn(),
+            saveToFile: vi.fn(),
+            removePage: vi.fn(),
+            getPageById: vi.fn().mockReturnValue(undefined),
+            updateAliasRename: vi.fn(),
+        };
+
+        const indexScanner = {
+            indexFile: vi.fn().mockResolvedValue(undefined),
+        };
+
+        const tracker = new WikilinkRenameTracker(
+            new WikilinkService(),
+            fileService as never,
+            indexService as never,
+            indexScanner as never,
+            { fsPath: '/notes', toString: () => 'file:///notes' } as never,
+        );
+
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Yes' as never);
+
+        await (tracker as unknown as { promptAndPerformRenames: Function })
+            .promptAndPerformRenames(document, [{
+                oldPageName: 'OldName',
+                newPageName: 'NewName',
+                line: 0,
+                startPosition: 0,
+                endPosition: 11,
+            }], 'sub/OldName.md');
+
+        expect(indexScanner.indexFile).not.toHaveBeenCalledWith(oldUri);
+        expect(indexScanner.indexFile).toHaveBeenCalledWith(newUri);
     });
 
     it('fires onDidDeclineRename when user declines', async () => {
@@ -1008,5 +1083,160 @@ describe('WikilinkRenameTracker — progress notifications', () => {
             .promptAndPerformRenames(document, renames, 'referencing.md');
 
         expect(vscode.window.withProgress).not.toHaveBeenCalled();
+    });
+});
+
+// ── No-save behaviour during merge and alias flows ────────────────────────────
+
+describe('WikilinkRenameTracker — no save() during merge flow', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('does not save the target document after a merge', async () => {
+        const oldUri = { fsPath: '/notes/sub/OldName.md', toString: () => 'file:///notes/sub/OldName.md' };
+        const newUri = { fsPath: '/notes/sub/NewName.md', toString: () => 'file:///notes/sub/NewName.md' };
+        const documentUri = { fsPath: '/notes/referencing.md', toString: () => 'file:///notes/referencing.md' };
+        const document = {
+            uri: documentUri,
+            getText: vi.fn(() => '[[NewName]]'),
+            lineCount: 1,
+            lineAt: vi.fn(() => ({ text: '[[NewName]]' })),
+        };
+
+        const targetSave = vi.fn().mockResolvedValue(true);
+        const sourceSave = vi.fn().mockResolvedValue(true);
+
+        const makeDoc = (content: string, uri: unknown, save: ReturnType<typeof vi.fn>) => ({
+            getText: () => content,
+            lineCount: content.split('\n').length,
+            lineAt: (line: number) => ({
+                text: content.split('\n')[line] ?? '',
+                range: { start: { line, character: 0 }, end: { line, character: (content.split('\n')[line] ?? '').length } },
+            }),
+            uri,
+            save,
+        });
+
+        vi.mocked(vscode.workspace.openTextDocument).mockImplementation(async (uri: unknown) => {
+            const uriStr = typeof uri === 'string' ? uri : (uri as { toString(): string }).toString();
+            if (uriStr.includes('OldName')) {
+                return makeDoc('---\ntitle: Old\n---\n\n# Old', oldUri, sourceSave) as never;
+            }
+            return makeDoc('---\ntitle: New\n---\n\n# New', newUri, targetSave) as never;
+        });
+
+        const tracker = new WikilinkRenameTracker(
+            new WikilinkService(),
+            {
+                resolveTargetUri: vi.fn().mockReturnValue(newUri),
+                resolveTargetUriCaseInsensitive: vi.fn().mockImplementation(async (_uri: unknown, pageFileName: string) => {
+                    if (pageFileName === 'OldName') return { uri: oldUri, viaAlias: false };
+                    return { uri: newUri, viaAlias: false };
+                }),
+                fileExists: vi.fn().mockResolvedValue(true),
+                resolveNewFileTargetUri: vi.fn(),
+            } as never,
+            {
+                isOpen: true,
+                getPageByPath: vi.fn().mockReturnValue({ id: 1 }),
+                getLinksForPage: vi.fn().mockReturnValue([]),
+                resolveAlias: vi.fn().mockReturnValue(undefined),
+                indexFileContent: vi.fn(),
+                updateRename: vi.fn(),
+                saveToFile: vi.fn(),
+                removePage: vi.fn(),
+                getPageById: vi.fn().mockReturnValue(undefined),
+                updateAliasRename: vi.fn(),
+            } as never,
+            { indexFile: vi.fn().mockResolvedValue(undefined) } as never,
+        );
+
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Yes' as never);
+
+        await (tracker as unknown as { promptAndPerformRenames: Function })
+            .promptAndPerformRenames(document, [{
+                oldPageName: 'OldName',
+                newPageName: 'NewName',
+                line: 0,
+                startPosition: 0,
+                endPosition: 11,
+            }], 'referencing.md');
+
+        expect(targetSave).not.toHaveBeenCalled();
+        expect(sourceSave).not.toHaveBeenCalled();
+    });
+});
+
+describe('WikilinkRenameTracker — no save() during alias rename flow', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('does not save the canonical document after an alias front matter update', async () => {
+        const documentUri = { fsPath: '/notes/referencing.md', toString: () => 'file:///notes/referencing.md' };
+        const canonicalUri = { fsPath: '/notes/Canonical.md', toString: () => 'file:///notes/Canonical.md' };
+        const document = {
+            uri: documentUri,
+            getText: vi.fn(() => '[[NewAlias]]'),
+            lineCount: 1,
+            lineAt: vi.fn(() => ({ text: '[[NewAlias]]' })),
+        };
+
+        const canonicalSave = vi.fn().mockResolvedValue(true);
+        const canonicalContent = '---\ntitle: Canonical\naliases:\n  - OldAlias\n---\n\n# Body';
+        vi.mocked(vscode.workspace.openTextDocument).mockResolvedValue({
+            getText: () => canonicalContent,
+            lineCount: canonicalContent.split('\n').length,
+            lineAt: (line: number) => ({
+                text: canonicalContent.split('\n')[line] ?? '',
+                range: {
+                    start: { line, character: 0 },
+                    end: { line, character: (canonicalContent.split('\n')[line] ?? '').length },
+                },
+            }),
+            uri: canonicalUri,
+            save: canonicalSave,
+        } as never);
+
+        const tracker = new WikilinkRenameTracker(
+            new WikilinkService(),
+            {
+                resolveTargetUri: vi.fn(),
+                resolveTargetUriCaseInsensitive: vi.fn(),
+                fileExists: vi.fn().mockResolvedValue(false),
+                resolveNewFileTargetUri: vi.fn(),
+            } as never,
+            {
+                isOpen: true,
+                getPageByPath: vi.fn().mockReturnValue({ id: 1 }),
+                getLinksForPage: vi.fn().mockReturnValue([]),
+                resolveAlias: vi.fn().mockReturnValue({
+                    id: 10,
+                    path: 'Canonical.md',
+                    filename: 'Canonical.md',
+                }),
+                indexFileContent: vi.fn(),
+                updateRename: vi.fn(),
+                saveToFile: vi.fn(),
+                removePage: vi.fn(),
+                getPageById: vi.fn().mockReturnValue(undefined),
+                updateAliasRename: vi.fn(),
+            } as never,
+            { indexFile: vi.fn().mockResolvedValue(undefined) } as never,
+        );
+
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Yes' as never);
+
+        await (tracker as unknown as { promptAndPerformRenames: Function })
+            .promptAndPerformRenames(document, [{
+                oldPageName: 'OldAlias',
+                newPageName: 'NewAlias',
+                line: 0,
+                startPosition: 0,
+                endPosition: 13,
+            }], 'referencing.md');
+
+        expect(canonicalSave).not.toHaveBeenCalled();
     });
 });

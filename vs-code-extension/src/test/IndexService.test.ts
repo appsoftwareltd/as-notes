@@ -788,6 +788,24 @@ describe('IndexService — aliases', () => {
         expect(links[0].page_filename).toBe('New Name.md');
     });
 
+    it('finds distinct pages linking to any of the supplied page names', () => {
+        const sourcePageId = service.upsertPage('notes/Source.md', 'Source.md', 'Source', 1000);
+        const otherPageId = service.upsertPage('notes/Other.md', 'Other.md', 'Other', 1000);
+
+        service.setLinksForPage(sourcePageId, [
+            { page_name: 'OldName', page_filename: 'OldName.md', line: 0, start_col: 0, end_col: 12, context: '[[OldName]]', parent_link_id: null, depth: 0 },
+            { page_name: 'AnotherName', page_filename: 'AnotherName.md', line: 1, start_col: 0, end_col: 16, context: '[[AnotherName]]', parent_link_id: null, depth: 0 },
+        ]);
+
+        service.setLinksForPage(otherPageId, [
+            { page_name: 'OldName', page_filename: 'OldName.md', line: 0, start_col: 0, end_col: 12, context: '[[OldName]]', parent_link_id: null, depth: 0 },
+        ]);
+
+        const pages = service.findPagesLinkingToPageNames(['OldName', 'AnotherName']);
+
+        expect(pages.map(p => p.path).sort()).toEqual(['notes/Other.md', 'notes/Source.md']);
+    });
+
     it('should find pages by filename for subfolder resolution', () => {
         service.indexFileContent('notes/Page.md', 'Page.md', '# Page in notes', 1000);
         service.indexFileContent('archive/Page.md', 'Page.md', '# Page in archive', 1000);

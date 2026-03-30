@@ -8,7 +8,7 @@ import {
     pickUniqueExplorerMergeTarget,
 } from './WikilinkExplorerMergeService.js';
 import { toNotesRelativePath } from './NotesRootService.js';
-import { updateLinksInWorkspace } from './WikilinkRefactorService.js';
+import { reindexWorkspaceUri, updateLinksInWorkspace } from './WikilinkRefactorService.js';
 import { withWikilinkRenameProgress } from './WikilinkRenameProgressService.js';
 
 interface ExplorerRenameFile {
@@ -20,7 +20,7 @@ interface ExplorerRenameRefactorDeps {
     files: ExplorerRenameFile[];
     renameTrackerIsRenaming: boolean;
     wikilinkService: WikilinkService;
-    indexService: Pick<IndexService, 'findPagesByFilename' | 'removePage'>;
+    indexService: Pick<IndexService, 'findPagesByFilename' | 'removePage' | 'findPagesLinkingToPageNames' | 'indexFileContent'>;
     indexScanner: Pick<IndexScanner, 'staleScan' | 'indexFile'>;
     notesRootPath?: string;
     safeSaveToFile: () => boolean;
@@ -95,12 +95,13 @@ export async function handleExplorerRenameRefactors({
                 );
                 edit.replace(targetUri, fullRange, mergedContent);
                 await vscode.workspace.applyEdit(edit);
-                await targetDoc.save();
 
                 progress.report('Refreshing index');
                 await vscode.workspace.fs.delete(newUri);
                 indexService.removePage(newPath);
-                try { await indexScanner.indexFile(targetUri); } catch { /* best effort */ }
+                try {
+                    await reindexWorkspaceUri(targetUri, { indexService, indexScanner, notesRootPath });
+                } catch { /* best effort */ }
                 safeSaveToFile();
             });
         }
@@ -130,11 +131,31 @@ export async function handleExplorerRenameRefactors({
     if (choice !== 'Yes') { return; }
 
     await withWikilinkRenameProgress('AS Notes: Updating wikilink references', async (progress) => {
+        const rootUri = notesRootPath
+            ? vscode.Uri.file(notesRootPath)
+            : vscode.workspace.workspaceFolders?.[0]?.uri;
+        const candidateUris = rootUri
+            ? indexService.findPagesLinkingToPageNames(linkRenames.map(rename => rename.oldPageName))
+                .map(page => vscode.Uri.joinPath(rootUri, page.path))
+            : [];
+
         progress.report('Updating links across workspace');
-        await updateLinksInWorkspace(wikilinkService, linkRenames);
+        const affectedUris = await updateLinksInWorkspace(
+            wikilinkService,
+            linkRenames,
+            candidateUris.length > 0 ? { candidateUris } : undefined,
+        );
 
         progress.report('Refreshing index');
-        try { await indexScanner.staleScan(); } catch { /* best effort */ }
+        for (const uri of affectedUris) {
+            try {
+                await reindexWorkspaceUri(uri, {
+                    indexService,
+                    indexScanner,
+                    notesRootPath,
+                });
+            } catch { /* best effort */ }
+        }
         if (safeSaveToFile()) {
             refreshProviders();
         }

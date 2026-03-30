@@ -8,7 +8,7 @@ This page gets you from zero to a working AS Notes workspace in a few minutes.
 
 ## 1. Install the Extension
 
-Install **AS Notes** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes).
+Install **AS Notes** from [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes) / [Open VSX](https://open-vsx.org/extension/appsoftwareltd/as-notes)
 
 Open VS Code, go to the Extensions view (`Ctrl+Shift+X`), search for **AS Notes**, and click **Install**.
 
@@ -33,9 +33,9 @@ Look for the AS Notes sidebar icon to view Search, Calendar, Kanban Boards and T
 
 ## 4. Write Your First Note
 
-Create a new `.md` file and start writing. Type `[[` anywhere to trigger [[Wikilinks]] autocomplete - a list of all your pages appears immediately.
+Create a new `.md` file and start writing. Type `[[` anywhere to trigger [[Wikilinks]] autocomplete - a list of all your pages appears immediately (unless this is your first page and wikilink, in which case it will be added too the index ready for referencing).
 
-Try adding a task `- [ ] task text` and try toggling the task state from the task management side panel.
+Next, try adding a task `- [ ] task text` (`Ctrl+Shift+Enter` / `Cmd+Shift+Enter`) and try toggling the task state from the task management side panel or by clicking the check box or by cycling the keyboard shortcut.
 
 ## Excluding Files from the Index
 
@@ -62,8 +62,8 @@ If the index ever becomes stale or corrupted, run **AS Notes: Rebuild Index** fr
 
 ## Cleaning the Workspace
 
-If the extension is in a bad state (e.g. persistent errors after a crash), run **AS Notes: Clean Workspace** to remove the `.asnotes/` directory and reset all in-memory state. Your `.asnotesignore` file is preserved. Run **AS Notes: Initialise Workspace** afterwards to start fresh.
+Run **AS Notes: Clean Workspace** to remove the `.asnotes/` directory and reset all in-memory state. Your `.asnotesignore` file is preserved. Run **AS Notes: Initialise Workspace** afterwards to start fresh.
 
 ## Compatibility With Other Tools
 
-AS Notes workspaces are plain markdown files in plain folders - they are compatible with Obsidian and Logseq due to similar file structures. Be aware there are format and behavioural differences, but you can use the same notes folder with multiple tools.
+AS Notes workspaces are plain markdown files in plain folders - they are largely compatible with Obsidian and Logseq due to similar file structures. Be aware there are format and behavioural differences, but you can use the same notes folder with multiple tools.

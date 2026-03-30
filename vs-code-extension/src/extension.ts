@@ -1088,7 +1088,7 @@ async function enterFullMode(
 
     // Rename tracker — backed by index for pre-edit state comparison
     const renameTracker = new WikilinkRenameTracker(
-        wikilinkService, fileService, indexService, indexScanner, nrUri,
+        wikilinkService, fileService, indexService, indexScanner, nrUri, logService,
     );
     fullModeDisposables.push(renameTracker);
     fullModeDisposables.push(
@@ -1980,11 +1980,16 @@ async function enterFullMode(
             completionDebounceHandle = setTimeout(() => {
                 completionDebounceHandle = undefined;
                 const doc = e.document;
+                // Skip re-indexing while a rename operation is in progress.
+                // The rename flow applies workspace edits to multiple files;
+                // re-indexing them mid-operation is wasteful and can interfere
+                // with the rename flow.  refreshIndexAfterRename handles all
+                // re-indexing once the rename completes.
+                if (renameTracker.isRenaming) { return; }
                 // Skip re-indexing while a rename check is pending for this document.
                 // The rename tracker needs the stale index state to detect the change;
                 // refreshIndexAfterRename will re-index the file once the rename completes.
                 if (renameTracker.hasPendingEdit(doc.uri.toString())) { return; }
-                const end = logService.time('debounce', 'indexFileContent + refresh');
                 const relativePath = notesRootPaths
                     ? toNotesRelativePath(notesRootPaths.root, doc.uri.fsPath)
                     : vscode.workspace.asRelativePath(doc.uri, false);
@@ -2004,7 +2009,6 @@ async function enterFullMode(
                 taskPanelProvider?.refresh();
                 searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
-                end();
             }, 500);
         }),
     );
