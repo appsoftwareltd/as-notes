@@ -303,3 +303,136 @@ describe('FrontMatterService — parseFrontMatterFields', () => {
         expect(fields.assets).toBe(false);
     });
 });
+
+describe('FrontMatterService - mergeDocuments', () => {
+    const service = new FrontMatterService();
+
+    it('should append source body after target body with blank line separator', () => {
+        const target = '# Target\n\nTarget content.';
+        const source = '# Source\n\nSource content.';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toBe('# Target\n\nTarget content.\n\n# Source\n\nSource content.');
+    });
+
+    it('should keep target front matter when source has none', () => {
+        const target = '---\ntitle: Target Title\n---\n\n# Target body';
+        const source = '# Source body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toBe('---\ntitle: Target Title\n---\n\n# Target body\n\n# Source body');
+    });
+
+    it('should adopt source front matter when target has none', () => {
+        const target = '# Target body';
+        const source = '---\ntitle: Source Title\n---\n\n# Source body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toBe('---\ntitle: Source Title\n---\n\n# Target body\n\n# Source body');
+    });
+
+    it('should give target priority for overlapping properties', () => {
+        const target = '---\ntitle: Target Title\npublic: true\n---\n\nTarget body';
+        const source = '---\ntitle: Source Title\npublic: false\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('title: Target Title');
+        expect(result).toContain('public: true');
+        expect(result).not.toContain('Source Title');
+        expect(result).not.toContain('public: false');
+    });
+
+    it('should copy source-only properties to target', () => {
+        const target = '---\ntitle: Target Title\n---\n\nTarget body';
+        const source = '---\ndraft: true\norder: 5\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('title: Target Title');
+        expect(result).toContain('draft: true');
+        expect(result).toContain('order: 5');
+    });
+
+    it('should merge and dedupe aliases from both documents', () => {
+        const target = '---\naliases:\n  - Alpha\n  - Beta\n---\n\nTarget body';
+        const source = '---\naliases:\n  - Beta\n  - Gamma\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        // Should contain all three, Beta only once
+        const merged = service.parseAliases(result);
+        expect(merged).toEqual(['Alpha', 'Beta', 'Gamma']);
+    });
+
+    it('should add source aliases when target has none', () => {
+        const target = '---\ntitle: Target\n---\n\nTarget body';
+        const source = '---\naliases:\n  - Alias A\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        const merged = service.parseAliases(result);
+        expect(merged).toEqual(['Alias A']);
+    });
+
+    it('should keep target aliases when source has none', () => {
+        const target = '---\naliases:\n  - Alias A\n---\n\nTarget body';
+        const source = '---\ntitle: Source\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        const merged = service.parseAliases(result);
+        expect(merged).toEqual(['Alias A']);
+    });
+
+    it('should preserve unknown/custom properties from source', () => {
+        const target = '---\ntitle: Target\n---\n\nTarget body';
+        const source = '---\ncustom_field: hello\nanother: world\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('custom_field: hello');
+        expect(result).toContain('another: world');
+    });
+
+    it('should preserve unknown/custom properties from target', () => {
+        const target = '---\ncustom_field: original\ntitle: Target\n---\n\nTarget body';
+        const source = '---\ncustom_field: replaced\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('custom_field: original');
+        expect(result).not.toContain('custom_field: replaced');
+    });
+
+    it('should handle both documents with no front matter', () => {
+        const target = '# Target';
+        const source = '# Source';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toBe('# Target\n\n# Source');
+    });
+
+    it('should handle empty source body', () => {
+        const target = '---\ntitle: Target\n---\n\n# Target body';
+        const source = '---\ndraft: true\n---\n';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('title: Target');
+        expect(result).toContain('draft: true');
+    });
+
+    it('should handle empty target body', () => {
+        const target = '---\ntitle: Target\n---\n';
+        const source = '# Source body\n\nSome content.';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('title: Target');
+        expect(result).toContain('# Source body');
+    });
+
+    it('should merge inline array aliases with list aliases', () => {
+        const target = '---\naliases: [Alpha, Beta]\n---\n\nTarget body';
+        const source = '---\naliases:\n  - Gamma\n  - Alpha\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        const merged = service.parseAliases(result);
+        expect(merged).toEqual(['Alpha', 'Beta', 'Gamma']);
+    });
+
+    it('should preserve source multi-line custom properties', () => {
+        const target = '---\ntitle: Target\n---\n\nTarget body';
+        const source = '---\ntags:\n  - tag1\n  - tag2\n---\n\nSource body';
+        const result = service.mergeDocuments(target, source);
+        expect(result).toContain('tags:');
+        expect(result).toContain('  - tag1');
+        expect(result).toContain('  - tag2');
+    });
+
+    it('should not duplicate the blank line separator when target body ends with newline', () => {
+        const target = '---\ntitle: Target\n---\n\nTarget body\n';
+        const source = 'Source body';
+        const result = service.mergeDocuments(target, source);
+        // Should not have triple newlines
+        expect(result).not.toMatch(/\n\n\n/);
+    });
+});

@@ -6,6 +6,7 @@ import type { IndexScanner } from './IndexScanner.js';
 import { sanitiseFileName } from './PathUtils.js';
 import { FrontMatterService } from 'as-notes-common';
 import { toNotesRelativePath } from './NotesRootService.js';
+import { updateLinksInWorkspace } from './WikilinkRefactorService.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -58,6 +59,10 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     private readonly notesRootUri: vscode.Uri | undefined;
     private readonly disposables: vscode.Disposable[] = [];
 
+    private readonly _onDidDeclineRename = new vscode.EventEmitter<void>();
+    /** Fires after a rename is declined and the document has been re-indexed. */
+    readonly onDidDeclineRename = this._onDidDeclineRename.event;
+
     /** Tracks the wikilink the cursor was inside during the most recent edit. */
     private pendingEdit: PendingEditInfo | undefined;
 
@@ -85,9 +90,15 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     }
 
     dispose(): void {
+        this._onDidDeclineRename.dispose();
         for (const d of this.disposables) {
             d.dispose();
         }
+    }
+
+    /** True while a rename operation is in progress (file rename + link updates). */
+    get isRenaming(): boolean {
+        return this.isProcessing;
     }
 
     /**
@@ -370,6 +381,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         const classifiedRenames: ClassifiedRename[] = [];
         const renameDescriptions: string[] = [];
         const fileRenames: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[] = [];
+        const fileMerges: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[] = [];
 
         for (const r of renames) {
             const oldFileName = sanitiseFileName(r.oldPageName);
@@ -379,7 +391,14 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 ? this.indexService.resolveAlias(oldFileName)
                 : undefined;
 
-            if (aliasResolution) {
+            // If the alias resolves to a page whose own filename matches the
+            // old link name, it's not a true alias -- it's the page's own name
+            // that happens to be stored as an alias.  Fall through to the
+            // direct rename path so merge detection can apply.
+            const isTrueAlias = aliasResolution
+                && aliasResolution.filename.toLowerCase() !== `${oldFileName}.md`.toLowerCase();
+
+            if (isTrueAlias && aliasResolution) {
                 // Alias rename — no file rename, just update front matter + references
                 classifiedRenames.push({
                     ...r,
@@ -403,39 +422,57 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 const oldFileExists = await this.fileService.fileExists(oldUri);
 
                 if (oldFileExists) {
-                    const newUri = this.fileService.resolveTargetUri(oldUri, newFileName);
-                    fileRenames.push({ oldUri, newUri, label: `${oldFileName}.md → ${newFileName}.md` });
-                    renameDescriptions.push(`"${oldFileName}.md" → "${newFileName}.md"`);
+                    // Detect merge targets using global direct-filename resolution,
+                    // but do not merge when the new name only resolves via alias.
+                    const newResolution = await this.fileService.resolveTargetUriCaseInsensitive(
+                        document.uri,
+                        newFileName,
+                    );
+                    const resolvedTargetExists = await this.fileService.fileExists(newResolution.uri);
+                    const isDirectMergeTarget = resolvedTargetExists
+                        && !newResolution.viaAlias
+                        && newResolution.uri.toString() !== oldUri.toString();
+
+                    if (isDirectMergeTarget) {
+                        fileMerges.push({ oldUri, newUri: newResolution.uri, label: `${oldFileName}.md → ${newFileName}.md` });
+                        renameDescriptions.push(`Merge "${oldFileName}.md" into "${newFileName}.md"`);
+                    } else {
+                        const newUri = this.fileService.resolveTargetUri(oldUri, newFileName);
+                        fileRenames.push({ oldUri, newUri, label: `${oldFileName}.md → ${newFileName}.md` });
+                        renameDescriptions.push(`"${oldFileName}.md" → "${newFileName}.md"`);
+                    }
                 } else {
                     renameDescriptions.push(`[[${r.oldPageName}]] → [[${r.newPageName}]]`);
                 }
             }
         }
 
+        const hasMerges = fileMerges.length > 0;
         const message = renames.length === 1
-            ? `Rename ${renameDescriptions[0]}? This will update all matching links.`
-            : `Rename ${renames.length} links?\n${renameDescriptions.join('\n')}\nThis will update all matching links.`;
+            ? `${hasMerges ? 'Merge' : 'Rename'} ${renameDescriptions[0]}? This will update all matching links.`
+            : `${hasMerges ? 'Merge/Rename' : 'Rename'} ${renames.length} links?\n${renameDescriptions.join('\n')}\nThis will update all matching links.`;
 
         const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
         if (choice !== 'Yes') {
-            // Re-index the document so any new/changed wikilinks are captured
-            const filename = relativePath.split('/').pop() ?? '';
-            this.indexService.indexFileContent(relativePath, filename, document.getText(), Date.now());
+            if (!hasMerges) {
+                // Re-index the document so any new/changed wikilinks are captured
+                const filename = relativePath.split('/').pop() ?? '';
+                this.indexService.indexFileContent(relativePath, filename, document.getText(), Date.now());
+                this._onDidDeclineRename.fire();
+            }
             return;
         }
 
         this.isProcessing = true;
         try {
-            // Process direct file renames (outermost first — matches rename order)
+            // Process file merges (target already exists — merge content)
+            for (const fm of fileMerges) {
+                await this.mergeFiles(fm.oldUri, fm.newUri);
+            }
+
+            // Process direct file renames
             for (const fr of fileRenames) {
-                const newFileAlreadyExists = await this.fileService.fileExists(fr.newUri);
-                if (newFileAlreadyExists) {
-                    vscode.window.showWarningMessage(
-                        `Cannot rename: "${fr.label}" — target already exists.`,
-                    );
-                } else {
-                    await vscode.workspace.fs.rename(fr.oldUri, fr.newUri, { overwrite: false });
-                }
+                await vscode.workspace.fs.rename(fr.oldUri, fr.newUri, { overwrite: false });
             }
 
             // Process alias renames — update front matter on canonical pages
@@ -450,9 +487,10 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             }
 
             // Update links across the workspace (outermost first)
-            for (const r of renames) {
-                await this.updateLinksInWorkspace(r.oldPageName, r.newPageName);
-            }
+            await updateLinksInWorkspace(
+                this.wikilinkService,
+                renames.map(r => ({ oldPageName: r.oldPageName, newPageName: r.newPageName })),
+            );
 
             // Refresh the index
             await this.refreshIndexAfterRename(document, classifiedRenames, fileRenames);
@@ -497,6 +535,33 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         } catch (err) {
             console.warn(`as-notes: failed to update alias front matter for ${canonicalPagePath}:`, err);
         }
+    }
+
+    /**
+     * Merge source file content into target file, then delete the source.
+     * Front matter is merged (target priority), source body is appended.
+     */
+    private async mergeFiles(sourceUri: vscode.Uri, targetUri: vscode.Uri): Promise<void> {
+        const sourceDoc = await vscode.workspace.openTextDocument(sourceUri);
+        const targetDoc = await vscode.workspace.openTextDocument(targetUri);
+
+        const frontMatterService = new FrontMatterService();
+        const mergedContent = frontMatterService.mergeDocuments(
+            targetDoc.getText(),
+            sourceDoc.getText(),
+        );
+
+        const edit = new vscode.WorkspaceEdit();
+        const fullRange = new vscode.Range(
+            targetDoc.lineAt(0).range.start,
+            targetDoc.lineAt(targetDoc.lineCount - 1).range.end,
+        );
+        edit.replace(targetUri, fullRange, mergedContent);
+        await vscode.workspace.applyEdit(edit);
+        await targetDoc.save();
+
+        // Delete the source file
+        await vscode.workspace.fs.delete(sourceUri);
     }
 
     /**
@@ -586,50 +651,4 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         this.indexService.saveToFile();
     }
 
-    /**
-     * Replace every `[[oldPageName]]` wikilink with `[[newPageName]]`
-     * across all markdown files in the workspace.
-     */
-    private async updateLinksInWorkspace(
-        oldPageName: string,
-        newPageName: string,
-    ): Promise<void> {
-        const mdFiles = await vscode.workspace.findFiles('**/*.{md,markdown}');
-        const workspaceEdit = new vscode.WorkspaceEdit();
-        const affectedUris = new Set<string>();
-
-        for (const fileUri of mdFiles) {
-            const doc = await vscode.workspace.openTextDocument(fileUri);
-
-            for (let line = 0; line < doc.lineCount; line++) {
-                const text = doc.lineAt(line).text;
-                const wikilinks = this.wikilinkService.extractWikilinks(text);
-
-                for (const wl of wikilinks) {
-                    if (wl.pageName === oldPageName) {
-                        const range = new vscode.Range(
-                            line, wl.startPositionInText,
-                            line, wl.endPositionInText + 1,
-                        );
-                        workspaceEdit.replace(fileUri, range, `[[${newPageName}]]`);
-                        affectedUris.add(fileUri.toString());
-                    }
-                }
-            }
-        }
-
-        if (affectedUris.size > 0) {
-            await vscode.workspace.applyEdit(workspaceEdit);
-
-            // Save affected files so the workspace is in a clean state
-            for (const uriStr of affectedUris) {
-                const doc = vscode.workspace.textDocuments.find(
-                    (d) => d.uri.toString() === uriStr,
-                );
-                if (doc?.isDirty) {
-                    await doc.save();
-                }
-            }
-        }
-    }
 }

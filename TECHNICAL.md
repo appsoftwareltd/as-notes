@@ -1576,6 +1576,20 @@ A single dialog lists all affected renames. For each rename:
 - If the old target file exists → shows as a file rename (e.g. `"Pagey.md" → "Page.md"`)
 - If the old file doesn't exist → shows as a link-only change
 
+**Merge detection:**
+
+When the old target file exists, rename execution distinguishes three cases:
+
+1. **Direct file merge target exists** — the new page name resolves to an existing file by **direct filename match** anywhere in the notes tree. In this case the dialog switches to merge language and the source page is merged into the existing target page.
+2. **Alias-only target resolution** — if the new page name only resolves via alias, no file merge is attempted. The operation falls back to a normal file rename path instead of merging into the alias's canonical page.
+3. **No existing direct target** — the source file is renamed in place (same directory as the source file), preserving the original rename behaviour.
+
+Direct-merge resolution is intentionally global while plain rename destination selection remains local. This preserves the original "rename beside the source file" behaviour when there is no real merge target, while still allowing merges into an existing page in another folder.
+
+**Alias self-name guard:**
+
+If `resolveAlias(oldPageName)` returns the same page whose filename is `oldPageName.md`, the rename tracker does **not** treat this as a true alias rename. This avoids a front-matter alias like `aliases: [Pothos]` on `Pothos.md` blocking merge detection for `[[Pothos]] → [[Monstera]]`.
+
 **Workspace-wide link update:**
 
 `updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and creates a `WorkspaceEdit` that replaces every `[[oldPageName]]` with `[[newPageName]]`. After applying the edit, it saves modified files.
@@ -1590,6 +1604,19 @@ After a rename operation completes, `refreshIndexAfterRename()` ensures the inde
 4. **Persist the database** — `saveToFile()`
 
 This explicit refresh prevents a stale-index window where the next edit event could compare against outdated links. The extension.ts save/rename handlers may also re-index some of these files (via event triggers), but the operations are idempotent — double-indexing is harmless and keeps the code robust.
+
+### Explorer rename merge handling
+
+Explorer-driven file renames are handled separately in `extension.ts` via `onDidRenameFiles`.
+
+After the renamed file is indexed at its new path, AS Notes checks for filename collisions using `IndexService.findPagesByFilename(newFilename)`. Merge handling is intentionally conservative:
+
+1. Compute the notes-root-relative path of the just-renamed file.
+2. Filter that path out of the duplicate list.
+3. Only proceed with a merge when **exactly one** pre-existing target remains.
+4. If multiple pre-existing targets remain, show a warning and skip the merge rather than picking an arbitrary file.
+
+This selection logic is isolated in `WikilinkExplorerMergeService.ts` so the ambiguity rules are unit-tested independently of the large `extension.ts` event handler.
 
 ### Re-entrancy guard
 

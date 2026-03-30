@@ -1,12 +1,17 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { WikilinkService, wikilinkPlugin, type WikilinkResolverFn } from 'as-notes-common';
+import { WikilinkService, FrontMatterService, wikilinkPlugin, type WikilinkResolverFn } from 'as-notes-common';
 import { WikilinkFileService } from './WikilinkFileService.js';
 import { WikilinkDecorationManager } from './WikilinkDecorationManager.js';
+import {
+    getExistingExplorerMergeTargets,
+    pickUniqueExplorerMergeTarget,
+} from './WikilinkExplorerMergeService.js';
 import { WikilinkDocumentLinkProvider } from './WikilinkDocumentLinkProvider.js';
 import { WikilinkHoverProvider } from './WikilinkHoverProvider.js';
 import { WikilinkRenameTracker } from './WikilinkRenameTracker.js';
+import { updateLinksInWorkspace } from './WikilinkRefactorService.js';
 import { IndexService } from './IndexService.js';
 import { IndexScanner } from './IndexScanner.js';
 import { WikilinkCompletionProvider } from './WikilinkCompletionProvider.js';
@@ -1090,6 +1095,14 @@ async function enterFullMode(
         wikilinkService, fileService, indexService, indexScanner, nrUri,
     );
     fullModeDisposables.push(renameTracker);
+    fullModeDisposables.push(
+        renameTracker.onDidDeclineRename(() => {
+            completionProvider?.refresh();
+            taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
+            backlinkPanelProvider?.refresh();
+        }),
+    );
 
     // Completion provider — wikilink autocomplete triggered by [[
     completionProvider = new WikilinkCompletionProvider(indexService, logService);
@@ -2112,6 +2125,102 @@ async function enterFullMode(
             searchPanelProvider?.refresh();
             backlinkPanelProvider?.refresh();
             calendarPanelProvider?.refresh();
+
+            // Offer to update wikilink references when files are renamed
+            // in the explorer (skip when the rename tracker itself triggered
+            // the file rename to avoid double-processing).
+            if (!renameTracker.isRenaming) {
+                const linkRenames: { oldPageName: string; newPageName: string }[] = [];
+
+                // Check for page name collisions (merge candidates)
+                for (const { oldUri, newUri } of e.files) {
+                    if (!isMarkdownUri(newUri)) { continue; }
+                    const newFilename = path.basename(newUri.fsPath);
+                    const pages = indexService!.findPagesByFilename(newFilename);
+                    if (pages.length < 2) { continue; }
+
+                    const newPath = notesRootPaths
+                        ? toNotesRelativePath(notesRootPaths.root, newUri.fsPath)
+                        : vscode.workspace.asRelativePath(newUri, false);
+                    const existingTargets = getExistingExplorerMergeTargets(pages, newPath);
+                    if (existingTargets.length === 0) { continue; }
+                    if (existingTargets.length > 1) {
+                        vscode.window.showWarningMessage(
+                            `Merge skipped for "${newFilename}": multiple existing targets match this filename.`,
+                        );
+                        continue;
+                    }
+
+                    const existingPage = pickUniqueExplorerMergeTarget(pages, newPath);
+                    if (!existingPage) { continue; }
+
+                    const rootUri = notesRootPaths
+                        ? vscode.Uri.file(notesRootPaths.root)
+                        : vscode.workspace.workspaceFolders?.[0]?.uri;
+                    if (!rootUri) { continue; }
+
+                    const mergeChoice = await vscode.window.showInformationMessage(
+                        `Merge "${newFilename}" into existing "${existingPage.path}"?`,
+                        'Yes', 'No',
+                    );
+                    if (mergeChoice === 'Yes') {
+                        const targetUri = vscode.Uri.joinPath(rootUri, existingPage.path);
+                        const sourceDoc = await vscode.workspace.openTextDocument(newUri);
+                        const targetDoc = await vscode.workspace.openTextDocument(targetUri);
+
+                        const mergedContent = new FrontMatterService().mergeDocuments(
+                            targetDoc.getText(),
+                            sourceDoc.getText(),
+                        );
+
+                        const edit = new vscode.WorkspaceEdit();
+                        const fullRange = new vscode.Range(
+                            targetDoc.lineAt(0).range.start,
+                            targetDoc.lineAt(targetDoc.lineCount - 1).range.end,
+                        );
+                        edit.replace(targetUri, fullRange, mergedContent);
+                        await vscode.workspace.applyEdit(edit);
+                        await targetDoc.save();
+
+                        await vscode.workspace.fs.delete(newUri);
+                        indexService!.removePage(newPath);
+                        try { await indexScanner!.indexFile(targetUri); } catch { /* best effort */ }
+                        safeSaveToFile();
+                    }
+                }
+
+                for (const { oldUri, newUri } of e.files) {
+                    if (isMarkdownUri(oldUri) && isMarkdownUri(newUri)) {
+                        const oldExt = path.extname(oldUri.fsPath);
+                        const newExt = path.extname(newUri.fsPath);
+                        const oldPageName = path.basename(oldUri.fsPath, oldExt);
+                        const newPageName = path.basename(newUri.fsPath, newExt);
+                        if (oldPageName !== newPageName) {
+                            linkRenames.push({ oldPageName, newPageName });
+                        }
+                    }
+                }
+                if (linkRenames.length > 0) {
+                    const summary = linkRenames
+                        .map(r => `[[${r.oldPageName}]] \u2192 [[${r.newPageName}]]`)
+                        .join(', ');
+                    const msg = linkRenames.length === 1
+                        ? `Update all ${summary} references?`
+                        : `Update references for ${linkRenames.length} renamed files? ${summary}`;
+                    const choice = await vscode.window.showInformationMessage(msg, 'Yes', 'No');
+                    if (choice === 'Yes') {
+                        await updateLinksInWorkspace(wikilinkService, linkRenames);
+                        // Re-index and refresh after link updates
+                        try { await indexScanner!.staleScan(); } catch { /* best effort */ }
+                        if (safeSaveToFile()) {
+                            completionProvider?.refresh();
+                            taskPanelProvider?.refresh();
+                            searchPanelProvider?.refresh();
+                            backlinkPanelProvider?.refresh();
+                        }
+                    }
+                }
+            }
         }),
     );
 
