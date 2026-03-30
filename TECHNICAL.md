@@ -1088,7 +1088,7 @@ The `sortText` prefix ensures pages always appear before aliases in the list. Bo
 
 **Front matter suppression:** `isLineInsideFrontMatter()` checks whether the cursor is between the first two `---` lines. If so, no completions are returned — front matter aliases are plain strings, not wikilinks.
 
-All four pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, `isLineInsideFrontMatter()`, and `isPositionInsideCode()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
+All five pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, `isLineInsideFrontMatter()`, `isPositionInsideCode()`, and `hasNewCompleteWikilink()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
 
 **Code block detection:** `isPositionInsideCode(lines, lineIndex, charIndex)` scans lines 0 through `lineIndex` tracking fenced code block open/close state (supports both `` ` `` and `~` fences, respects fence length — a closing fence must use the same character and at least as many markers as the opener). If a fence is still open at `lineIndex`, the position is inside a code block. Separately checks inline code spans (`` ` ``) on the target line.
 
@@ -1097,7 +1097,7 @@ All four pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBrac
 The provider maintains a cached array of `CompletionItem[]` objects. The cache is rebuilt **eagerly** whenever `refresh()` is called — there is no dirty flag or lazy rebuild.
 
 - **Eager rebuild:** `refresh()` calls `rebuildCache()` immediately, running three SQLite queries (`getAllPages`, `getAllAliases`, `getForwardReferencedPages`) and building lightweight plain data objects (not `CompletionItem` instances). This happens at index-update time (file save, create, delete, rename, periodic scan, rebuild), not at `[[` keystroke time.
-- **Not called on text-change debounce:** The 500 ms `onDidChangeTextDocument` debounce handler does **not** call `completionProvider.refresh()`. This eliminates three SQLite queries on every typing pause. Forward references appear in autocomplete after the next file save.
+- **Selective text-change refresh:** The 500 ms `onDidChangeTextDocument` debounce handler re-indexes the live buffer and calls `completionProvider.refresh()` **only when** `hasNewCompleteWikilink()` detects that the current document now contains at least one newly added complete wikilink compared to the page's last indexed links. This makes new forward references available without save while avoiding the refresh cost on ordinary typing edits.
 - **Warm on activation:** `enterFullMode()` calls `completionProvider.refresh()` immediately after construction (post stale-scan), so the cache is warm before the user types the first `[[`.
 - **Not called on editor switch:** The `onDidChangeActiveTextEditor` handler does **not** call `completionProvider.refresh()`. Completion data is global (all pages, aliases, forward refs) and is unaffected by which tab is focused. This avoids 3 SQLite queries on every tab switch.
 - **Hot path:** `provideCompletionItems()` never touches the database. It builds `CompletionItem` instances from lightweight cached data objects with the per-call replacement range and returns them inside a `CompletionList`.
@@ -1128,11 +1128,11 @@ The listener only fires on deletions (where `rangeLength > 0` and `text` is empt
 When the user types inside a wikilink, two things happen on every keystroke:
 
 1. `WikilinkRenameTracker.onDocumentChanged` — records `pendingEdit` (the outermost wikilink position the cursor is inside). This edit state is cleared and rename detection runs when the cursor exits the wikilink.
-2. The 500 ms `onDidChangeTextDocument` debounce in `extension.ts` — re-indexes the live buffer into the in-memory DB so that newly typed forward references appear in autocomplete immediately.
+2. The 500 ms `onDidChangeTextDocument` debounce in `extension.ts` — re-indexes the live buffer into the in-memory DB and selectively refreshes autocomplete when a newly added complete wikilink is detected.
 
 These two behaviours interact at the index: rename detection (`checkForRenames`) works by comparing the **current DB state** (the last-indexed link positions and names) against the live document. If the debounce fires and re-indexes the document before the cursor exits the wikilink, the DB is updated to reflect the edited name. When `checkForRenames` later runs after cursor exit, it compares the edited name in the DB against the same name in the live document — no difference is detected, and the rename dialog is never shown.
 
-**Guard:** The debounce callback in `extension.ts` checks `renameTracker.hasPendingEdit(doc.uri.toString())` before calling `indexFileContent`. If a pending edit is active for that document, the re-index is skipped for that tick. `WikilinkRenameTracker` exposes:
+**Guard:** The debounce callback in `extension.ts` checks `renameTracker.hasPendingEdit(doc.uri.toString())` before calling `indexFileContent` or refreshing completion. If a pending edit is active for that document, the re-index is skipped for that tick. `WikilinkRenameTracker` exposes:
 
 ```typescript
 hasPendingEdit(docKey: string): boolean
@@ -1594,6 +1594,16 @@ If `resolveAlias(oldPageName)` returns the same page whose filename is `oldPageN
 
 `updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and creates a `WorkspaceEdit` that replaces every `[[oldPageName]]` with `[[newPageName]]`. After applying the edit, it saves modified files.
 
+**Notification progress:**
+
+Accepted in-editor rename operations are wrapped in `withWikilinkRenameProgress()` (`WikilinkRenameProgressService.ts`), which shows a non-cancellable VS Code notification while the slow path runs. The tracker reports three coarse phases:
+
+1. `Preparing rename operations`
+2. `Updating links across workspace`
+3. `Refreshing index`
+
+The progress notification is only shown after the user confirms the rename or merge. Declined or dismissed prompts remain a no-op aside from the existing decline re-index path.
+
 ### Post-rename index refresh
 
 After a rename operation completes, `refreshIndexAfterRename()` ensures the index is consistent before releasing control:
@@ -1617,6 +1627,12 @@ After the renamed file is indexed at its new path, AS Notes checks for filename 
 4. If multiple pre-existing targets remain, show a warning and skip the merge rather than picking an arbitrary file.
 
 This selection logic is isolated in `WikilinkExplorerMergeService.ts` so the ambiguity rules are unit-tested independently of the large `extension.ts` event handler.
+
+The user-confirmed refactor work that follows explorer renames is now extracted into `WikilinkExplorerRenameRefactorService.ts`. That helper applies the same notification UX as in-editor renames:
+
+1. Accepted merge operations show `AS Notes: Applying rename updates` while the merge, delete, and target re-index complete.
+2. Accepted workspace-wide reference updates show `AS Notes: Updating wikilink references` while link replacement and stale-scan refresh complete.
+3. Declined explorer prompts do not show progress notifications.
 
 ### Re-entrancy guard
 

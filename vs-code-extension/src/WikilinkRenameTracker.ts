@@ -7,6 +7,7 @@ import { sanitiseFileName } from './PathUtils.js';
 import { FrontMatterService } from 'as-notes-common';
 import { toNotesRelativePath } from './NotesRootService.js';
 import { updateLinksInWorkspace } from './WikilinkRefactorService.js';
+import { withWikilinkRenameProgress } from './WikilinkRenameProgressService.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -465,35 +466,39 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
         this.isProcessing = true;
         try {
-            // Process file merges (target already exists — merge content)
-            for (const fm of fileMerges) {
-                await this.mergeFiles(fm.oldUri, fm.newUri);
-            }
+            await withWikilinkRenameProgress('AS Notes: Applying rename updates', async (progress) => {
+                progress.report('Preparing rename operations');
 
-            // Process direct file renames
-            for (const fr of fileRenames) {
-                await vscode.workspace.fs.rename(fr.oldUri, fr.newUri, { overwrite: false });
-            }
-
-            // Process alias renames — update front matter on canonical pages
-            for (const r of classifiedRenames) {
-                if (r.isAlias && r.canonicalPagePath) {
-                    await this.updateAliasFrontMatter(
-                        r.canonicalPagePath,
-                        r.oldPageName,
-                        r.newPageName,
-                    );
+                // Process file merges (target already exists — merge content)
+                for (const fm of fileMerges) {
+                    await this.mergeFiles(fm.oldUri, fm.newUri);
                 }
-            }
 
-            // Update links across the workspace (outermost first)
-            await updateLinksInWorkspace(
-                this.wikilinkService,
-                renames.map(r => ({ oldPageName: r.oldPageName, newPageName: r.newPageName })),
-            );
+                // Process direct file renames
+                for (const fr of fileRenames) {
+                    await vscode.workspace.fs.rename(fr.oldUri, fr.newUri, { overwrite: false });
+                }
 
-            // Refresh the index
-            await this.refreshIndexAfterRename(document, classifiedRenames, fileRenames);
+                // Process alias renames — update front matter on canonical pages
+                for (const r of classifiedRenames) {
+                    if (r.isAlias && r.canonicalPagePath) {
+                        await this.updateAliasFrontMatter(
+                            r.canonicalPagePath,
+                            r.oldPageName,
+                            r.newPageName,
+                        );
+                    }
+                }
+
+                progress.report('Updating links across workspace');
+                await updateLinksInWorkspace(
+                    this.wikilinkService,
+                    renames.map(r => ({ oldPageName: r.oldPageName, newPageName: r.newPageName })),
+                );
+
+                progress.report('Refreshing index');
+                await this.refreshIndexAfterRename(document, classifiedRenames, fileRenames);
+            });
         } catch (err) {
             const detail = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Rename failed: ${detail}`);

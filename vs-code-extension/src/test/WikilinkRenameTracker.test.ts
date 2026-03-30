@@ -24,6 +24,9 @@ vi.mock('vscode', () => {
     }
     return {
         EventEmitter,
+        ProgressLocation: {
+            Notification: 15,
+        },
         Uri: {
             joinPath: vi.fn((...args: unknown[]) => args),
         },
@@ -50,6 +53,7 @@ vi.mock('vscode', () => {
             showInformationMessage: vi.fn().mockResolvedValue('No'),
             showWarningMessage: vi.fn(),
             showErrorMessage: vi.fn(),
+            withProgress: vi.fn(async (_options: unknown, task: Function) => task({ report: vi.fn() }, {})),
         },
     };
 });
@@ -917,5 +921,92 @@ describe('WikilinkRenameTracker — cross-directory merge detection', () => {
         const messageArg = vi.mocked(vscode.window.showInformationMessage).mock.calls[0][0] as string;
         expect(messageArg.toLowerCase()).toContain('merge');
         expect(messageArg).toContain('[[Topic]] Garden.md');
+    });
+});
+
+describe('WikilinkRenameTracker — progress notifications', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    function makeProgressMocks() {
+        const oldUri = { fsPath: '/notes/sub/OldName.md', toString: () => 'file:///notes/sub/OldName.md' };
+        const newUri = { fsPath: '/notes/sub/NewName.md', toString: () => 'file:///notes/sub/NewName.md' };
+        const documentUri = { fsPath: '/notes/referencing.md', toString: () => 'file:///notes/referencing.md' };
+        const document = {
+            uri: documentUri,
+            getText: vi.fn(() => '[[NewName]]'),
+            lineCount: 1,
+            lineAt: vi.fn(() => ({ text: '[[NewName]]', range: { start: 0, end: 10 } })),
+        };
+
+        const fileService = {
+            resolveTargetUri: vi.fn().mockReturnValue(newUri),
+            resolveTargetUriCaseInsensitive: vi.fn().mockImplementation(async (_uri: unknown, pageFileName: string) => {
+                if (pageFileName === 'OldName') {
+                    return { uri: oldUri, viaAlias: false };
+                }
+                return { uri: newUri, viaAlias: false };
+            }),
+            fileExists: vi.fn().mockImplementation(async (uri: unknown) => {
+                const uriStr = (uri as { toString(): string }).toString();
+                return uriStr.includes('OldName');
+            }),
+            resolveNewFileTargetUri: vi.fn(),
+        };
+
+        const indexService = {
+            isOpen: true,
+            getPageByPath: vi.fn().mockReturnValue({ id: 1 }),
+            getLinksForPage: vi.fn().mockReturnValue([]),
+            resolveAlias: vi.fn().mockReturnValue(undefined),
+            indexFileContent: vi.fn(),
+            updateRename: vi.fn(),
+            saveToFile: vi.fn(),
+            removePage: vi.fn(),
+            getPageById: vi.fn().mockReturnValue(undefined),
+            updateAliasRename: vi.fn(),
+        };
+
+        const indexScanner = {
+            indexFile: vi.fn().mockResolvedValue(undefined),
+        };
+
+        const tracker = new WikilinkRenameTracker(
+            new WikilinkService(),
+            fileService as never,
+            indexService as never,
+            indexScanner as never,
+        );
+
+        const renames = [{
+            oldPageName: 'OldName',
+            newPageName: 'NewName',
+            line: 0,
+            startPosition: 0,
+            endPosition: 11,
+        }];
+
+        return { tracker, document, renames };
+    }
+
+    it('shows notification progress when the user accepts an in-editor rename', async () => {
+        const { tracker, document, renames } = makeProgressMocks();
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Yes' as never);
+
+        await (tracker as unknown as { promptAndPerformRenames: Function })
+            .promptAndPerformRenames(document, renames, 'referencing.md');
+
+        expect(vscode.window.withProgress).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show notification progress when the user declines an in-editor rename', async () => {
+        const { tracker, document, renames } = makeProgressMocks();
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('No' as never);
+
+        await (tracker as unknown as { promptAndPerformRenames: Function })
+            .promptAndPerformRenames(document, renames, 'referencing.md');
+
+        expect(vscode.window.withProgress).not.toHaveBeenCalled();
     });
 });

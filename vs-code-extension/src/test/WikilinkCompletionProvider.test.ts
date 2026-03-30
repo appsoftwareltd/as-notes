@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { IndexService } from '../IndexService.js';
-import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter, isPositionInsideCode } from '../CompletionUtils.js';
+import { findInnermostOpenBracket, findMatchingCloseBracket, hasNewCompleteWikilink, isLineInsideFrontMatter, isPositionInsideCode } from '../CompletionUtils.js';
+import { WikilinkService } from 'as-notes-common';
 
 // ── Bracket detection ──────────────────────────────────────────────────────
 
@@ -280,6 +281,47 @@ describe('WikilinkCompletionProvider — isPositionInsideCode', () => {
 
     it('should return false for empty document', () => {
         expect(check([], 0, 0)).toBe(false);
+    });
+});
+
+// ── New wikilink detection ──────────────────────────────────────────────────
+
+describe('WikilinkCompletionProvider — hasNewCompleteWikilink', () => {
+    const wikilinkService = new WikilinkService();
+
+    it('returns true when a new simple wikilink is added', () => {
+        const lines = ['Before [[New Link]] after'];
+        const indexedLinks: { page_name: string }[] = [];
+
+        expect(hasNewCompleteWikilink(lines, indexedLinks, wikilinkService)).toBe(true);
+    });
+
+    it('returns true when the same wikilink is added a second time', () => {
+        const lines = ['[[New Link]] and again [[New Link]]'];
+        const indexedLinks = [{ page_name: 'New Link' }];
+
+        expect(hasNewCompleteWikilink(lines, indexedLinks, wikilinkService)).toBe(true);
+    });
+
+    it('returns true when a nested wikilink is added', () => {
+        const lines = ['[[Garden [[Topic]] Notes]]'];
+        const indexedLinks: { page_name: string }[] = [];
+
+        expect(hasNewCompleteWikilink(lines, indexedLinks, wikilinkService)).toBe(true);
+    });
+
+    it('returns false when text changes but no new wikilink is added', () => {
+        const lines = ['prefix [[Existing]] suffix'];
+        const indexedLinks = [{ page_name: 'Existing' }];
+
+        expect(hasNewCompleteWikilink(lines, indexedLinks, wikilinkService)).toBe(false);
+    });
+
+    it('returns false when the only new target is incomplete', () => {
+        const lines = ['typing [[Incomplete'];
+        const indexedLinks: { page_name: string }[] = [];
+
+        expect(hasNewCompleteWikilink(lines, indexedLinks, wikilinkService)).toBe(false);
     });
 });
 
