@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { IndexService, type TaskViewItem } from './IndexService.js';
+import { formatLogError, getActiveLogger } from './LogService.js';
 import { toggleTodoLine } from './TodoToggleService.js';
 
 // ── Provider ───────────────────────────────────────────────────────────────
@@ -88,7 +89,7 @@ export class TaskPanelProvider implements vscode.WebviewViewProvider {
                     edit.replace(doc.uri, doc.lineAt(line).range, toggled);
                     return vscode.workspace.applyEdit(edit).then(() => doc.save());
                 }).then(undefined, err => {
-                    console.warn('as-notes: failed to toggle task from panel:', err);
+                    getActiveLogger().warn('TaskPanel', `failed to toggle task from panel: ${formatLogError(err)}`);
                 });
                 break;
             }

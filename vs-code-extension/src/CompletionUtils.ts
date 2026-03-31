@@ -1,7 +1,13 @@
+import type { IWikilinkService } from 'as-notes-common';
+
 /**
  * Pure utility functions for wikilink completion logic.
  * No VS Code dependencies — safe for unit testing.
  */
+
+interface IndexedLinkLike {
+    page_name: string;
+}
 
 /**
  * Find the column of the innermost unclosed `[[` in the text up to the cursor.
@@ -141,6 +147,41 @@ export function isPositionInsideCode(lines: string[], lineIndex: number, charInd
             continue;
         }
         if (inCode && c === charIndex) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Determine whether the current document contains at least one newly added
+ * complete wikilink compared to the page's last indexed links.
+ *
+ * This uses page-name occurrence counts rather than positions so that plain
+ * text edits that shift existing links do not count as new links, while added
+ * duplicate links and nested links are still detected.
+ */
+export function hasNewCompleteWikilink(
+    lines: string[],
+    indexedLinks: IndexedLinkLike[],
+    wikilinkService: IWikilinkService,
+): boolean {
+    const indexedCounts = new Map<string, number>();
+    for (const link of indexedLinks) {
+        indexedCounts.set(link.page_name, (indexedCounts.get(link.page_name) ?? 0) + 1);
+    }
+
+    const currentCounts = new Map<string, number>();
+    for (const line of lines) {
+        const wikilinks = wikilinkService.extractWikilinks(line, false, false);
+        for (const wikilink of wikilinks) {
+            currentCounts.set(wikilink.pageName, (currentCounts.get(wikilink.pageName) ?? 0) + 1);
+        }
+    }
+
+    for (const [pageName, count] of currentCounts) {
+        if (count > (indexedCounts.get(pageName) ?? 0)) {
             return true;
         }
     }

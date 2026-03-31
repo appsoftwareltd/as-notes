@@ -370,4 +370,157 @@ export class FrontMatterService {
 
         return null; // alias not found
     }
+
+    /**
+     * Merge two markdown documents, combining front matter and appending bodies.
+     *
+     * - Front matter is merged at the raw YAML line level so unknown/custom
+     *   properties are preserved.
+     * - Target properties take priority when both documents define the same key.
+     * - Aliases are merged and deduplicated (case-sensitive).
+     * - The source body is appended after the target body, separated by a blank line.
+     *
+     * @param targetContent - The authoritative document content (priority for overlapping keys).
+     * @param sourceContent - The document being merged in.
+     * @returns The merged document content as a single string.
+     */
+    mergeDocuments(targetContent: string, sourceContent: string): string {
+        const targetFm = this.extractFrontMatter(targetContent);
+        const sourceFm = this.extractFrontMatter(sourceContent);
+        const targetBody = this.stripFrontMatter(targetContent);
+        const sourceBody = this.stripFrontMatter(sourceContent);
+
+        let mergedFrontMatter: string | null = null;
+
+        if (targetFm !== null && sourceFm !== null) {
+            mergedFrontMatter = this.mergeFrontMatterBlocks(targetFm, sourceFm);
+        } else if (targetFm !== null) {
+            mergedFrontMatter = targetFm;
+        } else if (sourceFm !== null) {
+            mergedFrontMatter = sourceFm;
+        }
+
+        // Build merged body: target body + blank line + source body
+        const trimmedTargetBody = targetBody.replace(/^\n+/, '').replace(/\n+$/, '');
+        const trimmedSourceBody = sourceBody.replace(/^\n+/, '').replace(/\n+$/, '');
+        let mergedBody: string;
+        if (trimmedTargetBody.length > 0 && trimmedSourceBody.length > 0) {
+            mergedBody = trimmedTargetBody + '\n\n' + trimmedSourceBody;
+        } else if (trimmedTargetBody.length > 0) {
+            mergedBody = trimmedTargetBody;
+        } else {
+            mergedBody = trimmedSourceBody;
+        }
+
+        if (mergedFrontMatter !== null) {
+            return '---\n' + mergedFrontMatter + '\n---\n\n' + mergedBody;
+        }
+        return mergedBody;
+    }
+
+    /**
+     * Merge two raw front matter blocks (without --- fences).
+     * Target keys take priority. Source-only keys are appended.
+     * Aliases are merged and deduplicated.
+     */
+    private mergeFrontMatterBlocks(targetFm: string, sourceFm: string): string {
+        const targetEntries = this.parseFrontMatterEntries(targetFm);
+        const sourceEntries = this.parseFrontMatterEntries(sourceFm);
+
+        // Determine which source keys are missing from target
+        const targetKeys = new Set(targetEntries.map(e => e.key));
+        const sourceOnlyEntries = sourceEntries.filter(e => e.key !== 'aliases' && !targetKeys.has(e.key));
+
+        // Handle aliases specially: merge and dedupe
+        const targetAliases = this.parseAliasesFromFrontMatter(targetFm);
+        const sourceAliases = this.parseAliasesFromFrontMatter(sourceFm);
+        const hasTargetAliases = targetKeys.has('aliases');
+        const hasSourceAliases = sourceEntries.some(e => e.key === 'aliases');
+
+        // Start with the target front matter lines
+        const resultLines = targetFm.split(/\r?\n/);
+
+        // Append source-only entries
+        for (const entry of sourceOnlyEntries) {
+            resultLines.push(...entry.lines);
+        }
+
+        // Merge aliases if source has any that target doesn't
+        if (hasSourceAliases && sourceAliases.length > 0) {
+            const mergedAliases = [...targetAliases];
+            for (const alias of sourceAliases) {
+                if (!mergedAliases.includes(alias)) {
+                    mergedAliases.push(alias);
+                }
+            }
+
+            if (hasTargetAliases) {
+                // Replace existing alias block in result
+                this.replaceAliasBlock(resultLines, mergedAliases);
+            } else {
+                // Append alias block
+                resultLines.push('aliases:');
+                for (const alias of mergedAliases) {
+                    resultLines.push(`  - ${alias}`);
+                }
+            }
+        }
+
+        return resultLines.join('\n');
+    }
+
+    /**
+     * Parse front matter into entries: each entry has a key and its raw lines
+     * (including any indented continuation lines like list items).
+     */
+    private parseFrontMatterEntries(frontMatter: string): { key: string; lines: string[] }[] {
+        const lines = frontMatter.split(/\r?\n/);
+        const entries: { key: string; lines: string[] }[] = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const kvMatch = lines[i].match(/^(\w[\w-]*)\s*:/);
+            if (kvMatch) {
+                const key = kvMatch[1].toLowerCase();
+                const entryLines = [lines[i]];
+                // Collect indented continuation lines (list items, etc.)
+                while (i + 1 < lines.length && /^\s+/.test(lines[i + 1]) && !lines[i + 1].match(/^(\w[\w-]*)\s*:/)) {
+                    i++;
+                    entryLines.push(lines[i]);
+                }
+                entries.push({ key, lines: entryLines });
+            }
+        }
+
+        return entries;
+    }
+
+    /**
+     * Replace the alias block in a set of front matter lines with merged aliases.
+     * Outputs list-style format.
+     */
+    private replaceAliasBlock(lines: string[], mergedAliases: string[]): void {
+        // Find alias key line
+        let aliasStart = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].match(/^aliases\s*:/)) {
+                aliasStart = i;
+                break;
+            }
+        }
+        if (aliasStart === -1) { return; }
+
+        // Find end of alias block (next top-level key or end)
+        let aliasEnd = aliasStart + 1;
+        while (aliasEnd < lines.length && /^\s+/.test(lines[aliasEnd])) {
+            aliasEnd++;
+        }
+
+        // Build replacement lines
+        const replacementLines = ['aliases:'];
+        for (const alias of mergedAliases) {
+            replacementLines.push(`  - ${alias}`);
+        }
+
+        lines.splice(aliasStart, aliasEnd - aliasStart, ...replacementLines);
+    }
 }

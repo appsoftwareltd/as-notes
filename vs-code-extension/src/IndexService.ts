@@ -571,6 +571,34 @@ export class IndexService {
     }
 
     /**
+     * Find distinct source pages containing links to any of the supplied page names.
+     * Used to narrow rename refactors to only files that could contain matches.
+     */
+    findPagesLinkingToPageNames(pageNames: string[]): PageRow[] {
+        this.ensureOpen();
+        if (pageNames.length === 0) { return []; }
+
+        const placeholders = pageNames.map(() => '?').join(', ');
+        const result = this.db!.exec(
+            `SELECT DISTINCT p.id, p.path, p.filename, p.title, p.mtime, p.indexed_at
+             FROM pages p
+             JOIN links l ON l.source_page_id = p.id
+             WHERE l.page_name IN (${placeholders})
+             ORDER BY p.path COLLATE NOCASE`,
+            pageNames,
+        );
+        if (result.length === 0) { return []; }
+        return result[0].values.map(row => ({
+            id: row[0] as number,
+            path: row[1] as string,
+            filename: row[2] as string,
+            title: row[3] as string,
+            mtime: row[4] as number,
+            indexed_at: row[5] as number,
+        }));
+    }
+
+    /**
      * Get the total number of links across all pages.
      * Uses a single `COUNT(*)` query — O(1) regardless of table size.
      */

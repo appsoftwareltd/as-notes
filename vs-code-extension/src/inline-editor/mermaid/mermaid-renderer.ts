@@ -5,6 +5,7 @@ import { processSvg } from './svg-processor';
 import { createErrorSvg, extractErrorMessage } from './error-handler';
 import { MERMAID_CONSTANTS } from './constants';
 import type { MermaidRenderOptions } from './types';
+import { getActiveLogger } from '../../LogService.js';
 
 // Singleton webview manager instance
 let webviewManager: MermaidWebviewManager | undefined;
@@ -19,7 +20,7 @@ let hasLoggedWaitingForWebview = false;
 async function waitForWebviewOnceLogged(manager: MermaidWebviewManager): Promise<void> {
   if (!hasLoggedWaitingForWebview) {
     hasLoggedWaitingForWebview = true;
-    console.warn('Mermaid: waiting for webview');
+    getActiveLogger().warn('MermaidRenderer', 'waiting for webview');
   }
   await manager.waitForWebview();
 }
@@ -32,7 +33,7 @@ export function initMermaidRenderer(context: vscode.ExtensionContext): void {
     // Already initialized
     return;
   }
-  
+
   webviewManager = new MermaidWebviewManager();
   webviewManager.initialize(context);
 }
@@ -56,28 +57,28 @@ export async function renderMermaidSvgNatural(
   await waitForWebviewOnceLogged(webviewManager);
 
   const darkMode = options.theme === 'dark';
-  
+
   // Check cancellation before starting expensive operation
   if (cancellationToken?.isCancellationRequested) {
     throw new vscode.CancellationError();
   }
-  
+
   // Use shorter timeout for hover requests (5 seconds) to match VS Code's hover timeout
   // Regular requests use the default 30-second timeout
   const timeoutMs = cancellationToken ? MERMAID_CONSTANTS.HOVER_REQUEST_TIMEOUT_MS : MERMAID_CONSTANTS.REQUEST_TIMEOUT_MS;
-  
+
   // Request SVG without processing (get natural dimensions)
   const svgString = await webviewManager.requestSvg(
     { source, darkMode, fontFamily: options.fontFamily },
     timeoutMs,
     cancellationToken
   );
-  
+
   // Check cancellation again after await (in case it was cancelled during the request)
   if (cancellationToken?.isCancellationRequested) {
     throw new vscode.CancellationError();
   }
-  
+
   // Return raw SVG without height processing
   return svgString;
 }
@@ -123,7 +124,7 @@ const getMermaidDecoration = memoizeMermaidDecoration(async (
     { source, darkMode, fontFamily },
     MERMAID_CONSTANTS.REQUEST_TIMEOUT_MS
   );
-  
+
   // Check if this is an error SVG (contains "Mermaid Rendering Error")
   if (svgString.includes('Mermaid Rendering Error')) {
     // Recreate error SVG with proper dimensions
@@ -135,9 +136,9 @@ const getMermaidDecoration = memoizeMermaidDecoration(async (
     );
     return errorSvg;
   }
-  
+
   const processedSvg = processSvg(svgString, height);
-  
+
   return processedSvg;
 });
 
@@ -161,7 +162,7 @@ export async function renderMermaidSvg(
   // Default to 200px if numLines not provided
   const editorConfig = vscode.workspace.getConfiguration('editor');
   let lineHeight = editorConfig.get<number>('lineHeight', 0);
-  
+
   // If lineHeight is 0 or invalid, calculate from fontSize (like Markless does)
   if (lineHeight === 0 || lineHeight < 8) {
     const fontSize = editorConfig.get<number>('fontSize', 14);
@@ -172,7 +173,7 @@ export async function renderMermaidSvg(
       lineHeight = 8; // Minimum line height
     }
   }
-  
+
   const numLines = options.numLines || 5;
   const height = options.height || ((numLines + 2) * lineHeight);
 
@@ -192,7 +193,7 @@ export function disposeMermaidRenderer(): void {
     webviewManager.dispose();
     webviewManager = undefined;
   }
-  
+
   // Clear decoration cache
   decorationCache.clear();
 }

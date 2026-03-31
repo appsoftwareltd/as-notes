@@ -8,11 +8,10 @@ AS Notes brings markdown and [[wikilink]] editing for notes, documentation, blog
 
 **Capture ideas, link concepts, write, and stay focused - without ever leaving your editor.**
 
-> **This documentation was written and generated using AS Notes. See [[Publishing a Static Site]] for how you can use AS Notes for your docs, including deploying to GitHub Pages**.
+> **This documentation was written and generated using AS Notes. See [[Publishing a Static Site]] for how you can use AS Notes for your docs, including deploying to GitHub Pages, Cloudflare and More**.
 
-> **Install:** [https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
-
-> **GitHub:** [https://github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
+> **Install:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes) / [Open VSX](https://open-vsx.org/extension/appsoftwareltd/as-notes)
+> **GitHub:** [github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
 
 ![AS Notes editor screenshot](../assets/images/as-notes-editor-screenshot.png)
 
@@ -22,13 +21,12 @@ If you've already installed AS Notes and want to get started, see [[Getting Star
 
 ## Why VS Code?
 
-Using VS Code as your notes app gives you a huge amount for free before you even start using AS Notes features:
+Using VS Code as your notes app gives you a huge amount for free in addition the features that AS Notes provides:
 
-- Cross-platform and web-based (via VS Code Workspaces)
+- Cross-platform compatibility and web access (via VS Code Workspaces)
 - Tabs, file explorer, themes, keyboard shortcuts
-- A vast extension library — Mermaid diagrams, Vim mode, and more, all usable alongside AS Notes
+- A vast extension library
 - AI chat (GitHub Copilot, Claude, etc.) to query and work with your notes
-- Outliner-style indentation via `Ctrl+[` / `Ctrl+]`
 - Syntax highlighting for code embedded in your notes
 
 ## Features at a Glance
@@ -65,4 +63,4 @@ AS Notes is privacy-first. It never connects to external servers. All indexing, 
 
 ## Licence
 
-See [[Licence Rationale]] for an explanation of the source-available licence model.
+See [[Licence]]

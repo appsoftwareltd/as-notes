@@ -1088,7 +1088,7 @@ The `sortText` prefix ensures pages always appear before aliases in the list. Bo
 
 **Front matter suppression:** `isLineInsideFrontMatter()` checks whether the cursor is between the first two `---` lines. If so, no completions are returned — front matter aliases are plain strings, not wikilinks.
 
-All four pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, `isLineInsideFrontMatter()`, and `isPositionInsideCode()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
+All five pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, `isLineInsideFrontMatter()`, `isPositionInsideCode()`, and `hasNewCompleteWikilink()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
 
 **Code block detection:** `isPositionInsideCode(lines, lineIndex, charIndex)` scans lines 0 through `lineIndex` tracking fenced code block open/close state (supports both `` ` `` and `~` fences, respects fence length — a closing fence must use the same character and at least as many markers as the opener). If a fence is still open at `lineIndex`, the position is inside a code block. Separately checks inline code spans (`` ` ``) on the target line.
 
@@ -1097,7 +1097,7 @@ All four pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBrac
 The provider maintains a cached array of `CompletionItem[]` objects. The cache is rebuilt **eagerly** whenever `refresh()` is called — there is no dirty flag or lazy rebuild.
 
 - **Eager rebuild:** `refresh()` calls `rebuildCache()` immediately, running three SQLite queries (`getAllPages`, `getAllAliases`, `getForwardReferencedPages`) and building lightweight plain data objects (not `CompletionItem` instances). This happens at index-update time (file save, create, delete, rename, periodic scan, rebuild), not at `[[` keystroke time.
-- **Not called on text-change debounce:** The 500 ms `onDidChangeTextDocument` debounce handler does **not** call `completionProvider.refresh()`. This eliminates three SQLite queries on every typing pause. Forward references appear in autocomplete after the next file save.
+- **Selective text-change refresh:** The 500 ms `onDidChangeTextDocument` debounce handler re-indexes the live buffer and calls `completionProvider.refresh()` **only when** `hasNewCompleteWikilink()` detects that the current document now contains at least one newly added complete wikilink compared to the page's last indexed links. This makes new forward references available without save while avoiding the refresh cost on ordinary typing edits.
 - **Warm on activation:** `enterFullMode()` calls `completionProvider.refresh()` immediately after construction (post stale-scan), so the cache is warm before the user types the first `[[`.
 - **Not called on editor switch:** The `onDidChangeActiveTextEditor` handler does **not** call `completionProvider.refresh()`. Completion data is global (all pages, aliases, forward refs) and is unaffected by which tab is focused. This avoids 3 SQLite queries on every tab switch.
 - **Hot path:** `provideCompletionItems()` never touches the database. It builds `CompletionItem` instances from lightweight cached data objects with the per-call replacement range and returns them inside a `CompletionList`.
@@ -1128,11 +1128,11 @@ The listener only fires on deletions (where `rangeLength > 0` and `text` is empt
 When the user types inside a wikilink, two things happen on every keystroke:
 
 1. `WikilinkRenameTracker.onDocumentChanged` — records `pendingEdit` (the outermost wikilink position the cursor is inside). This edit state is cleared and rename detection runs when the cursor exits the wikilink.
-2. The 500 ms `onDidChangeTextDocument` debounce in `extension.ts` — re-indexes the live buffer into the in-memory DB so that newly typed forward references appear in autocomplete immediately.
+2. The 500 ms `onDidChangeTextDocument` debounce in `extension.ts` — re-indexes the live buffer into the in-memory DB and selectively refreshes autocomplete when a newly added complete wikilink is detected.
 
 These two behaviours interact at the index: rename detection (`checkForRenames`) works by comparing the **current DB state** (the last-indexed link positions and names) against the live document. If the debounce fires and re-indexes the document before the cursor exits the wikilink, the DB is updated to reflect the edited name. When `checkForRenames` later runs after cursor exit, it compares the edited name in the DB against the same name in the live document — no difference is detected, and the rename dialog is never shown.
 
-**Guard:** The debounce callback in `extension.ts` checks `renameTracker.hasPendingEdit(doc.uri.toString())` before calling `indexFileContent`. If a pending edit is active for that document, the re-index is skipped for that tick. `WikilinkRenameTracker` exposes:
+**Guard:** The debounce callback in `extension.ts` checks `renameTracker.hasPendingEdit(doc.uri.toString())` before calling `indexFileContent` or refreshing completion. If a pending edit is active for that document, the re-index is skipped for that tick. `WikilinkRenameTracker` exposes:
 
 ```typescript
 hasPendingEdit(docKey: string): boolean
@@ -1310,7 +1310,15 @@ Diagnostic logging is provided by `LogService` (`src/LogService.ts`), a pure Nod
 
 **Log format:** `[ISO timestamp] [LEVEL] tag: message`
 
-**Usage in services:** `LogService` is injected as an optional constructor parameter (defaulting to `NO_OP_LOGGER`) into `IndexService`, `IndexScanner`, `WikilinkDecorationManager`, and `WikilinkCompletionProvider`. The `extension.ts` module also uses the instance directly for lifecycle logging. A `NO_OP_LOGGER` singleton is used when logging is disabled, avoiding null checks throughout the codebase.
+**Usage in services:** `LogService` is injected as an optional constructor parameter (defaulting to `NO_OP_LOGGER`) into `IndexService`, `IndexScanner`, `WikilinkDecorationManager`, `WikilinkCompletionProvider`, and other logger-aware services. The `extension.ts` module also uses the instance directly for lifecycle logging. A `NO_OP_LOGGER` singleton is used when logging is disabled, avoiding null checks throughout the codebase.
+
+For modules that are not constructed with an injected logger (for example some inline-editor / Mermaid helpers), `LogService.ts` also exposes a shared active logger:
+
+- `setActiveLogger(logger)` — called by `extension.ts` when logging is configured
+- `getActiveLogger()` — returns the current active logger, or `NO_OP_LOGGER` when logging is off
+- `formatLogError(error)` — normalises unknown exceptions into a string for logger output
+
+This allows the extension to avoid naked `console.log/warn/error` calls while still keeping all diagnostic output behind the same logging gate.
 
 **Timer API:** `logService.time(tag, label)` returns a closure that, when called, logs the elapsed milliseconds at INFO level — used for performance instrumentation throughout the decoration and completion pipelines.
 
@@ -1576,9 +1584,42 @@ A single dialog lists all affected renames. For each rename:
 - If the old target file exists → shows as a file rename (e.g. `"Pagey.md" → "Page.md"`)
 - If the old file doesn't exist → shows as a link-only change
 
+**Merge detection:**
+
+When the old target file exists, rename execution distinguishes three cases:
+
+1. **Direct file merge target exists** — the new page name resolves to an existing file by **direct filename match** anywhere in the notes tree. In this case the dialog switches to merge language and the source page is merged into the existing target page.
+2. **Alias-only target resolution** — if the new page name only resolves via alias, no file merge is attempted. The operation falls back to a normal file rename path instead of merging into the alias's canonical page.
+3. **No existing direct target** — the source file is renamed in place (same directory as the source file), preserving the original rename behaviour.
+
+Direct-merge resolution is intentionally global while plain rename destination selection remains local. This preserves the original "rename beside the source file" behaviour when there is no real merge target, while still allowing merges into an existing page in another folder.
+
+**Alias self-name guard:**
+
+If `resolveAlias(oldPageName)` returns the same page whose filename is `oldPageName.md`, the rename tracker does **not** treat this as a true alias rename. This avoids a front-matter alias like `aliases: [Pothos]` on `Pothos.md` blocking merge detection for `[[Pothos]] → [[Monstera]]`.
+
 **Workspace-wide link update:**
 
-`updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and creates a `WorkspaceEdit` that replaces every `[[oldPageName]]` with `[[newPageName]]`. After applying the edit, it saves modified files.
+`updateLinksInWorkspace()` finds all `.md` and `.markdown` files, parses each for wikilinks, and now uses a split write strategy:
+
+1. **Already-open documents** are updated through a `WorkspaceEdit` so their live editor buffers stay authoritative.
+2. **Closed documents** are rewritten directly on disk using `workspace.fs.writeFile()` after a raw `fs.readFile()` pass.
+
+This avoids VS Code opening newly-dirty tabs for files that were closed before the rename, which in turn avoids working-copy save conflicts on those reference files.
+
+**Index-driven candidate narrowing:**
+
+Rename refactors no longer have to discover rewrite candidates by scanning the entire workspace up front. `IndexService.findPagesLinkingToPageNames(...)` queries the `links` table for distinct source pages whose indexed `page_name` matches one of the renamed targets. `updateLinksInWorkspace()` now accepts those candidate URIs and only opens that bounded set of files when a candidate set is provided. The actual rewrite still parses the real file text before editing, so the index narrows the search space but does not become the edit source of truth.
+
+**Notification progress:**
+
+Accepted in-editor rename operations are wrapped in `withWikilinkRenameProgress()` (`WikilinkRenameProgressService.ts`), which shows a non-cancellable VS Code notification while the slow path runs. The tracker reports three coarse phases:
+
+1. `Preparing rename operations`
+2. `Updating links across workspace`
+3. `Refreshing index`
+
+The progress notification is only shown after the user confirms the rename or merge. Declined or dismissed prompts remain a no-op aside from the existing decline re-index path.
 
 ### Post-rename index refresh
 
@@ -1590,6 +1631,44 @@ After a rename operation completes, `refreshIndexAfterRename()` ensures the inde
 4. **Persist the database** — `saveToFile()`
 
 This explicit refresh prevents a stale-index window where the next edit event could compare against outdated links. The extension.ts save/rename handlers may also re-index some of these files (via event triggers), but the operations are idempotent — double-indexing is harmless and keeps the code robust.
+
+### Explorer rename merge handling
+
+Explorer-driven file renames are handled separately in `extension.ts` via `onDidRenameFiles`.
+
+After the renamed file is indexed at its new path, AS Notes checks for filename collisions using `IndexService.findPagesByFilename(newFilename)`. Merge handling is intentionally conservative:
+
+1. Compute the notes-root-relative path of the just-renamed file.
+2. Filter that path out of the duplicate list.
+3. Only proceed with a merge when **exactly one** pre-existing target remains.
+4. If multiple pre-existing targets remain, show a warning and skip the merge rather than picking an arbitrary file.
+
+This selection logic is isolated in `WikilinkExplorerMergeService.ts` so the ambiguity rules are unit-tested independently of the large `extension.ts` event handler.
+
+The user-confirmed refactor work that follows explorer renames is now extracted into `WikilinkExplorerRenameRefactorService.ts`. That helper applies the same notification UX as in-editor renames:
+
+1. Accepted merge operations show `AS Notes: Applying rename updates` while the merge, delete, and target re-index complete.
+2. Accepted workspace-wide reference updates show `AS Notes: Updating wikilink references` while index-driven candidate rewrite and targeted file re-indexing complete.
+3. Declined explorer prompts do not show progress notifications.
+
+For explorer renames, the old broad `staleScan()` follow-up has been replaced with targeted re-indexing of the files actually edited by the refactor. That removes a second whole-tree pass from the common rename path.
+
+`updateLinksInWorkspace()` no longer auto-saves affected open editors after applying workspace edits. Instead, both the in-editor and explorer rename flows now use `reindexWorkspaceUri(...)`: if an affected file is currently open, it is re-indexed from the live editor buffer via `indexFileContent(...)`; otherwise it falls back to `indexScanner.indexFile(...)`. `WikilinkRenameTracker` still re-indexes the initiating document from `document.getText()` when its URI is stable, and remaps any old source candidate URI to the post-rename or post-merge target before follow-up indexing. Combined with the direct-to-disk rewrite path for closed files, this avoids save conflicts on both open reference files and files that were previously closed, as well as attempts to reopen a source file that has just been renamed or deleted.
+
+### Filename-level wikilink refactors
+
+Rename propagation now also updates filenames that contain the renamed wikilink text itself, not just file contents. The shared planner in `WikilinkFilenameRefactorService.ts` scans indexed pages for filenames containing `[[oldPageName]]` and computes additional file operations such as:
+
+1. `Topic [[Plant]].md` -> `Topic [[Tree]].md`
+2. merge into an existing `Topic [[Tree]].md` when that target already exists
+
+The planner is reused by both `WikilinkRenameTracker.ts` and `WikilinkExplorerRenameRefactorService.ts`, so in-editor renames and explorer renames follow the same rules. It provides three guarantees:
+
+1. **Consistent rename/merge classification** - filename collisions become merges instead of failing midway.
+2. **Safe ordering** - chained filename renames are topologically ordered so a rename that frees a target path can run before a dependent rename that needs that path.
+3. **URI remapping for follow-up work** - candidate files selected for link rewrites or re-indexing are remapped through the filename operations so later content edits and index refreshes use the final file locations.
+
+This keeps filename refactors, content refactors, and index updates in sync even when nested wikilinks appear inside page filenames.
 
 ### Re-entrancy guard
 

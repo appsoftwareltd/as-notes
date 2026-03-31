@@ -59,14 +59,36 @@ Type `[[` in any markdown file to trigger the autocomplete list:
 
 ## Rename Synchronisation
 
+AS Notes keeps files and links consistent when you rename either a wikilink or its backing file.
+
+### In-Editor Rename
+
 When you edit a wikilink's text and move the cursor away (or switch files), AS Notes detects the change and offers to:
 
 1. **Rename the corresponding `.md` file** (if it exists)
 2. **Update every matching wikilink** across all markdown files in the workspace
 
-A single confirmation dialog covers all affected pages. You can decline — the link text change is kept but files and other links are left untouched.
+A single confirmation dialog covers all affected renames. You can decline -- the link text change is kept but files and other links are left untouched.
 
-Rename tracking is alias-aware: editing an alias wikilink offers to update the alias in the front matter and all matching references.
+### Merge on Rename to Existing Page
+
+If you rename a wikilink to match a page that already exists, AS Notes offers to **merge** the two files instead of renaming:
+
+- The dialog uses "Merge" language so the operation is clear
+- **Target page content is preserved** -- the source body is appended below the target body, separated by a blank line
+- **Front matter is merged** with target priority -- the target's values win for any shared properties (e.g. `title`, `description`), while properties that only exist in the source are added
+- **Aliases are merged and deduplicated** -- both pages' alias lists are combined, with duplicates removed
+- The source file is **deleted** after the merge
+
+Declining a merge is a full no-op -- no files change, no index updates, no other links are touched.
+
+### Explorer Sidebar Rename
+
+Renaming a `.md` file in the VS Code explorer sidebar triggers the same link update: all wikilinks that referenced the old filename are updated to match the new name.
+
+### Alias-Aware Rename
+
+Rename tracking is alias-aware. Editing an alias wikilink offers to update the alias value in the canonical page's front matter and all matching references across the workspace.
 
 ## Page Aliases
 

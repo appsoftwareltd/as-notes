@@ -12,6 +12,7 @@ import { MermaidDiagramDecorations } from './decorator/mermaid-diagram-decoratio
 import { MathDecorations } from './math/math-decorations';
 import { renderMermaidSvg, svgToDataUri, createErrorSvg } from './mermaid/mermaid-renderer';
 import { MermaidHoverIndicatorDecorationType } from './decorations';
+import { formatLogError, getActiveLogger } from '../LogService.js';
 
 /**
  * Performance and caching constants.
@@ -590,7 +591,7 @@ export class Decorator {
               const svg = await renderMermaidSvg(block.source, { theme, fontFamily, numLines: block.numLines });
               return svgToDataUri(svg);
             } catch (error) {
-              console.warn('Mermaid render failed:', error instanceof Error ? error.message : error);
+              getActiveLogger().warn('InlineDecorator', `Mermaid render failed: ${formatLogError(error)}`);
               // Create error SVG to display instead of silently failing.
               let errorMessage = 'Rendering failed';
               if (error instanceof Error) {
