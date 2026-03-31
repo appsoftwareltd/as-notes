@@ -22,7 +22,7 @@ import * as vscode from 'vscode';
  */
 export async function applyAssetPathSettings(): Promise<void> {
     const config = vscode.workspace.getConfiguration('as-notes');
-    const assetPath = config.get<string>('assetPath', 'assets/images');
+    const assetPath = config.get<string>('assetPath', 'assets');
     const rootDirectory = config.get<string>('rootDirectory', '').trim().replace(/^[/\\]+|[/\\]+$/g, '');
 
     const target = vscode.ConfigurationTarget.Workspace;

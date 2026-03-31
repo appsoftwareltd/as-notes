@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { IgnoreService } from '../IgnoreService.js';
+import { IgnoreService, createConfiguredIgnoreService } from '../IgnoreService.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -210,5 +210,63 @@ describe('IgnoreService — default patterns', () => {
         // Normal user notes are not affected
         expect(svc.isIgnored('notes/ideas.md')).toBe(false);
         expect(svc.isIgnored('journal/2024-01-01.md')).toBe(false);
+    });
+});
+
+describe('IgnoreService — mandatory runtime exclusions', () => {
+    it('always excludes .asnotes, templateFolder, and assetPath directories', () => {
+        const svc = createConfiguredIgnoreService(ignoreFilePath, {
+            templateFolder: 'templates',
+            assetPath: 'assets',
+        });
+
+        expect(svc.isIgnored('.asnotes/index.db')).toBe(true);
+        expect(svc.isIgnored('.asnotes/logs/main.log')).toBe(true);
+        expect(svc.isIgnored('templates/Journal.md')).toBe(true);
+        expect(svc.isIgnored('assets/diagram.md')).toBe(true);
+        expect(svc.isIgnored('assets/images/diagram.md')).toBe(true);
+        expect(svc.isIgnored('notes/page.md')).toBe(false);
+    });
+
+    it('normalises configured directory paths and preserves mandatory exclusions across reload', () => {
+        writeIgnore('archive/\n');
+        const svc = createConfiguredIgnoreService(ignoreFilePath, {
+            templateFolder: '/templates/',
+            assetPath: '\\assets\\images\\',
+        });
+
+        expect(svc.isIgnored('templates/Journal.md')).toBe(true);
+        expect(svc.isIgnored('assets/images/diagram.md')).toBe(true);
+        expect(svc.isIgnored('.asnotes/index.db')).toBe(true);
+        expect(svc.isIgnored('archive/page.md')).toBe(true);
+
+        writeIgnore('private/\n');
+        svc.reload();
+
+        expect(svc.isIgnored('.asnotes/index.db')).toBe(true);
+        expect(svc.isIgnored('templates/Journal.md')).toBe(true);
+        expect(svc.isIgnored('assets/images/diagram.md')).toBe(true);
+        expect(svc.isIgnored('archive/page.md')).toBe(false);
+        expect(svc.isIgnored('private/page.md')).toBe(true);
+    });
+
+    it('reflects settings changes when a new configured service is created', () => {
+        const initialSvc = createConfiguredIgnoreService(ignoreFilePath, {
+            templateFolder: 'templates',
+            assetPath: 'assets',
+        });
+        expect(initialSvc.isIgnored('templates/Journal.md')).toBe(true);
+        expect(initialSvc.isIgnored('static/diagram.md')).toBe(false);
+        expect(initialSvc.isIgnored('assets/diagram.md')).toBe(true);
+
+        const updatedSvc = createConfiguredIgnoreService(ignoreFilePath, {
+            templateFolder: 'snippets',
+            assetPath: 'static',
+        });
+        expect(updatedSvc.isIgnored('.asnotes/index.db')).toBe(true);
+        expect(updatedSvc.isIgnored('templates/Journal.md')).toBe(false);
+        expect(updatedSvc.isIgnored('snippets/Journal.md')).toBe(true);
+        expect(updatedSvc.isIgnored('assets/diagram.md')).toBe(false);
+        expect(updatedSvc.isIgnored('static/diagram.md')).toBe(true);
     });
 });

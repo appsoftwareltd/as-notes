@@ -40,7 +40,7 @@ import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
 import { LogService, NO_OP_LOGGER, formatLogError, setActiveLogger } from './LogService.js';
 import { findInnermostOpenBracket, hasNewCompleteWikilink } from './CompletionUtils.js';
-import { IgnoreService } from './IgnoreService.js';
+import { IgnoreService, createConfiguredIgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
 import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
@@ -774,8 +774,7 @@ async function enterFullMode(
         fs.mkdirSync(notesFolderPath, { recursive: true });
     }
 
-    ignoreService = new IgnoreService(nrp.ignoreFilePath);
-    indexScanner = new IndexScanner(indexService, nrUri, ignoreService, logService);
+    refreshIgnoreInfrastructure();
 
     // Shared services — WikilinkService is index-independent, so create early
     const wikilinkService = new WikilinkService();
@@ -2216,17 +2215,7 @@ async function enterFullMode(
     );
     const onIgnoreFileChange = (): void => {
         ignoreService?.reload();
-        indexScanner?.staleScan().then((summary) => {
-            if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
-                indexService?.saveToFile();
-                completionProvider?.refresh();
-                taskPanelProvider?.refresh();
-                searchPanelProvider?.refresh();
-                backlinkPanelProvider?.refresh();
-                calendarPanelProvider?.refresh();
-                updateFullModeStatusBar();
-            }
-        }).catch(err => logService.warn('extension', `stale scan after .asnotesignore change failed: ${formatLogError(err)}`));
+        runStaleScanAfterExclusionRefresh('.asnotesignore change');
     };
     ignoreFileWatcher.onDidChange(onIgnoreFileChange);
     ignoreFileWatcher.onDidCreate(onIgnoreFileChange);
@@ -2244,6 +2233,10 @@ async function enterFullMode(
                 applyAssetPathSettings().catch(err =>
                     logService.warn('extension', `failed to apply asset path settings on config change: ${formatLogError(err)}`),
                 );
+            }
+            if (e.affectsConfiguration('as-notes.assetPath') || e.affectsConfiguration('as-notes.templateFolder')) {
+                refreshIgnoreInfrastructure();
+                runStaleScanAfterExclusionRefresh('runtime exclusion config change');
             }
             if (e.affectsConfiguration('as-notes.rootDirectory')) {
                 vscode.window.showWarningMessage(
@@ -2477,7 +2470,7 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
             indexService = new IndexService(nrp.databasePath, logService);
             await indexService.initDatabase();
 
-            const initIgnoreService = new IgnoreService(nrp.ignoreFilePath);
+            const initIgnoreService = createRuntimeIgnoreService(nrp.ignoreFilePath);
             indexScanner = new IndexScanner(indexService, nrUri, initIgnoreService, logService);
 
             const result = await indexScanner.fullScan(progress);
@@ -2940,6 +2933,37 @@ function ensureIgnoreFile(notesRootFsPath: string): void {
     if (!fs.existsSync(ignoreFilePath)) {
         fs.writeFileSync(ignoreFilePath, DEFAULT_IGNORE_CONTENT, 'utf-8');
     }
+}
+
+function createRuntimeIgnoreService(ignoreFilePath: string): IgnoreService {
+    const config = vscode.workspace.getConfiguration('as-notes');
+    return createConfiguredIgnoreService(ignoreFilePath, {
+        templateFolder: config.get<string>('templateFolder', 'templates'),
+        assetPath: config.get<string>('assetPath', 'assets'),
+    });
+}
+
+function refreshIgnoreInfrastructure(): void {
+    if (!notesRootPaths) { return; }
+    ignoreService = createRuntimeIgnoreService(notesRootPaths.ignoreFilePath);
+    if (indexService?.isOpen && notesRootUri) {
+        indexScanner = new IndexScanner(indexService, notesRootUri, ignoreService, logService);
+    }
+}
+
+function runStaleScanAfterExclusionRefresh(reason: string): void {
+    if (!indexScanner) { return; }
+    indexScanner.staleScan().then((summary) => {
+        if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
+            indexService?.saveToFile();
+            completionProvider?.refresh();
+            taskPanelProvider?.refresh();
+            searchPanelProvider?.refresh();
+            backlinkPanelProvider?.refresh();
+            calendarPanelProvider?.refresh();
+            updateFullModeStatusBar();
+        }
+    }).catch(err => logService.warn('extension', `stale scan after ${reason} failed: ${formatLogError(err)}`));
 }
 
 function getWorkspaceRoot(): vscode.Uri | undefined {

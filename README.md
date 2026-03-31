@@ -532,6 +532,7 @@ Update `version` in `package.json` and add an entry to `CHANGELOG.md`.
 **Step 2 - publish to the VS Code Marketplace**
 
 ```bash
+cd .\vs-code-extension\
 npm run build
 npx @vscode/vsce package
 npx @vscode/vsce login appsoftwareltd   # enter PAT token if auth expired
@@ -541,6 +542,7 @@ npx @vscode/vsce publish
 **Step 3 - tag and push**
 
 ```bash
+cd ..
 git add .
 git commit -m "Release v2.3.1"   # change version
 git tag v2.3.1                   # change version

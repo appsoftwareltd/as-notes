@@ -257,6 +257,14 @@ reload(): void
 
 Patterns follow `.gitignore` syntax, parsed by the [`ignore`](https://www.npmjs.com/package/ignore) npm package — the standard implementation used by many tools. `IgnoreService` normalises backslash paths to forward slashes on Windows before passing them to `ignore`.
 
+In addition to user-owned `.asnotesignore` content, the extension builds a runtime ignore layer via `createConfiguredIgnoreService()` for mandatory exclusions derived from current configuration. These patterns are added after `.asnotesignore` is loaded so they remain non-optional even if a user adds negation rules.
+
+Mandatory runtime exclusions are:
+
+- `.asnotes/`
+- configured `templateFolder`
+- configured `assetPath`
+
 **`.asnotesignore` lifecycle:**
 
 - Created by `initWorkspace()` at the workspace root (same level as `.asnotes/`) if it does not already exist.
@@ -272,7 +280,7 @@ The create-if-missing logic is centralised in a private `ensureIgnoreFile(worksp
 | `rebuildIndex()` | At the start of every manual rebuild |
 | `startPeriodicScan()` setInterval callback | On every periodic scan tick |
 
-After `ensureIgnoreFile()` is called in `rebuildIndex()` and `startPeriodicScan()`, `ignoreService?.reload()` is called immediately so the in-memory patterns reflect any changes (including recreation after deletion) before the scan proceeds.
+After `ensureIgnoreFile()` is called in `rebuildIndex()` and `startPeriodicScan()`, `ignoreService?.reload()` is called immediately so the in-memory patterns reflect any changes (including recreation after deletion) before the scan proceeds. When `templateFolder` or `assetPath` changes, the extension recreates the configured ignore service and re-runs a stale scan so the mandatory runtime exclusions update immediately without rewriting `.asnotesignore`.
 
 **Integration with IndexScanner:**
 
@@ -2637,7 +2645,17 @@ In `extension.ts`, all index update triggers (`onDidSaveTextDocument`, `onDidCha
 
 A private `isEncryptedFileUri(uri)` helper centralises the `.enc.md` check within `extension.ts`.
 
-**2. `.asnotesignore` patterns (user exclusions)**
+**2. Runtime ignore exclusions**
+
+The index also excludes mandatory runtime directories built from extension configuration:
+
+- `.asnotes/`
+- configured `templateFolder`
+- configured `assetPath`
+
+These are enforced through `IgnoreService` rather than written into `.asnotesignore`, so settings changes take effect immediately and user ignore files remain user-owned.
+
+**3. `.asnotesignore` patterns (user exclusions)**
 
 See [IgnoreService and .asnotesignore](#ignoreservice-and-asnotesignore) in the Persistent index section.
 
@@ -2664,11 +2682,11 @@ AS Notes delegates file drop and paste to VS Code's **built-in** markdown editor
 
 ### Workspace configuration
 
-`applyAssetPathSettings()` in `src/ImageDropProvider.ts` reads `as-notes.assetPath` (default `assets/images`) and writes:
+`applyAssetPathSettings()` in `src/ImageDropProvider.ts` reads `as-notes.assetPath` (default `assets`) and writes:
 
 ```json
 "markdown.copyFiles.destination": {
-    "**/*.md": "assets/images/${fileName}"
+    "**/*.md": "assets/${fileName}"
 }
 ```
 
@@ -2676,7 +2694,7 @@ to `.vscode/settings.json` at workspace scope. `${fileName}` is a built-in VS Co
 
 | Setting | Default | Description |
 |---|---|---|
-| `as-notes.assetPath` | `assets/images` | Workspace-relative folder where dropped/pasted files are saved |
+| `as-notes.assetPath` | `assets` | Workspace-relative folder where dropped/pasted files are saved |
 
 **Trigger points** (all in `extension.ts`):
 

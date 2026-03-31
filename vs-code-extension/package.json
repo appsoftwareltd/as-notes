@@ -292,7 +292,7 @@
                 },
                 "as-notes.assetPath": {
                     "type": "string",
-                    "default": "assets/images",
+                    "default": "assets",
                     "description": "Folder where dropped or pasted files are saved by VS Code's built-in markdown editor, relative to the AS Notes root directory. AS Notes configures the built-in markdown.copyFiles.destination setting to use this path."
                 },
                 "as-notes.createNotesInCurrentDirectory": {
