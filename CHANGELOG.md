@@ -10,6 +10,15 @@ All notable changes to AS Notes will be documented here.
 - Feature: Detects conflicting Markdown Inline Editor extensions and offers to disable them.
 - Feature: Outliner mode awareness -- bullet markers and checkbox syntax always remain visible when outliner mode is active.
 
+## [2.3.1] - 2026-03-31
+
+- Feature: Improved page / wikilink rename merge behaviours.
+- Feature: Mermaid / LaTeX rendering in published HTML (static site rendering).
+
+## [2.3.0] - 2026-03-28
+
+- Feature: Integration of inline markdown editing.
+
 ## [2.2.9] - 2026-03-24
 
 - Feature: Improved default themes for static HTML publishing.

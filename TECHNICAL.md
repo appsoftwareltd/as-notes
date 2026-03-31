@@ -2744,23 +2744,36 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | `isOnBulletLine(lineText)` | Returns `true` for lines matching `/^\s*- /` |
 | `getOutlinerEnterInsert(lineText)` | Returns the `\n{indent}-` or `\n{indent}- [ ]` string to insert on Enter |
 | `isCodeFenceOpen(lineText)` | Returns `true` when a bullet line ends with `` ``` `` (optionally + language) |
+| `getFenceTokenCursorZone(lineText, cursorCharacter)` | Classifies the cursor as `before`, `inside`, or `after` the first `` ``` `` token on the line |
+| `isOutlinerBackspaceMergeCandidate(lineText, cursorCharacter)` | Returns `true` when the cursor is at the end of an empty bullet shell such as `-` or `- [ ]` |
+| `getOutlinerBackspaceTargetLine(lines, lineIndex)` | Returns the previous sibling bullet or nearest ancestor bullet that an empty shell should collapse into |
 | `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
 | `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
 | `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
 | `isClosingCodeFenceLine(lineText)` | Returns `true` for non-bullet bare `` ``` `` lines (no language identifier) |
-| `getClosingFenceBulletInsert(lines, lineIndex)` | Scans upward from closing fence; returns new bullet insert if inside a bullet code block, else `null` |
+| `getBulletCodeFenceContext(lines, lineIndex)` | Returns bullet-owned fence context for the current line when the cursor is on an opening fence, its content, or its closing fence |
+| `getBulletCodeFenceEnterInsert(lines, lineIndex)` | Returns the correct Enter insertion for a bullet fence opener: full skeleton when unclosed, continuation line when already balanced |
+| `getClosingFenceBulletInsert(lines, lineIndex)` | Returns new bullet insert if the closing fence belongs to a bullet code block, else `null` |
 | `isCodeFenceUnbalanced(lines, lineIndex)` | Returns `true` when the standalone fence at `lineIndex` has no matching pair at the same indent |
+| `isInsideBulletCodeFence(lines, lineIndex)` | Returns `true` when the current line is within a bullet-owned fenced code block, including the opening and closing fence lines |
+| `getOwningOutlinerBranchLine(lines, lineIndex)` | Returns the owning bullet branch root for any line inside an outliner-owned block, else `null` |
+| `getOutlinerBranchActionLine(lines, lineIndex)` | Returns the branch root when Tab / Shift+Tab should move the owning branch from the current line, else `null` |
+| `getOutlinerFirstChildLine(lines, lineIndex)` | Returns the first descendant bullet line in the branch, or `null` when the bullet has no children |
 | `getMaxOutlinerIndent(lines, lineIndex, tabSize)` | Returns the maximum indent allowed for a bullet — at most one tab stop past the nearest bullet above |
 | `formatOutlinerPaste(lineText, cursorChar, clipboardText)` | Formats multi-line clipboard text as indented bullets |
 | `toggleOutlinerTodoLine(lineText)` | 3-state cycle: plain bullet → unchecked → done → plain bullet |
 
 ### Context keys
 
-Three context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
+Five context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
 
 - **`as-notes.outlinerMode`** — mirrors the `as-notes.outlinerMode` setting value. Synced on activation and on `onDidChangeConfiguration`.
 - **`as-notes.onBulletLine`** — `true` when any cursor's active line matches `/^\s*- /`. Updated on `onDidChangeTextEditorSelection` and `onDidChangeActiveTextEditor`.
+- **`as-notes.onOutlinerBranchLine`** — `true` when any cursor's active line can resolve to a branch move target via `getOutlinerBranchActionLine(...)`. This includes bullet lines, continuation paragraphs, eligible blank lines, and fence delimiter lines that still belong to an outliner branch.
+- **`as-notes.onOutlinerBackspaceMergePoint`** — `true` when there is a single empty cursor selection at the end of an empty outliner bullet shell that can be structurally collapsed.
 - **`as-notes.onCodeFenceLine`** — `true` when any cursor's active line is a non-bullet code fence (opening or closing). Updated alongside `onBulletLine`.
+
+These context keys are refreshed not only on selection/editor changes but also on active-document text changes, so keybindings that depend on transient line shapes (such as Backspace after deleting down to `-`) become eligible immediately after the preceding edit.
 
 This combination allows keybindings to fire only when in outliner mode AND on a relevant line, preserving normal behaviour elsewhere.
 
@@ -2770,20 +2783,27 @@ Keybinding: `Enter` when `editorLangId == markdown && as-notes.outlinerMode && a
 
 Command `as-notes.outlinerEnter` for each cursor (in priority order):
 
-1. **Bullet code fence open** — `isCodeFenceOpen` returns `true`: inserts code block skeleton indented +2 past bullet (see below).
-2. **Bullet line** — deletes from cursor to end of line, inserts `getOutlinerEnterInsert(lineText)`. Text after cursor is pushed to the new bullet.
+1. **Bullet code fence open, cursor on/after token** — `isCodeFenceOpen` returns `true` and `getFenceTokenCursorZone(...)` is not `before`: inserts the result of `getBulletCodeFenceEnterInsert(...)`, which either opens a new bullet-owned skeleton or continues into the existing balanced fence block.
+2. **Bullet with existing children, cursor at end of line** — inserts a new first child before the current first descendant bullet. The new line reuses the first child's indentation and keeps the parent's bullet vs unchecked-todo shape.
+3. **Bullet line fallback** — deletes from cursor to end of line, inserts `getOutlinerEnterInsert(lineText)`. Text after cursor is pushed to the new bullet.
 
 Standalone and closing code fences are handled by the separate `codeFenceEnter` command (see below).
 
 ### Enter — code fence
 
-When a bullet line ends with `` ``` `` or `` ```language ``, `isCodeFenceOpen` returns `true` and the command inserts a code block skeleton instead of a new bullet:
+When a bullet line ends with `` ``` `` or `` ```language ``, `isCodeFenceOpen` returns `true` and the command only takes the fence-specific path when the cursor is on or after the fence token. If the cursor is still before the opening backticks, Enter falls back to normal outliner splitting so the trailing fence text moves to the next bullet.
+
+When the fence-specific path is active, the command uses bullet-fence context to choose between two behaviours:
+
+1. **Unclosed bullet fence opener** — inserts a full code block skeleton:
 
 ```
 - ```javascript     ← original line (unchanged)
       ← cursor placed here (indent + 2 spaces past the `-`)
   ```                ← closing fence at same content indent
 ```
+
+1. **Already-balanced bullet fence opener** — inserts only a continuation line at the bullet content indent so Enter moves into the existing code block without inserting a duplicate closing fence.
 
 The content inside the fence is indented 2 spaces past the bullet marker. This offset is hardcoded (not derived from editor tab size) to match standard markdown list continuation indent.
 
@@ -2795,7 +2815,7 @@ For standalone (non-bullet) opening fences with a language identifier, `isStanda
 ```                    ← closing fence at same indent
 ```
 
-After the edit, the cursor is repositioned from the end of the closing fence to the blank content line via `editor.selections` assignment in the `.then()` callback.
+After custom Enter edits, the extension now assigns explicit cursor targets per selection rather than relying on VS Code's default post-edit cursor placement. That keeps the cursor on the inserted continuation or bullet line after both fence skeleton insertion and closing-fence bullet continuation.
 
 ### Enter — code fence completion
 
@@ -2805,9 +2825,10 @@ Keybinding: `Enter` when `editorLangId == markdown && as-notes.onCodeFenceLine &
 
 For each cursor (in priority order):
 
-1. **Closing fence of a bullet code block** — `isClosingCodeFenceLine` returns `true` and `getClosingFenceBulletInsert` returns a result. In outliner mode, inserts a new bullet at the parent's indentation. Outside outliner mode, inserts a plain newline.
-2. **Unbalanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` and `isCodeFenceUnbalanced` returns `true`: inserts the closing fence skeleton and positions cursor inside.
-3. **Balanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` but `isCodeFenceUnbalanced` returns `false` (the fence already has a matching closer at the same indent): inserts a plain newline.
+1. **Cursor before fence token** — performs a plain line split at the cursor so Enter behaves like normal text editing rather than fence completion.
+2. **Closing fence of a bullet code block** — `isClosingCodeFenceLine` returns `true` and `getClosingFenceBulletInsert` returns a result based on `getBulletCodeFenceContext(...)`. In outliner mode, inserts a new bullet at the parent's indentation. Outside outliner mode, inserts a plain newline.
+3. **Unbalanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` and `isCodeFenceUnbalanced` returns `true`: inserts the closing fence skeleton and positions cursor inside.
+4. **Balanced standalone fence** — `isStandaloneCodeFenceOpen` returns `true` but `isCodeFenceUnbalanced` returns `false` (the fence already has a matching closer at the same indent): inserts a plain newline.
 
 #### Fence balance detection
 
@@ -2821,13 +2842,58 @@ Fences at different indent levels are never paired. Bullet-prefixed fences are e
 
 ### Tab / Shift+Tab — indent and outdent
 
-Keybinding: `Tab` / `Shift+Tab` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine`.
+Keybinding: `Tab` / `Shift+Tab` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBranchLine`.
 
-`Tab` delegates to `editor.action.indentLines` but only when the resulting indent would not exceed one tab stop past the nearest bullet above. `getMaxOutlinerIndent(lines, lineIndex, tabSize)` scans upward for the closest bullet and returns its indent + tabSize. If no bullet exists above, 0 is returned (root level only). When any selection's line would exceed the maximum, the indent is suppressed entirely.
+`Tab` and `Shift+Tab` are handled by explicit branch-aware edits rather than delegating to VS Code's generic indent commands, and can now be triggered from any line that still belongs to an outliner-owned branch.
 
-`Shift+Tab` always delegates to `editor.action.outdentLines` with no guard — reducing indent is always valid.
+`applyOutlinerBranchMove(...)` first resolves each selected line through `getOutlinerBranchActionLine(...)`:
+
+- bullet lines resolve to themselves
+- continuation lines outside fenced code resolve to their owning bullet branch root
+- fence opener / closer structural lines resolve to their owning bullet branch root
+- actual code-content lines inside a bullet-owned fenced block resolve to `null`, so Tab / Shift+Tab falls back to normal editor indentation for those lines
+
+`OutlinerService` computes the selected branch range from the bullet line down to the end of its descendant block. The moved range includes:
+
+- descendant bullet lines deeper than the branch root
+- non-bullet continuation lines that belong to the branch, such as paragraphs, fenced code, tables, blockquotes, and indented images
+
+Branch ownership uses **content-indent semantics** rather than a naive "everything until the next bullet" rule:
+
+- branch root indent = indentation before `-`
+- continuation indent = branch root indent + 2
+- a non-bullet line belongs to the branch only when its indentation is at least the continuation indent
+- blank lines are neutral and only remain part of the branch when the next significant line still satisfies the continuation rule
+- fenced blocks are stateful regions: once an included standalone fence starts, its internal lines and blank lines remain part of the branch until the closing fence
+
+`Tab` applies a **push** to the whole branch: the root bullet and everything in its descendant block move one tab stop deeper together. The one-level-deeper guard still applies, but only to the branch root. `canIndentOutlinerBranch(...)` uses `getMaxOutlinerIndent(...)` for that check.
+
+`Shift+Tab` applies a **drag** to the whole branch: the root bullet and everything in its descendant block move one tab stop shallower together, clamped at root indentation. This prevents descendants from being left more than one indentation level deeper than their parent after an outdent.
+
+This means structural continuation lines such as fence delimiters still move the owning branch, while actual code-content lines inside fenced code retain normal editor indentation behaviour.
 
 On non-bullet lines Tab retains normal VS Code behaviour with no extra logic.
+
+### Backspace — collapse empty bullet shell
+
+Keybinding: `Backspace` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBackspaceMergePoint && !editorReadonly && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible`.
+
+`as-notes.outlinerBackspace` is intentionally narrow. It only runs when all of the following are true:
+
+- there is exactly one empty cursor selection
+- the current line is an empty bullet shell such as `-`, `-`, `- [ ]`, or `- [ ]`
+- the cursor is at the shell's content-start/end position (the same position a second Backspace would normally keep deleting left from)
+
+When triggered:
+
+1. `getOutlinerBackspaceTargetLine(...)` scans upward for the first bullet whose indentation is less than or equal to the current shell's indentation.
+2. That means the merge target is the previous sibling when one exists, otherwise the nearest ancestor bullet.
+3. The current empty shell line is deleted.
+4. The cursor is placed at the end of the target bullet line.
+
+If no such structural predecessor exists, the command falls back to VS Code's normal `deleteLeft` behaviour.
+
+This first implementation does **not** jump to the end of the target subtree; it deliberately lands at the end of the target bullet line only.
 
 ### Paste — multi-line bullet conversion
 

@@ -2,16 +2,28 @@ import { describe, it, expect } from 'vitest';
 import {
     isOnBulletLine,
     getOutlinerEnterInsert,
+    getFenceTokenCursorZone,
+    isOutlinerBackspaceMergeCandidate,
+    getOutlinerBackspaceTargetLine,
     toggleOutlinerTodoLine,
     isCodeFenceOpen,
     getCodeFenceEnterInsert,
+    getBulletCodeFenceEnterInsert,
     formatOutlinerPaste,
     isStandaloneCodeFenceOpen,
     getStandaloneCodeFenceEnterInsert,
     isClosingCodeFenceLine,
+    getBulletCodeFenceContext,
     getClosingFenceBulletInsert,
+    isInsideBulletCodeFence,
     isCodeFenceUnbalanced,
     getMaxOutlinerIndent,
+    getOutlinerBranchRange,
+    getOutlinerFirstChildLine,
+    getOwningOutlinerBranchLine,
+    getOutlinerBranchActionLine,
+    canIndentOutlinerBranch,
+    moveOutlinerBranch,
 } from '../OutlinerService.js';
 
 // ── isOnBulletLine ─────────────────────────────────────────────────────────
@@ -119,6 +131,113 @@ describe('getOutlinerEnterInsert', () => {
 
     it('returns new indented unchecked todo for an indented done todo', () => {
         expect(getOutlinerEnterInsert('    - [x] nested done')).toBe('\n    - [ ] ');
+    });
+
+    it('can override the target indentation for child-first insertion', () => {
+        expect(getOutlinerEnterInsert('- parent', '    ')).toBe('\n    - ');
+        expect(getOutlinerEnterInsert('- [x] parent', '    ')).toBe('\n    - [ ] ');
+    });
+});
+
+// ── fence token cursor position ───────────────────────────────────────────
+
+describe('getFenceTokenCursorZone', () => {
+    it('returns before when the cursor is before the first backtick', () => {
+        expect(getFenceTokenCursorZone('- ```ts', 2)).toBe('before');
+    });
+
+    it('returns inside when the cursor is inside the backtick token', () => {
+        expect(getFenceTokenCursorZone('- ```ts', 4)).toBe('inside');
+    });
+
+    it('returns after when the cursor is after the backtick token', () => {
+        expect(getFenceTokenCursorZone('- ```ts', 5)).toBe('after');
+    });
+
+    it('returns none when the line does not contain a fence token', () => {
+        expect(getFenceTokenCursorZone('- plain bullet', 3)).toBe('none');
+    });
+});
+
+// ── outliner backspace merge ─────────────────────────────────────────────
+
+describe('isOutlinerBackspaceMergeCandidate', () => {
+    it('returns true for an empty plain bullet at the bullet content start', () => {
+        expect(isOutlinerBackspaceMergeCandidate('- ', 2)).toBe(true);
+        expect(isOutlinerBackspaceMergeCandidate('-', 1)).toBe(true);
+        expect(isOutlinerBackspaceMergeCandidate('    - ', 6)).toBe(true);
+        expect(isOutlinerBackspaceMergeCandidate('    -', 5)).toBe(true);
+    });
+
+    it('returns true for an empty todo bullet at the checkbox content start', () => {
+        expect(isOutlinerBackspaceMergeCandidate('- [ ] ', 6)).toBe(true);
+    });
+
+    it('returns false for non-empty bullets or other cursor positions', () => {
+        expect(isOutlinerBackspaceMergeCandidate('- item', 2)).toBe(false);
+        expect(isOutlinerBackspaceMergeCandidate('- ', 1)).toBe(false);
+        expect(isOutlinerBackspaceMergeCandidate('- [ ] ', 5)).toBe(false);
+    });
+});
+
+describe('getOutlinerBackspaceTargetLine', () => {
+    it('merges an empty root-level sibling into the previous sibling bullet', () => {
+        const lines = [
+            '- first',
+            '-',
+        ];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 1)).toBe(0);
+    });
+
+    it('merges a first child into its parent when there is no previous sibling', () => {
+        const lines = [
+            '- parent',
+            '    - ',
+        ];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 1)).toBe(0);
+    });
+
+    it('prefers the previous sibling over the parent for nested empty bullets', () => {
+        const lines = [
+            '- parent',
+            '    - child one',
+            '        - grandchild',
+            '    - ',
+        ];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 3)).toBe(1);
+    });
+
+    it('returns null when there is no previous structural predecessor', () => {
+        const lines = ['- '];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 0)).toBeNull();
+    });
+
+    it('returns null for non-empty bullets', () => {
+        const lines = ['- first', '- second'];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 1)).toBeNull();
+    });
+
+    it('handles \\r\\n line endings from getText().split(\\n)', () => {
+        const lines = [
+            '- first\r',
+            '- \r',
+        ];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 1)).toBe(0);
+    });
+
+    it('handles bare dash with \\r\\n line endings', () => {
+        const lines = [
+            '- parent\r',
+            '    -\r',
+        ];
+
+        expect(getOutlinerBackspaceTargetLine(lines, 1)).toBe(0);
     });
 });
 
@@ -272,6 +391,122 @@ describe('getCodeFenceEnterInsert', () => {
 
     it('returns code block skeleton for an indented todo line', () => {
         expect(getCodeFenceEnterInsert('    - [ ] ```')).toBe('\n      \n      ```');
+    });
+});
+
+// ── bullet-owned code fence context ───────────────────────────────────────
+
+describe('getBulletCodeFenceContext', () => {
+    it('returns bullet fence context for the opening bullet line', () => {
+        const lines = [
+            '- ```csharp',
+            '  Console.WriteLine("hi");',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(getBulletCodeFenceContext(lines, 0)).toEqual({
+            openerLine: 0,
+            rootIndent: 0,
+            contentIndent: 2,
+            isTodo: false,
+        });
+    });
+
+    it('returns bullet fence context for content and closing fence lines', () => {
+        const lines = [
+            '    - [ ] ```ts',
+            '      const value = 1;',
+            '      ```',
+            '    - next',
+        ];
+
+        expect(getBulletCodeFenceContext(lines, 1)).toEqual({
+            openerLine: 0,
+            rootIndent: 4,
+            contentIndent: 6,
+            isTodo: true,
+        });
+        expect(getBulletCodeFenceContext(lines, 2)).toEqual({
+            openerLine: 0,
+            rootIndent: 4,
+            contentIndent: 6,
+            isTodo: true,
+        });
+    });
+
+    it('returns null once the bullet-owned fence has closed', () => {
+        const lines = [
+            '- ```js',
+            '  const value = 1;',
+            '  ```',
+            '- next',
+        ];
+
+        expect(getBulletCodeFenceContext(lines, 3)).toBeNull();
+    });
+
+    it('does not treat standalone fences as bullet-owned fence context', () => {
+        const lines = [
+            '```js',
+            'const value = 1;',
+            '```',
+        ];
+
+        expect(getBulletCodeFenceContext(lines, 1)).toBeNull();
+    });
+});
+
+describe('isInsideBulletCodeFence', () => {
+    it('returns true for opening, content, and closing lines of a bullet-owned fence', () => {
+        const lines = [
+            '- ```python',
+            '  print("hello")',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(isInsideBulletCodeFence(lines, 0)).toBe(true);
+        expect(isInsideBulletCodeFence(lines, 1)).toBe(true);
+        expect(isInsideBulletCodeFence(lines, 2)).toBe(true);
+        expect(isInsideBulletCodeFence(lines, 3)).toBe(false);
+    });
+});
+
+describe('getBulletCodeFenceEnterInsert', () => {
+    it('returns null when the cursor is before the opening backticks on a bullet fence line', () => {
+        const lines = [
+            '- ```csharp',
+            '  Console.WriteLine("hi");',
+            '  ```',
+        ];
+
+        expect(getBulletCodeFenceEnterInsert(lines, 0, 2)).toBeNull();
+    });
+
+    it('returns a full skeleton when a bullet fence has no closing fence yet', () => {
+        const lines = [
+            '- ```csharp',
+            '  Console.WriteLine("hi");',
+        ];
+
+        expect(getBulletCodeFenceEnterInsert(lines, 0, 5)).toBe('\n  \n  ```');
+    });
+
+    it('returns only a continued content line when the bullet fence is already closed later', () => {
+        const lines = [
+            '- ```csharp',
+            '  Console.WriteLine("hi");',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(getBulletCodeFenceEnterInsert(lines, 0, 5)).toBe('\n  ');
+    });
+
+    it('returns null for lines that are not bullet fence openers', () => {
+        const lines = ['- plain bullet'];
+        expect(getBulletCodeFenceEnterInsert(lines, 0)).toBeNull();
     });
 });
 
@@ -898,5 +1133,382 @@ describe('getMaxOutlinerIndent', () => {
         const lines = ['- root', '    - child', '        - grandchild', '    - back-to-child'];
         // Nearest bullet above line 3 is "grandchild" at indent 8; max = 12
         expect(getMaxOutlinerIndent(lines, 3, 4)).toBe(12);
+    });
+});
+
+// ── subtree-aware branch moves ────────────────────────────────────────────
+
+describe('getOutlinerBranchRange', () => {
+    it('includes non-bullet continuation lines indented to content indent', () => {
+        const lines = [
+            '- parent',
+            '  paragraph',
+            '  > quote',
+            '  ![img](../assets/leaf.png)',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 3,
+            rootIndent: 0,
+        });
+    });
+
+    it('stops before a non-bullet line indented less than content indent', () => {
+        const lines = [
+            '- parent',
+            '  paragraph',
+            'plain root paragraph',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 1,
+            rootIndent: 0,
+        });
+    });
+
+    it('treats blank lines as neutral when followed by valid continuation content', () => {
+        const lines = [
+            '- parent',
+            '  paragraph',
+            '',
+            '',
+            '  continued paragraph',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 4,
+            rootIndent: 0,
+        });
+    });
+
+    it('does not keep trailing blank lines when the next significant line closes the branch', () => {
+        const lines = [
+            '- parent',
+            '  paragraph',
+            '',
+            '',
+            'plain root paragraph',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 1,
+            rootIndent: 0,
+        });
+    });
+
+    it('treats a heading outside continuation indent as a hard boundary', () => {
+        const lines = [
+            '- parent',
+            '  paragraph',
+            '# Heading',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 1,
+            rootIndent: 0,
+        });
+    });
+
+    it('includes an indented table but excludes a root-level table after the branch', () => {
+        const lines = [
+            '- parent',
+            '  | Col | Val |',
+            '  | --- | --- |',
+            '  | A | B |',
+            '| Root | Table |',
+            '| --- | --- |',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 3,
+            rootIndent: 0,
+        });
+    });
+
+    it('keeps fenced blocks with internal blank lines inside the branch', () => {
+        const lines = [
+            '- parent',
+            '  ```ts',
+            '',
+            'root-looking text inside fence',
+            '',
+            '  ```',
+            'plain root paragraph',
+        ];
+
+        expect(getOutlinerBranchRange(lines, 0)).toEqual({
+            startLine: 0,
+            endLine: 5,
+            rootIndent: 0,
+        });
+    });
+});
+
+describe('getOutlinerFirstChildLine', () => {
+    it('returns the first descendant bullet line for a branch with children', () => {
+        const lines = [
+            '- parent',
+            '  paragraph owned by parent',
+            '    - child one',
+            '        - grandchild',
+            '    - child two',
+        ];
+
+        expect(getOutlinerFirstChildLine(lines, 0)).toBe(2);
+    });
+
+    it('returns null when the branch has no descendant bullets', () => {
+        const lines = [
+            '- parent',
+            '  paragraph owned by parent',
+            '  ```ts',
+            '  const value = 1;',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(getOutlinerFirstChildLine(lines, 0)).toBeNull();
+    });
+});
+
+describe('getOwningOutlinerBranchLine', () => {
+    it('returns the same line when the current line is a bullet', () => {
+        const lines = ['- root', '  paragraph'];
+        expect(getOwningOutlinerBranchLine(lines, 0)).toBe(0);
+    });
+
+    it('returns the owning bullet line for a continuation paragraph', () => {
+        const lines = [
+            '- root',
+            '  paragraph',
+            '  still part of root',
+            '- sibling',
+        ];
+
+        expect(getOwningOutlinerBranchLine(lines, 2)).toBe(0);
+    });
+
+    it('returns the owning bullet line for a blank line kept by lookahead', () => {
+        const lines = [
+            '- root',
+            '  paragraph',
+            '',
+            '  continued paragraph',
+            '- sibling',
+        ];
+
+        expect(getOwningOutlinerBranchLine(lines, 2)).toBe(0);
+    });
+
+    it('returns the owning bullet line for an indented closing fence', () => {
+        const lines = [
+            '- root',
+            '  ```ts',
+            '  const value = 1;',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(getOwningOutlinerBranchLine(lines, 3)).toBe(0);
+    });
+
+    it('returns null for a root-level line outside any branch', () => {
+        const lines = [
+            '- root',
+            '  paragraph',
+            'root paragraph',
+        ];
+
+        expect(getOwningOutlinerBranchLine(lines, 2)).toBeNull();
+    });
+});
+
+describe('getOutlinerBranchActionLine', () => {
+    it('returns the branch root when the cursor is on a bullet fence opener line', () => {
+        const lines = [
+            '- root',
+            '  - ```csharp',
+            '    Console.WriteLine("hi");',
+            '    ```',
+        ];
+
+        expect(getOutlinerBranchActionLine(lines, 1)).toBe(1);
+    });
+
+    it('returns the owning branch root when the cursor is on a closing fence line', () => {
+        const lines = [
+            '- root',
+            '  ```ts',
+            '  const value = 1;',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchActionLine(lines, 3)).toBe(0);
+    });
+
+    it('returns the owning branch root when the cursor is on a continuation paragraph outside fenced code', () => {
+        const lines = [
+            '- root',
+            '  paragraph',
+            '  another paragraph',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchActionLine(lines, 2)).toBe(0);
+    });
+
+    it('returns null for actual code-content lines inside a bullet-owned fence', () => {
+        const lines = [
+            '- root',
+            '  ```ts',
+            '  const value = 1;',
+            '  ```',
+            '- sibling',
+        ];
+
+        expect(getOutlinerBranchActionLine(lines, 2)).toBeNull();
+    });
+});
+
+describe('canIndentOutlinerBranch', () => {
+    it('allows indent when the branch root stays within one tab stop of the nearest bullet above', () => {
+        const lines = ['- root', '- child', '    - grandchild'];
+        expect(canIndentOutlinerBranch(lines, 1, 4)).toBe(true);
+    });
+
+    it('blocks indent when the branch root would exceed the max indent guard', () => {
+        const lines = ['- root', '    - child', '        - grandchild'];
+        expect(canIndentOutlinerBranch(lines, 2, 4)).toBe(false);
+    });
+});
+
+describe('moveOutlinerBranch', () => {
+    it('indenting a parent pushes direct and deep descendants', () => {
+        const lines = [
+            '- root',
+            '- parent',
+            '    - child',
+            '        - grandchild',
+            '- sibling',
+        ];
+
+        const result = moveOutlinerBranch(lines, 1, 4, 'indent');
+
+        expect(result).not.toBeNull();
+        expect(result!.lines).toEqual([
+            '- root',
+            '    - parent',
+            '        - child',
+            '            - grandchild',
+            '- sibling',
+        ]);
+        expect(result!.startLine).toBe(1);
+        expect(result!.endLine).toBe(3);
+        expect(result!.appliedIndentDelta).toBe(4);
+    });
+
+    it('outdenting a parent drags direct and deep descendants', () => {
+        const lines = [
+            '- root',
+            '    - parent',
+            '        - child',
+            '            - grandchild',
+            '- sibling',
+        ];
+
+        const result = moveOutlinerBranch(lines, 1, 4, 'outdent');
+
+        expect(result).not.toBeNull();
+        expect(result!.lines).toEqual([
+            '- root',
+            '- parent',
+            '    - child',
+            '        - grandchild',
+            '- sibling',
+        ]);
+        expect(result!.startLine).toBe(1);
+        expect(result!.endLine).toBe(3);
+        expect(result!.appliedIndentDelta).toBe(-4);
+    });
+
+    it('outdenting a nested branch clamps at root level and preserves subtree shape', () => {
+        const lines = [
+            '- parent',
+            '    - child',
+            '        - grandchild',
+        ];
+
+        const result = moveOutlinerBranch(lines, 0, 4, 'outdent');
+
+        expect(result).not.toBeNull();
+        expect(result!.lines).toEqual(lines);
+        expect(result!.appliedIndentDelta).toBe(0);
+    });
+
+    it('leaves sibling branches outside the moved subtree unchanged', () => {
+        const lines = [
+            '- root',
+            '    - branch a',
+            '        - child a1',
+            '    - branch b',
+            '        - child b1',
+        ];
+
+        const result = moveOutlinerBranch(lines, 1, 4, 'outdent');
+
+        expect(result).not.toBeNull();
+        expect(result!.lines).toEqual([
+            '- root',
+            '- branch a',
+            '    - child a1',
+            '    - branch b',
+            '        - child b1',
+        ]);
+    });
+
+    it('moves continuation paragraphs, fenced blocks, and tables with the branch', () => {
+        const lines = [
+            '- root',
+            '    - parent',
+            '      continuation paragraph',
+            '      ```ts',
+            '      const water = true;',
+            '      ```',
+            '      | Col | Val |',
+            '      | --- | --- |',
+            '      | A | B |',
+            '        - child',
+            '- sibling',
+        ];
+
+        const result = moveOutlinerBranch(lines, 1, 4, 'outdent');
+
+        expect(result).not.toBeNull();
+        expect(result!.lines).toEqual([
+            '- root',
+            '- parent',
+            '  continuation paragraph',
+            '  ```ts',
+            '  const water = true;',
+            '  ```',
+            '  | Col | Val |',
+            '  | --- | --- |',
+            '  | A | B |',
+            '    - child',
+            '- sibling',
+        ]);
+        expect(result!.endLine).toBe(9);
     });
 });

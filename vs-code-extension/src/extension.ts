@@ -46,7 +46,7 @@ import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { toggleFrontMatterField, cycleFrontMatterField, publishToHtml, configurePublish } from './PublishService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
-import { isOnBulletLine, getOutlinerEnterInsert, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, formatOutlinerPaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, getMaxOutlinerIndent } from './OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, getFenceTokenCursorZone, getOutlinerFirstChildLine, isOutlinerBackspaceMergeCandidate, getOutlinerBackspaceTargetLine, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, getBulletCodeFenceEnterInsert, formatOutlinerPaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, canIndentOutlinerBranch, getOutlinerBranchRange, getOutlinerBranchActionLine, moveOutlinerBranch } from './OutlinerService.js';
 import { KanbanStore } from './KanbanStore.js';
 import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
@@ -305,12 +305,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     const syncOutlinerLineContext = (editor: vscode.TextEditor | undefined) => {
         if (!editor || editor.document.languageId !== 'markdown') {
             vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', false);
+            vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBranchLine', false);
+            vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBackspaceMergePoint', false);
             vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', false);
             return;
         }
+        const lines = editor.document.getText().split('\n');
         const onBullet = editor.selections.some(
             sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
         );
+        const onOutlinerBranchLine = editor.selections.some(
+            sel => getOutlinerBranchActionLine(lines, sel.active.line) !== null,
+        );
+        const onOutlinerBackspaceMergePoint = editor.selections.length === 1
+            && editor.selection.isEmpty
+            && isOutlinerBackspaceMergeCandidate(
+                editor.document.lineAt(editor.selection.active.line).text,
+                editor.selection.active.character,
+            );
         const onCodeFence = editor.selections.some(
             sel => {
                 const text = editor.document.lineAt(sel.active.line).text;
@@ -318,6 +330,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             },
         );
         vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', onBullet);
+        vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBranchLine', onOutlinerBranchLine);
+        vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBackspaceMergePoint', onOutlinerBackspaceMergePoint);
         vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', onCodeFence);
     };
 
@@ -327,6 +341,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor((editor) => syncOutlinerLineContext(editor)),
     );
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeTextDocument((e) => {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor || e.document !== activeEditor.document) {
+                return;
+            }
+            syncOutlinerLineContext(activeEditor);
+        }),
+    );
     // Initialise for currently active editor
     syncOutlinerLineContext(vscode.window.activeTextEditor);
 
@@ -335,9 +358,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
 
-            // Track which selections triggered code fence skeleton insertion so we
-            // can reposition cursors to the blank content line after the edit.
-            let hasCodeFenceSkeleton = false;
+            const allLines = editor.document.getText().split('\n');
+            const nextSelections: vscode.Selection[] = [];
 
             editor.edit(editBuilder => {
                 for (const selection of editor.selections) {
@@ -346,32 +368,43 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                         selection.active.line,
                         editor.document.lineAt(selection.active.line).range.end.character,
                     );
+                    const cursorCharacter = selection.active.character;
+                    const fenceZone = getFenceTokenCursorZone(lineText, cursorCharacter);
 
                     // 1. Bullet line ending with opening code fence → open code block
-                    if (isCodeFenceOpen(lineText)) {
-                        hasCodeFenceSkeleton = true;
-                        editBuilder.insert(lineEnd, getCodeFenceEnterInsert(lineText));
+                    if (isCodeFenceOpen(lineText) && fenceZone !== 'before') {
+                        const insertText = getBulletCodeFenceEnterInsert(allLines, selection.active.line, cursorCharacter) ?? getCodeFenceEnterInsert(lineText);
+                        const bulletIndent = lineText.match(/^(\s*)- /)?.[1]?.length ?? 0;
+                        editBuilder.insert(lineEnd, insertText);
+                        const pos = new vscode.Position(selection.active.line + 1, bulletIndent + 2);
+                        nextSelections.push(new vscode.Selection(pos, pos));
                         continue;
                     }
 
-                    // 2. Bullet line → new bullet at same indentation
+                    // 2. End-of-line Enter on a parent with children → insert a new first child
+                    if (cursorCharacter === lineEnd.character) {
+                        const firstChildLine = getOutlinerFirstChildLine(allLines, selection.active.line);
+                        if (firstChildLine !== null) {
+                            const childIndent = editor.document.lineAt(firstChildLine).text.match(/^(\s*)/)?.[1] ?? '';
+                            const childInsert = `${getOutlinerEnterInsert(lineText, childIndent).slice(1)}\n`;
+                            const insertAt = new vscode.Position(firstChildLine, 0);
+                            editBuilder.insert(insertAt, childInsert);
+                            const pos = new vscode.Position(firstChildLine, childInsert.length - 1);
+                            nextSelections.push(new vscode.Selection(pos, pos));
+                            continue;
+                        }
+                    }
+
+                    // 3. Bullet line → new bullet at same indentation
                     const insertText = getOutlinerEnterInsert(lineText);
                     editBuilder.delete(new vscode.Range(selection.active, lineEnd));
                     editBuilder.insert(selection.active, insertText);
+                    const pos = new vscode.Position(selection.active.line + 1, insertText.length - 1);
+                    nextSelections.push(new vscode.Selection(pos, pos));
                 }
             }).then(success => {
-                if (!success || !hasCodeFenceSkeleton) { return; }
-                // After code fence skeleton insertion, VS Code places the cursor at
-                // the end of the closing ```. Reposition it to the blank line inside
-                // the fence (one line above the closing ```).
-                const newSelections: vscode.Selection[] = editor.selections.map(sel => {
-                    const closingLine = sel.active.line;
-                    const contentLine = closingLine > 0 ? closingLine - 1 : closingLine;
-                    const contentLineLength = editor.document.lineAt(contentLine).text.length;
-                    const pos = new vscode.Position(contentLine, contentLineLength);
-                    return new vscode.Selection(pos, pos);
-                });
-                editor.selections = newSelections;
+                if (!success || nextSelections.length !== editor.selections.length) { return; }
+                editor.selections = nextSelections;
             });
         }),
     );
@@ -386,7 +419,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
 
             const allLines = editor.document.getText().split('\n');
             const outlinerMode = vscode.workspace.getConfiguration('as-notes').get<boolean>('outlinerMode', false);
-            let hasCodeFenceSkeleton = false;
+            const nextSelections: vscode.Selection[] = [];
 
             editor.edit(editBuilder => {
                 for (const selection of editor.selections) {
@@ -395,6 +428,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                         selection.active.line,
                         editor.document.lineAt(selection.active.line).range.end.character,
                     );
+                    const cursorCharacter = selection.active.character;
+                    const fenceZone = getFenceTokenCursorZone(lineText, cursorCharacter);
+
+                    if (fenceZone === 'before') {
+                        const trailingText = lineText.slice(cursorCharacter);
+                        editBuilder.delete(new vscode.Range(selection.active, lineEnd));
+                        editBuilder.insert(selection.active, `\n${trailingText}`);
+                        const pos = new vscode.Position(selection.active.line + 1, 0);
+                        nextSelections.push(new vscode.Selection(pos, pos));
+                        continue;
+                    }
 
                     // Closing fence of a bullet code block (checked first to avoid
                     // misidentifying it as an unbalanced standalone opener)
@@ -403,8 +447,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                         if (bulletResult !== null) {
                             if (outlinerMode) {
                                 editBuilder.insert(lineEnd, bulletResult);
+                                const pos = new vscode.Position(selection.active.line + 1, bulletResult.length - 1);
+                                nextSelections.push(new vscode.Selection(pos, pos));
                             } else {
                                 editBuilder.insert(lineEnd, '\n');
+                                const pos = new vscode.Position(selection.active.line + 1, 0);
+                                nextSelections.push(new vscode.Selection(pos, pos));
                             }
                             continue;
                         }
@@ -412,25 +460,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
 
                     // Standalone fence (opening with language, or bare ```)
                     if (isStandaloneCodeFenceOpen(lineText)) {
+                        const indent = lineText.match(/^(\s*)/)?.[1]?.length ?? 0;
                         if (isCodeFenceUnbalanced(allLines, selection.active.line)) {
-                            hasCodeFenceSkeleton = true;
                             editBuilder.insert(lineEnd, getStandaloneCodeFenceEnterInsert(lineText));
+                            const pos = new vscode.Position(selection.active.line + 1, indent);
+                            nextSelections.push(new vscode.Selection(pos, pos));
                         } else {
                             editBuilder.insert(lineEnd, '\n');
+                            const pos = new vscode.Position(selection.active.line + 1, indent);
+                            nextSelections.push(new vscode.Selection(pos, pos));
                         }
                         continue;
                     }
+
+                    nextSelections.push(selection);
                 }
             }).then(success => {
-                if (!success || !hasCodeFenceSkeleton) { return; }
-                const newSelections: vscode.Selection[] = editor.selections.map(sel => {
-                    const closingLine = sel.active.line;
-                    const contentLine = closingLine > 0 ? closingLine - 1 : closingLine;
-                    const contentLineLength = editor.document.lineAt(contentLine).text.length;
-                    const pos = new vscode.Position(contentLine, contentLineLength);
-                    return new vscode.Selection(pos, pos);
-                });
-                editor.selections = newSelections;
+                if (!success || nextSelections.length !== editor.selections.length) { return; }
+                editor.selections = nextSelections;
             });
         }),
     );
@@ -440,27 +487,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
 
-            const allLines = editor.document.getText().split('\n');
-            const tabSize = editor.options.tabSize as number ?? 4;
-
-            // Only indent if every selection's bullet line would stay within
-            // one tab stop of the nearest bullet above it.
-            const allAllowed = editor.selections.every(sel => {
-                const lineText = editor.document.lineAt(sel.active.line).text;
-                const currentIndent = (lineText.match(/^(\s*)/)?.[1]?.length) ?? 0;
-                const maxIndent = getMaxOutlinerIndent(allLines, sel.active.line, tabSize);
-                return currentIndent + tabSize <= maxIndent;
-            });
-
-            if (allAllowed) {
-                vscode.commands.executeCommand('editor.action.indentLines');
-            }
+            applyOutlinerBranchMove(editor, 'indent');
         }),
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerOutdent', () => {
-            vscode.commands.executeCommand('editor.action.outdentLines');
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+            applyOutlinerBranchMove(editor, 'outdent');
         }),
     );
 
@@ -486,6 +521,43 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const line = editor.document.lineAt(sel.active.line);
             editor.edit(editBuilder => {
                 editBuilder.replace(line.range, result.text);
+            });
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerBackspace', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || editor.selections.length !== 1 || !editor.selection.isEmpty) {
+                void vscode.commands.executeCommand('deleteLeft');
+                return;
+            }
+
+            const lineIndex = editor.selection.active.line;
+            const lineText = editor.document.lineAt(lineIndex).text;
+            if (!isOutlinerBackspaceMergeCandidate(lineText, editor.selection.active.character)) {
+                void vscode.commands.executeCommand('deleteLeft');
+                return;
+            }
+
+            const lines = editor.document.getText().split('\n');
+            const targetLine = getOutlinerBackspaceTargetLine(lines, lineIndex);
+            if (targetLine === null) {
+                void vscode.commands.executeCommand('deleteLeft');
+                return;
+            }
+
+            const deleteRange = editor.document.lineAt(lineIndex).rangeIncludingLineBreak;
+            void editor.edit(editBuilder => {
+                editBuilder.delete(deleteRange);
+            }).then(success => {
+                if (!success) {
+                    return;
+                }
+
+                const targetLineEnd = editor.document.lineAt(targetLine).range.end.character;
+                const pos = new vscode.Position(targetLine, targetLineEnd);
+                editor.selections = [new vscode.Selection(pos, pos)];
             });
         }),
     );
@@ -2968,6 +3040,105 @@ function runStaleScanAfterExclusionRefresh(reason: string): void {
 
 function getWorkspaceRoot(): vscode.Uri | undefined {
     return vscode.workspace.workspaceFolders?.[0]?.uri;
+}
+
+function applyOutlinerBranchMove(
+    editor: vscode.TextEditor,
+    direction: 'indent' | 'outdent',
+): void {
+    const tabSize = editor.options.tabSize as number ?? 4;
+    const originalLines = editor.document.getText().split('\n');
+    const originalSelections = editor.selections.map(sel => sel);
+    const candidateLines = Array.from(new Set(originalSelections.map(sel => sel.active.line))).sort((a, b) => a - b);
+
+    const candidateRoots = candidateLines.map(lineIndex => getOutlinerBranchActionLine(originalLines, lineIndex));
+    if (candidateRoots.some(lineIndex => lineIndex === null)) {
+        void vscode.commands.executeCommand(
+            direction === 'indent' ? 'editor.action.indentLines' : 'editor.action.outdentLines',
+        );
+        return;
+    }
+
+    const resolvedRootCandidates = Array.from(new Set(candidateRoots as number[])).sort((a, b) => a - b);
+
+    const rootLines: number[] = [];
+    const coveredRanges: Array<{ startLine: number; endLine: number }> = [];
+
+    for (const lineIndex of resolvedRootCandidates) {
+        if (coveredRanges.some(range => lineIndex >= range.startLine && lineIndex <= range.endLine)) {
+            continue;
+        }
+        const range = getOutlinerBranchRange(originalLines, lineIndex);
+        if (!range) {
+            continue;
+        }
+        rootLines.push(lineIndex);
+        coveredRanges.push(range);
+    }
+
+    if (rootLines.length === 0) {
+        return;
+    }
+
+    if (direction === 'indent' && !rootLines.every(lineIndex => canIndentOutlinerBranch(originalLines, lineIndex, tabSize))) {
+        return;
+    }
+
+    let updatedLines = originalLines.slice();
+    const appliedRanges: Array<{ startLine: number; endLine: number; delta: number }> = [];
+
+    for (const lineIndex of rootLines) {
+        const result = moveOutlinerBranch(updatedLines, lineIndex, tabSize, direction);
+        if (!result) {
+            continue;
+        }
+        updatedLines = result.lines;
+        appliedRanges.push({
+            startLine: result.startLine,
+            endLine: result.endLine,
+            delta: result.appliedIndentDelta,
+        });
+    }
+
+    const updatedText = updatedLines.join('\n');
+    const originalText = editor.document.getText();
+    if (updatedText === originalText) {
+        return;
+    }
+
+    const fullRange = new vscode.Range(
+        editor.document.positionAt(0),
+        editor.document.positionAt(originalText.length),
+    );
+
+    void editor.edit(editBuilder => {
+        editBuilder.replace(fullRange, updatedText);
+    }).then(success => {
+        if (!success) {
+            return;
+        }
+        editor.selections = originalSelections.map(selection => {
+            const adjustCharacter = (line: number, character: number): number => {
+                const delta = appliedRanges.reduce((sum, range) => {
+                    if (line >= range.startLine && line <= range.endLine) {
+                        return sum + range.delta;
+                    }
+                    return sum;
+                }, 0);
+                return Math.max(0, character + delta);
+            };
+
+            const anchor = new vscode.Position(
+                selection.anchor.line,
+                adjustCharacter(selection.anchor.line, selection.anchor.character),
+            );
+            const active = new vscode.Position(
+                selection.active.line,
+                adjustCharacter(selection.active.line, selection.active.character),
+            );
+            return new vscode.Selection(anchor, active);
+        });
+    });
 }
 
 function isMarkdown(doc: vscode.TextDocument): boolean {
