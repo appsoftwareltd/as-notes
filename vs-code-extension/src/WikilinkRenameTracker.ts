@@ -8,7 +8,12 @@ import { FrontMatterService } from 'as-notes-common';
 import { toNotesRelativePath } from './NotesRootService.js';
 import { reindexWorkspaceUri, updateLinksInWorkspace } from './WikilinkRefactorService.js';
 import { withWikilinkRenameProgress } from './WikilinkRenameProgressService.js';
-import { type LogService, NO_OP_LOGGER } from './LogService.js';
+import { type LogService, NO_OP_LOGGER, formatLogError } from './LogService.js';
+import {
+    collectFilenameRefactorOperations,
+    orderFileRenameOperations,
+    remapUrisForFileOperations,
+} from './WikilinkFilenameRefactorService.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -59,7 +64,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
     private readonly indexService: IndexService;
     private readonly indexScanner: IndexScanner;
     private readonly notesRootUri: vscode.Uri | undefined;
-    private readonly log: Pick<LogService, 'info'>;
+    private readonly log: Pick<LogService, 'info' | 'warn'>;
     private readonly disposables: vscode.Disposable[] = [];
 
     private readonly _onDidDeclineRename = new vscode.EventEmitter<void>();
@@ -78,7 +83,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         indexService: IndexService,
         indexScanner: IndexScanner,
         notesRootUri?: vscode.Uri,
-        log?: Pick<LogService, 'info'>,
+        log?: Pick<LogService, 'info' | 'warn'>,
     ) {
         this.wikilinkService = wikilinkService;
         this.fileService = fileService;
@@ -454,6 +459,29 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             }
         }
 
+        const filenameRefactorPlan = this.notesRootUri && this.indexService.getAllPages
+            ? collectFilenameRefactorOperations(
+                renames,
+                this.indexService.getAllPages(),
+                this.notesRootUri,
+                {
+                    excludePaths: [
+                        ...fileRenames.map(operation => this.toRelativePath(operation.oldUri)),
+                        ...fileMerges.map(operation => this.toRelativePath(operation.oldUri)),
+                    ],
+                },
+            )
+            : { fileRenames: [], fileMerges: [] };
+
+        fileRenames.push(...filenameRefactorPlan.fileRenames);
+        fileMerges.push(...filenameRefactorPlan.fileMerges);
+        renameDescriptions.push(
+            ...filenameRefactorPlan.fileRenames.map(operation => `Filename: ${operation.label}`),
+            ...filenameRefactorPlan.fileMerges.map(operation => `Merge filename ${operation.label}`),
+        );
+
+        const orderedFileRenames = orderFileRenameOperations(fileRenames);
+
         const hasMerges = fileMerges.length > 0;
         const message = renames.length === 1
             ? `${hasMerges ? 'Merge' : 'Rename'} ${renameDescriptions[0]}? This will update all matching links.`
@@ -475,12 +503,12 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         this.isProcessing = true;
         this.log.info('rename', 'start (isProcessing=true)');
         try {
-            const rewriteCandidateUris = this.remapRefactorCandidateUris(
+            const rewriteCandidateUris = remapUrisForFileOperations(
                 this.getRefactorCandidateUris(
                     renames.map(r => r.oldPageName),
                     document.uri,
                 ),
-                fileRenames,
+                orderedFileRenames,
                 fileMerges,
             );
 
@@ -495,7 +523,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 }
 
                 // Process direct file renames
-                for (const fr of fileRenames) {
+                for (const fr of orderedFileRenames) {
                     this.log.info('rename', `fs.rename: ${vscode.workspace.asRelativePath(fr.oldUri)} → ${vscode.workspace.asRelativePath(fr.newUri)}`);
                     await vscode.workspace.fs.rename(fr.oldUri, fr.newUri, { overwrite: false });
                     this.log.info('rename', 'fs.rename: done');
@@ -527,7 +555,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
                 progress.report('Refreshing index');
                 this.log.info('rename', 'refreshIndex: start');
-                await this.refreshIndexAfterRename(document, classifiedRenames, fileRenames, fileMerges, affectedReferenceUris);
+                await this.refreshIndexAfterRename(document, classifiedRenames, orderedFileRenames, fileMerges, affectedReferenceUris);
                 this.log.info('rename', 'refreshIndex: done');
             });
         } catch (err) {
@@ -570,7 +598,7 @@ export class WikilinkRenameTracker implements vscode.Disposable {
                 await vscode.workspace.applyEdit(edit);
             }
         } catch (err) {
-            console.warn(`as-notes: failed to update alias front matter for ${canonicalPagePath}:`, err);
+            this.log.warn('rename', `failed to update alias front matter for ${canonicalPagePath}: ${formatLogError(err)}`);
         }
     }
 
@@ -750,25 +778,10 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         return uris;
     }
 
-    private remapRefactorCandidateUris(
-        candidateUris: vscode.Uri[],
-        fileRenames: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[],
-        fileMerges: { oldUri: vscode.Uri; newUri: vscode.Uri; label: string }[],
-    ): vscode.Uri[] {
-        const replacements = new Map<string, vscode.Uri>();
-        for (const fr of fileRenames) {
-            replacements.set(fr.oldUri.toString(), fr.newUri);
-        }
-        for (const fm of fileMerges) {
-            replacements.set(fm.oldUri.toString(), fm.newUri);
-        }
-
-        const unique = new Map<string, vscode.Uri>();
-        for (const uri of candidateUris) {
-            const replacement = replacements.get(uri.toString()) ?? uri;
-            unique.set(replacement.toString(), replacement);
-        }
-        return [...unique.values()];
+    private toRelativePath(uri: vscode.Uri): string {
+        return this.notesRootUri
+            ? toNotesRelativePath(this.notesRootUri.fsPath, uri.fsPath)
+            : vscode.workspace.asRelativePath(uri, false);
     }
 
 }

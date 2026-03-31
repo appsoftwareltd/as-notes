@@ -154,3 +154,17 @@ export class LogService {
  * Avoids null checks throughout the codebase — callers always have a LogService.
  */
 export const NO_OP_LOGGER = new LogService('', { enabled: false });
+
+let activeLogger: LogService = NO_OP_LOGGER;
+
+export function setActiveLogger(logger: LogService): void {
+    activeLogger = logger;
+}
+
+export function getActiveLogger(): LogService {
+    return activeLogger;
+}
+
+export function formatLogError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}

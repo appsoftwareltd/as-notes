@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { IndexService, type BacklinkChainGroup, type BacklinkChainInstance, type PageRow } from './IndexService.js';
-import type { LogService } from './LogService.js';
+import { getActiveLogger, formatLogError, type LogService } from './LogService.js';
 import * as path from 'path';
 import { toNotesRelativePath } from './NotesRootService.js';
 
@@ -463,7 +463,7 @@ export class BacklinkPanelProvider implements vscode.Disposable {
                 vscode.TextEditorRevealType.InCenter,
             );
         } catch (err) {
-            console.warn('as-notes: failed to navigate to backlink:', err);
+            (this.logger ?? getActiveLogger()).warn('BacklinkPanel', `failed to navigate to backlink: ${formatLogError(err)}`);
         }
     }
 

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import ignore, { type Ignore } from 'ignore';
+import { formatLogError, getActiveLogger } from './LogService.js';
 
 /**
  * Reads and parses an `.asnotesignore` file (`.gitignore` syntax) and exposes
@@ -48,7 +49,7 @@ export class IgnoreService {
             const content = fs.readFileSync(this.ignoreFilePath, 'utf-8');
             instance.add(content);
         } catch (err) {
-            console.warn(`as-notes: could not read ${this.ignoreFilePath}:`, err);
+            getActiveLogger().warn('IgnoreService', `could not read ${this.ignoreFilePath}: ${formatLogError(err)}`);
         }
         return instance;
     }

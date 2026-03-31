@@ -290,6 +290,7 @@ describe('WikilinkRenameTracker — promptAndPerformRenames', () => {
             isOpen: true,
             getPageByPath: vi.fn().mockReturnValue({ id: 1 }),
             getLinksForPage: vi.fn().mockReturnValue([]),
+            findPagesLinkingToPageNames: vi.fn().mockReturnValue([]),
             resolveAlias: vi.fn().mockReturnValue(undefined),
             indexFileContent,
             updateRename: vi.fn(),
@@ -309,6 +310,7 @@ describe('WikilinkRenameTracker — promptAndPerformRenames', () => {
             fileService as never,
             indexService as never,
             indexScanner as never,
+            { fsPath: '/notes', toString: () => 'file:///notes' } as never,
         );
 
         return { tracker, document, fileService, indexService, indexScanner, oldUri, newUri, documentUri };
@@ -407,7 +409,7 @@ describe('WikilinkRenameTracker — promptAndPerformRenames', () => {
             .promptAndPerformRenames(document, renames, 'referencing.md');
 
         expect(indexService.indexFileContent).toHaveBeenCalledWith(
-            '/notes/referencing.md',
+            'referencing.md',
             'referencing.md',
             '[[NewName]]',
             expect.any(Number),
@@ -483,6 +485,30 @@ describe('WikilinkRenameTracker — promptAndPerformRenames', () => {
 
         expect(indexScanner.indexFile).not.toHaveBeenCalledWith(oldUri);
         expect(indexScanner.indexFile).toHaveBeenCalledWith(newUri);
+    });
+
+    it('renames filenames that contain the renamed wikilink text', async () => {
+        const { tracker, document, indexService } = makeMocks();
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Yes' as never);
+
+        indexService.getAllPages = vi.fn().mockReturnValue([
+            { id: 2, path: 'Topic [[OldName]].md', filename: 'Topic [[OldName]].md', title: 'Topic [[OldName]]', mtime: 0, indexed_at: 0 },
+        ]);
+
+        await (tracker as unknown as { promptAndPerformRenames: Function })
+            .promptAndPerformRenames(document, [{
+                oldPageName: 'OldName',
+                newPageName: 'NewName',
+                line: 0,
+                startPosition: 0,
+                endPosition: 11,
+            }], 'referencing.md');
+
+        expect(vscode.workspace.fs.rename).toHaveBeenCalledWith(
+            expect.objectContaining({ fsPath: '/notes/Topic [[OldName]].md' }),
+            expect.objectContaining({ fsPath: '/notes/Topic [[NewName]].md' }),
+            { overwrite: false },
+        );
     });
 
     it('fires onDidDeclineRename when user declines', async () => {

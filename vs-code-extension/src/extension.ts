@@ -38,7 +38,7 @@ import { activateLicenceKey, checkServerForRevocation, verifyLicenceFromSettings
 import * as EncryptionService from './EncryptionService.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
-import { LogService, NO_OP_LOGGER } from './LogService.js';
+import { LogService, NO_OP_LOGGER, formatLogError, setActiveLogger } from './LogService.js';
 import { findInnermostOpenBracket, hasNewCompleteWikilink } from './CompletionUtils.js';
 import { IgnoreService } from './IgnoreService.js';
 import { SlashCommandProvider } from './SlashCommandProvider.js';
@@ -536,7 +536,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             inlineEditorManager?.refreshLicenceGate();
         }).catch((err) => {
             clearTimeout(progressTimer);
-            console.warn('as-notes: licence validation failed:', err);
+            logService.warn('extension', `licence validation failed: ${formatLogError(err)}`);
         });
     }
 
@@ -563,7 +563,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
 
     // Clean up legacy SecretStorage keys from the JWT-based system.
     migrateOldSecrets(context.secrets).catch((err) => {
-        console.warn('as-notes: failed to migrate old secrets:', err);
+        logService.warn('extension', `failed to migrate old secrets: ${formatLogError(err)}`);
     });
 
     // Verify licence from settings on startup (instant, offline Ed25519 check).
@@ -574,7 +574,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         updateFullModeStatusBar();
         inlineEditorManager?.refreshLicenceGate();
     }).catch((err) => {
-        console.warn('as-notes: failed to verify licence from settings:', err);
+        logService.warn('extension', `failed to verify licence from settings: ${formatLogError(err)}`);
     });
 
     // Periodic background check for revocation (every 7 days).
@@ -588,7 +588,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             updateFullModeStatusBar();
             inlineEditorManager?.refreshLicenceGate();
         }).catch((err) => {
-            console.warn('as-notes: periodic licence check failed:', err);
+            logService.warn('extension', `periodic licence check failed: ${formatLogError(err)}`);
         });
     }, VALIDATION_INTERVAL_MS);
 
@@ -648,7 +648,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         // extendMarkdownIt — if we block here on DB init + stale scan,
         // the preview hangs waiting and never renders wikilinks.
         enterFullMode(context, workspaceRoot).catch(err => {
-            console.error('as-notes: failed to enter full mode, falling back to passive', err);
+            logService.error('extension', `failed to enter full mode, falling back to passive: ${formatLogError(err)}`);
             setPassiveMode('Index initialisation failed');
         });
     } else {
@@ -739,6 +739,7 @@ async function enterFullMode(
     const loggingEnabled = config.get<boolean>('enableLogging', false)
         || process.env.AS_NOTES_DEBUG === '1';
     logService = new LogService(nrp.logDir, { enabled: loggingEnabled });
+    setActiveLogger(logService);
     if (logService.isEnabled) {
         logService.info('extension', 'Logging activated');
     }
@@ -1057,8 +1058,9 @@ async function enterFullMode(
         const summary = await indexScanner.staleScan();
         if (summary.newFiles > 0 || summary.staleFiles > 0 || summary.deletedFiles > 0) {
             indexService.saveToFile();
-            console.log(
-                `as-notes: stale scan — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted, ${summary.unchanged} unchanged`,
+            logService.info(
+                'extension',
+                `stale scan — ${summary.newFiles} new, ${summary.staleFiles} stale, ${summary.deletedFiles} deleted, ${summary.unchanged} unchanged`,
             );
         }
     }
@@ -1476,7 +1478,7 @@ async function enterFullMode(
 
     // Configure the built-in markdown copy-files destination to use our asset path
     applyAssetPathSettings().catch(err =>
-        console.warn('as-notes: failed to apply asset path settings:', err),
+        logService.warn('extension', `failed to apply asset path settings: ${formatLogError(err)}`),
     );
 
     // Todo toggle — requires full mode (index needed for task panel sync)
@@ -1669,7 +1671,7 @@ async function enterFullMode(
                     }
                     encrypted++;
                 } catch (err) {
-                    console.warn(`as-notes: failed to encrypt ${fileUri.fsPath}:`, err);
+                    logService.warn('extension', `failed to encrypt ${fileUri.fsPath}: ${formatLogError(err)}`);
                     errors++;
                 }
             }
@@ -1727,7 +1729,7 @@ async function enterFullMode(
                     }
                     decrypted++;
                 } catch (err) {
-                    console.warn(`as-notes: failed to decrypt ${fileUri.fsPath}:`, err);
+                    logService.warn('extension', `failed to decrypt ${fileUri.fsPath}: ${formatLogError(err)}`);
                     errors++;
                 }
             }
@@ -1958,7 +1960,7 @@ async function enterFullMode(
                 searchPanelProvider?.refresh();
                 backlinkPanelProvider?.refresh();
             } catch (err) {
-                console.warn('as-notes: failed to index on save:', err);
+                logService.warn('extension', `failed to index on save: ${formatLogError(err)}`);
             }
         }),
     );
@@ -2053,7 +2055,7 @@ async function enterFullMode(
                     try {
                         await indexScanner!.indexFile(fileUri);
                     } catch (err) {
-                        console.warn('as-notes: failed to index created file:', err);
+                        logService.warn('extension', `failed to index created file: ${formatLogError(err)}`);
                     }
                 }
             }
@@ -2087,7 +2089,7 @@ async function enterFullMode(
                 try {
                     await indexScanner!.staleScan();
                 } catch (err) {
-                    console.warn('as-notes: stale scan after folder delete failed:', err);
+                    logService.warn('extension', `stale scan after folder delete failed: ${formatLogError(err)}`);
                 }
             }
             if (!safeSaveToFile()) { return; }
@@ -2117,7 +2119,7 @@ async function enterFullMode(
                     try {
                         await indexScanner!.indexFile(newUri);
                     } catch (err) {
-                        console.warn('as-notes: failed to index renamed file:', err);
+                        logService.warn('extension', `failed to index renamed file: ${formatLogError(err)}`);
                     }
                 }
             }
@@ -2127,7 +2129,7 @@ async function enterFullMode(
                 try {
                     await indexScanner!.staleScan();
                 } catch (err) {
-                    console.warn('as-notes: stale scan after folder rename failed:', err);
+                    logService.warn('extension', `stale scan after folder rename failed: ${formatLogError(err)}`);
                 }
             }
             if (!safeSaveToFile()) { return; }
@@ -2224,7 +2226,7 @@ async function enterFullMode(
                 calendarPanelProvider?.refresh();
                 updateFullModeStatusBar();
             }
-        }).catch(err => console.warn('as-notes: stale scan after .asnotesignore change failed:', err));
+        }).catch(err => logService.warn('extension', `stale scan after .asnotesignore change failed: ${formatLogError(err)}`));
     };
     ignoreFileWatcher.onDidChange(onIgnoreFileChange);
     ignoreFileWatcher.onDidCreate(onIgnoreFileChange);
@@ -2240,7 +2242,7 @@ async function enterFullMode(
             }
             if (e.affectsConfiguration('as-notes.assetPath')) {
                 applyAssetPathSettings().catch(err =>
-                    console.warn('as-notes: failed to apply asset path settings on config change:', err),
+                    logService.warn('extension', `failed to apply asset path settings on config change: ${formatLogError(err)}`),
                 );
             }
             if (e.affectsConfiguration('as-notes.rootDirectory')) {
@@ -2329,10 +2331,11 @@ function exitFullMode(): void {
     ignoreService = undefined;
     completionProvider = undefined;
     logService.info('extension', 'exitFullMode: complete');
+    logService.info('extension', '.asnotes/ directory removed — switched to passive mode');
+    setActiveLogger(NO_OP_LOGGER);
     logService = NO_OP_LOGGER;
     disposeFullMode();
     setPassiveMode();
-    console.log('as-notes: .asnotes/ directory removed — switched to passive mode');
 }
 
 /**
@@ -2457,6 +2460,7 @@ async function initWorkspace(context: vscode.ExtensionContext): Promise<void> {
     const loggingEnabled = config.get<boolean>('enableLogging', false)
         || process.env.AS_NOTES_DEBUG === '1';
     logService = new LogService(nrp.logDir, { enabled: loggingEnabled });
+    setActiveLogger(logService);
     if (logService.isEnabled) {
         logService.info('extension', 'initWorkspace: logging activated');
     }
@@ -2506,7 +2510,7 @@ async function rebuildIndex(): Promise<void> {
 
     // Re-apply asset path settings in case they were modified externally
     applyAssetPathSettings().catch(err =>
-        console.warn('as-notes: failed to re-apply asset path settings on rebuild:', err),
+        logService.warn('extension', `failed to re-apply asset path settings on rebuild: ${formatLogError(err)}`),
     );
 
     await vscode.window.withProgress(
@@ -2549,8 +2553,7 @@ async function rebuildIndex(): Promise<void> {
                 );
                 logService.info('extension', `rebuildIndex: complete — ${result.filesIndexed} files, ${result.linksFound} links`);
             } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                console.error('as-notes: rebuildIndex failed:', err);
+                const msg = formatLogError(err);
                 logService.error('extension', `rebuildIndex: failed — ${msg}`);
                 vscode.window.showErrorMessage(`AS Notes: Rebuild failed — ${msg}`);
             }
@@ -2595,7 +2598,7 @@ async function cleanWorkspace(): Promise<void> {
     try {
         fs.rmSync(asnotesDir, { recursive: true, force: true });
     } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = formatLogError(err);
         vscode.window.showErrorMessage(`AS Notes: Failed to remove .asnotes/ — ${msg}`);
         return;
     }
@@ -2797,7 +2800,7 @@ async function openDailyJournal(notesRoot: vscode.Uri, date?: Date): Promise<voi
         // Update status bar with new page count
         updateFullModeStatusBar();
     } catch (err) {
-        console.warn('as-notes: failed to index new journal file:', err);
+        logService.warn('extension', `failed to index new journal file: ${formatLogError(err)}`);
     }
 
     // Open the new journal file with cursor at end of content
@@ -2862,7 +2865,7 @@ async function renameJournalFiles(notesRoot: vscode.Uri): Promise<void> {
             await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: false });
             renamed++;
         } catch (err) {
-            console.warn(`as-notes: failed to rename ${oldName} to ${newName}:`, err);
+            logService.warn('extension', `failed to rename ${oldName} to ${newName}: ${formatLogError(err)}`);
             errors++;
         }
     }
@@ -2913,7 +2916,7 @@ function startPeriodicScan(): void {
                 logService.info('extension', 'periodicScan: no changes');
             }
         } catch (err) {
-            console.warn('as-notes: periodic scan failed:', err);
+            logService.warn('extension', `periodic scan failed: ${formatLogError(err)}`);
         }
     }, intervalMs);
 }
@@ -2970,7 +2973,7 @@ function isEncryptedFileUri(uri: vscode.Uri): boolean {
  */
 function createExtendMarkdownIt(): (md: any) => any {
     const wikilinkService = new WikilinkService();
-    console.log('as-notes: createExtendMarkdownIt() called');
+    logService.info('extension', 'createExtendMarkdownIt() called');
 
     const resolver: WikilinkResolverFn = (pageFileName, env) => {
         const sourcePath = getSourcePathFromEnv(env);
@@ -3008,7 +3011,7 @@ function createExtendMarkdownIt(): (md: any) => any {
     };
 
     return (md: any) => {
-        console.log('as-notes: extendMarkdownIt() invoked by VS Code markdown preview');
+        logService.info('extension', 'extendMarkdownIt() invoked by VS Code markdown preview');
         wikilinkPlugin(md, { wikilinkService, resolver });
         return md;
     };

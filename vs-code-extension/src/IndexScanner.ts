@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { IndexService, type ScanSummary } from './IndexService.js';
 import { IgnoreService } from './IgnoreService.js';
-import { LogService, NO_OP_LOGGER } from './LogService.js';
+import { LogService, NO_OP_LOGGER, formatLogError } from './LogService.js';
 import { toNotesRelativePath } from './NotesRootService.js';
 
 /**
@@ -108,7 +108,7 @@ export class IndexScanner {
                     this.logger.info('IndexScanner', `fullScan: progress ${filesIndexed}/${total} files`);
                 }
             } catch (err) {
-                console.warn(`as-notes: failed to index ${relativePath}:`, err);
+                this.logger.warn('IndexScanner', `failed to index ${relativePath}: ${formatLogError(err)}`);
             }
         }
 
@@ -186,7 +186,7 @@ export class IndexScanner {
                     summary.unchanged++;
                 }
             } catch (err) {
-                console.warn(`as-notes: failed to scan ${relativePath}:`, err);
+                this.logger.warn('IndexScanner', `failed to scan ${relativePath}: ${formatLogError(err)}`);
             }
 
             processed++;

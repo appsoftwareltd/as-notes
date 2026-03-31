@@ -8,6 +8,7 @@ import {
 } from "./link-targets";
 import { MarkdownParseCache } from "./markdown-parse-cache";
 import { getForgeContext } from "./forge-context";
+import { formatLogError, getActiveLogger } from "../LogService.js";
 
 /**
  * Handles single-click navigation for markdown links and images.
@@ -20,7 +21,7 @@ export class LinkClickHandler {
   private disposables: vscode.Disposable[] = [];
   private isEnabled: boolean = false;
 
-  constructor(private parseCache: MarkdownParseCache) {}
+  constructor(private parseCache: MarkdownParseCache) { }
 
   /**
    * Enables or disables single-click link navigation.
@@ -175,7 +176,7 @@ export class LinkClickHandler {
       await vscode.commands.executeCommand("vscode.open", target.uri);
     } catch (error) {
       // File might not exist, silently fail
-      console.warn("Failed to open link:", error);
+      getActiveLogger().warn('LinkClickHandler', `Failed to open link: ${formatLogError(error)}`);
     }
   }
 

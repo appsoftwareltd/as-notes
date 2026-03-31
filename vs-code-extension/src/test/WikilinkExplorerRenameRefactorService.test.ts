@@ -28,6 +28,7 @@ vi.mock('vscode', () => {
             textDocuments: [],
             fs: {
                 delete: vi.fn().mockResolvedValue(undefined),
+                rename: vi.fn().mockResolvedValue(undefined),
                 readFile: vi.fn().mockResolvedValue(new Uint8Array()),
                 writeFile: vi.fn().mockResolvedValue(undefined),
             },
@@ -84,6 +85,45 @@ describe('WikilinkExplorerRenameRefactorService', () => {
         expect(vscode.window.withProgress).toHaveBeenCalledTimes(1);
         expect(staleScan).not.toHaveBeenCalled();
         expect(indexFile).toHaveBeenCalled();
+    });
+
+    it('renames filenames that contain the renamed wikilink text during explorer refactors', async () => {
+        vi.mocked(vscode.window.showInformationMessage).mockResolvedValue('Yes' as never);
+        vi.mocked(vscode.workspace.fs.readFile).mockResolvedValue(
+            new TextEncoder().encode('[[OldName]]'),
+        );
+
+        const indexFile = vi.fn().mockResolvedValue(undefined);
+
+        await handleExplorerRenameRefactors({
+            files: [{
+                oldUri: { fsPath: '/notes/OldName.md', toString: () => 'file:///notes/OldName.md' },
+                newUri: { fsPath: '/notes/NewName.md', toString: () => 'file:///notes/NewName.md' },
+            }],
+            renameTrackerIsRenaming: false,
+            wikilinkService: new WikilinkService(),
+            indexService: {
+                findPagesByFilename: vi.fn().mockReturnValue([{ id: 1, path: 'NewName.md', filename: 'NewName.md', title: 'NewName', mtime: 0, indexed_at: 0 }]),
+                findPagesLinkingToPageNames: vi.fn().mockReturnValue([{ id: 3, path: 'Ref.md', filename: 'Ref.md', title: 'Ref', mtime: 0, indexed_at: 0 }]),
+                getAllPages: vi.fn().mockReturnValue([
+                    { id: 4, path: 'Topic [[OldName]].md', filename: 'Topic [[OldName]].md', title: 'Topic [[OldName]]', mtime: 0, indexed_at: 0 },
+                ]),
+                removePage: vi.fn(),
+            } as never,
+            indexScanner: {
+                staleScan: vi.fn().mockResolvedValue(undefined),
+                indexFile,
+            } as never,
+            notesRootPath: '/notes',
+            safeSaveToFile: vi.fn().mockReturnValue(true),
+            refreshProviders: vi.fn(),
+        });
+
+        expect(vscode.workspace.fs.rename).toHaveBeenCalledWith(
+            expect.objectContaining({ fsPath: '/notes/Topic [[OldName]].md' }),
+            expect.objectContaining({ fsPath: '/notes/Topic [[NewName]].md' }),
+            { overwrite: false },
+        );
     });
 
     it('shows notification progress when the user accepts an explorer merge', async () => {

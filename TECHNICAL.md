@@ -1310,7 +1310,15 @@ Diagnostic logging is provided by `LogService` (`src/LogService.ts`), a pure Nod
 
 **Log format:** `[ISO timestamp] [LEVEL] tag: message`
 
-**Usage in services:** `LogService` is injected as an optional constructor parameter (defaulting to `NO_OP_LOGGER`) into `IndexService`, `IndexScanner`, `WikilinkDecorationManager`, and `WikilinkCompletionProvider`. The `extension.ts` module also uses the instance directly for lifecycle logging. A `NO_OP_LOGGER` singleton is used when logging is disabled, avoiding null checks throughout the codebase.
+**Usage in services:** `LogService` is injected as an optional constructor parameter (defaulting to `NO_OP_LOGGER`) into `IndexService`, `IndexScanner`, `WikilinkDecorationManager`, `WikilinkCompletionProvider`, and other logger-aware services. The `extension.ts` module also uses the instance directly for lifecycle logging. A `NO_OP_LOGGER` singleton is used when logging is disabled, avoiding null checks throughout the codebase.
+
+For modules that are not constructed with an injected logger (for example some inline-editor / Mermaid helpers), `LogService.ts` also exposes a shared active logger:
+
+- `setActiveLogger(logger)` — called by `extension.ts` when logging is configured
+- `getActiveLogger()` — returns the current active logger, or `NO_OP_LOGGER` when logging is off
+- `formatLogError(error)` — normalises unknown exceptions into a string for logger output
+
+This allows the extension to avoid naked `console.log/warn/error` calls while still keeping all diagnostic output behind the same logging gate.
 
 **Timer API:** `logService.time(tag, label)` returns a closure that, when called, logs the elapsed milliseconds at INFO level — used for performance instrumentation throughout the decoration and completion pipelines.
 
@@ -1646,6 +1654,21 @@ The user-confirmed refactor work that follows explorer renames is now extracted 
 For explorer renames, the old broad `staleScan()` follow-up has been replaced with targeted re-indexing of the files actually edited by the refactor. That removes a second whole-tree pass from the common rename path.
 
 `updateLinksInWorkspace()` no longer auto-saves affected open editors after applying workspace edits. Instead, both the in-editor and explorer rename flows now use `reindexWorkspaceUri(...)`: if an affected file is currently open, it is re-indexed from the live editor buffer via `indexFileContent(...)`; otherwise it falls back to `indexScanner.indexFile(...)`. `WikilinkRenameTracker` still re-indexes the initiating document from `document.getText()` when its URI is stable, and remaps any old source candidate URI to the post-rename or post-merge target before follow-up indexing. Combined with the direct-to-disk rewrite path for closed files, this avoids save conflicts on both open reference files and files that were previously closed, as well as attempts to reopen a source file that has just been renamed or deleted.
+
+### Filename-level wikilink refactors
+
+Rename propagation now also updates filenames that contain the renamed wikilink text itself, not just file contents. The shared planner in `WikilinkFilenameRefactorService.ts` scans indexed pages for filenames containing `[[oldPageName]]` and computes additional file operations such as:
+
+1. `Topic [[Plant]].md` -> `Topic [[Tree]].md`
+2. merge into an existing `Topic [[Tree]].md` when that target already exists
+
+The planner is reused by both `WikilinkRenameTracker.ts` and `WikilinkExplorerRenameRefactorService.ts`, so in-editor renames and explorer renames follow the same rules. It provides three guarantees:
+
+1. **Consistent rename/merge classification** - filename collisions become merges instead of failing midway.
+2. **Safe ordering** - chained filename renames are topologically ordered so a rename that frees a target path can run before a dependent rename that needs that path.
+3. **URI remapping for follow-up work** - candidate files selected for link rewrites or re-indexing are remapped through the filename operations so later content edits and index refreshes use the final file locations.
+
+This keeps filename refactors, content refactors, and index updates in sync even when nested wikilinks appear inside page filenames.
 
 ### Re-entrancy guard
 

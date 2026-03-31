@@ -5,6 +5,7 @@ import { MarkdownParseCache } from './markdown-parse-cache';
 import { renderMermaidSvgNatural, createErrorSvg, svgToDataUri } from './mermaid/mermaid-renderer';
 import { svgToDataUriBase64 } from './mermaid/svg-processor';
 import * as cheerio from 'cheerio';
+import { formatLogError, getActiveLogger } from '../LogService.js';
 
 /**
  * Configuration for code block hover previews
@@ -60,26 +61,26 @@ type CodeBlockHoverHandler = (
 function ensureSvgDimensions(svgString: string, width: number, height: number): string {
   const $ = cheerio.load(svgString, { xmlMode: true });
   const svgNode = $('svg').first();
-  
+
   if (svgNode.length === 0) {
     return svgString;
   }
-  
+
   // Set explicit pixel-based dimensions
   svgNode.attr('width', `${width}px`);
   svgNode.attr('height', `${height}px`);
-  
+
   // Ensure viewBox exists if it doesn't, using the calculated dimensions
   if (!svgNode.attr('viewBox')) {
     svgNode.attr('viewBox', `0 0 ${width} ${height}`);
   }
-  
+
   // Remove any percentage-based width that might interfere
   const currentWidth = svgNode.attr('width');
   if (currentWidth && currentWidth.includes('%')) {
     svgNode.attr('width', `${width}px`);
   }
-  
+
   return svgNode.toString();
 }
 
@@ -125,7 +126,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
         : 'default';
 
       const fontFamily = vscode.workspace.getConfiguration('editor').get<string>('fontFamily');
-      
+
       // Render at natural size first to get actual diagram dimensions
       // Pass cancellation token for shorter timeout (5 seconds) to match VS Code hover timeout
       const naturalSvg = await renderMermaidSvgNatural(source, {
@@ -136,7 +137,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
       // Parse natural SVG to get actual dimensions
       const $ = cheerio.load(naturalSvg, { xmlMode: true });
       const svgNode = $('svg').first();
-      
+
       if (svgNode.length === 0) {
         return undefined;
       }
@@ -145,11 +146,11 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
       // Try to get width/height from attributes, or viewBox
       const widthAttr = svgNode.attr('width') || '0';
       const heightAttr = svgNode.attr('height') || '0';
-      
+
       // Handle percentage-based dimensions (Mermaid often uses width="100%")
       let svgWidth = widthAttr === '100%' ? 0 : parseFloat(widthAttr) || 0;
       let svgHeight = parseFloat(heightAttr) || 0;
-      
+
       // If no explicit width/height, try viewBox (most reliable source)
       if ((svgWidth === 0 || svgHeight === 0) && svgNode.attr('viewBox')) {
         const viewBox = svgNode.attr('viewBox')!.split(/\s+/);
@@ -227,7 +228,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
       // Further reduced from 1200px to 1000px for better size reduction
       const maxWidth = Math.min(config.maxWidth, 1000); // Cap at 1000px (reduced from 1200px)
       const maxHeight = Math.min(config.maxHeight, 750); // Cap at 750px (reduced from 900px)
-      
+
       if (hoverWidth > maxWidth) {
         const aspectRatio = hoverHeight / hoverWidth;
         hoverWidth = maxWidth;
@@ -242,14 +243,14 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
       // Ensure SVG has explicit dimensions for proper display in hover
       // Some diagrams (like state diagrams) may have percentage-based or missing dimensions
       const processedSvg = ensureSvgDimensions(naturalSvg, hoverWidth, hoverHeight);
-      
+
       return {
         html: processedSvg,
         width: Math.round(hoverWidth),
         height: Math.round(hoverHeight),
       };
     } catch (error) {
-      console.warn('[Code Block Hover] Mermaid render failed:', error instanceof Error ? error.message : error);
+      getActiveLogger().warn('CodeBlockHover', `Mermaid render failed: ${formatLogError(error)}`);
       // Create error SVG to display in hover instead of returning undefined
       // Extract meaningful error message
       let errorMessage = 'Rendering failed';
@@ -361,7 +362,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
     // First, find all code blocks with language identifiers
     const languageDecs = decorations.filter(d => d.type === 'codeBlockLanguage');
     const codeBlockDecs = decorations.filter(d => d.type === 'codeBlock');
-    
+
     // Check each code block to see if hover is within it
     for (const codeBlockDec of codeBlockDecs) {
       if (token.isCancellationRequested) {
@@ -374,7 +375,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
       // Check if hover is within this code block
       if (hoverOffset >= codeStart && hoverOffset < codeEnd) {
         // Find the language identifier for this code block
-        const langDec = languageDecs.find(l => 
+        const langDec = languageDecs.find(l =>
           l.startPos >= codeBlockDec.startPos &&
           l.endPos <= codeBlockDec.endPos
         );
@@ -382,7 +383,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
         if (langDec) {
           // Extract language from text
           const language = text.substring(langDec.startPos, langDec.endPos).trim().toLowerCase();
-          
+
           // Check if we have a handler for this language
           if (this.handlers.has(language)) {
             // Extract source code from the code block
@@ -396,7 +397,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
             if (lines.length >= 3) {
               // Remove first line (opening fence with language) and last line (closing fence)
               const source = lines.slice(1, -1).join('\n');
-              
+
               return this.createHoverForCodeBlock(
                 source,
                 language,
@@ -441,19 +442,19 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
       const markdown = new vscode.MarkdownString();
       markdown.supportHtml = true;
       markdown.isTrusted = true; // SVGs are safe
-      
+
       if (result.html) {
         // Try multiple encoding strategies to avoid VS Code hover size limits
         // Strategy: URL encoding (smaller) -> Base64 (different handling) -> fallback message
         const svgSize = result.html.length;
         const MAX_DATA_URI_SIZE = 80 * 1024; // 80KB threshold
-        
+
         let imageSrc: string | undefined;
-        
+
         // First try URL-encoded data URI (typically smaller for SVG)
         const urlEncodedUri = svgToDataUri(result.html);
         const urlEncodedSize = urlEncodedUri.length;
-        
+
         if (urlEncodedSize <= MAX_DATA_URI_SIZE) {
           // URL encoding fits - use it
           imageSrc = urlEncodedUri;
@@ -461,7 +462,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
           // URL encoding too large - try Base64 (might be handled differently by VS Code)
           const base64Uri = svgToDataUriBase64(result.html);
           const base64Size = base64Uri.length;
-          
+
           if (base64Size <= MAX_DATA_URI_SIZE) {
             // Base64 fits - use it
             imageSrc = base64Uri;
@@ -469,7 +470,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
             // Both encodings too large - show helpful, informative message
             const sizeKB = Math.round(svgSize / 1024);
             const dataUriKB = Math.round(Math.max(urlEncodedSize, base64Size) / 1024);
-            
+
             markdown.appendMarkdown(
               `## 📊 Mermaid Diagram Preview\n\n` +
               `**Size:** ${sizeKB}KB (data URI: ${dataUriKB}KB)  \n` +
@@ -484,7 +485,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
             imageSrc = undefined;
           }
         }
-        
+
         if (imageSrc) {
           const escapedUri = escapeHtmlAttribute(imageSrc);
           markdown.appendMarkdown(
@@ -514,7 +515,7 @@ export class CodeBlockHoverProvider implements vscode.HoverProvider {
 
       return new vscode.Hover(markdown, hoverRange);
     } catch (error) {
-      console.warn(`[Code Block Hover] Failed to create hover for ${language}:`, error);
+      getActiveLogger().warn('CodeBlockHover', `Failed to create hover for ${language}: ${formatLogError(error)}`);
       return undefined;
     }
   }

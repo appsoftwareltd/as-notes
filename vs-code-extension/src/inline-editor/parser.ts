@@ -18,6 +18,7 @@ import type {
 import type { Node } from "unist";
 import { getRemarkProcessorSync, getRemarkProcessor } from "./parser-remark";
 import { getEmojiMap } from "./emoji-map-loader";
+import { formatLogError, getActiveLogger } from '../LogService.js';
 import { scanMathRegions } from "./math/math-scanner";
 import { config } from "./config";
 
@@ -259,7 +260,7 @@ export class MarkdownParser {
       decorations.sort((a, b) => a.startPos - b.startPos);
     } catch (error) {
       // Gracefully handle parse errors
-      console.error("Error parsing markdown:", error);
+      getActiveLogger().error('InlineParser', `Error parsing markdown: ${formatLogError(error)}`);
     }
 
     return {
@@ -448,7 +449,7 @@ export class MarkdownParser {
         } catch (error) {
           // Gracefully handle invalid positions or processing errors
           // Individual methods still validate, so this catches unexpected issues
-          console.warn("Error processing AST node:", node.type, error);
+          getActiveLogger().warn('InlineParser', `Error processing AST node ${node.type}: ${formatLogError(error)}`);
         }
       },
     );
