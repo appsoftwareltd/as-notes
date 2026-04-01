@@ -4,6 +4,15 @@ order: 14
 
 # Editing GitHub Wikis with AS Notes
 
+## What is AS Notes?
+
+AS Notes is a VS Code extension brings markdown and [[wikilink]] editing for notes, documentation, blogs and wikis directly into VS Code and compatible editors (e.g. Antigravity, Cursor, Windsurf).
+
+> **Install:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes) / [Open VSX](https://open-vsx.org/extension/appsoftwareltd/as-notes)
+> **GitHub:** [github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
+
+## Editing Github Wikis with AS Notes
+
 Every GitHub repository comes with a built-in wiki. It is a separate Git repository that stores markdown files, supports `[[wikilinks]]` between pages, and can be organised into subdirectories.
 
 [AS Notes](https://www.asnotes.io) is compatible with Github Wiki structure. Github wikis can be cloned locally. , Where initialised in the repository root, AS Notes provides wikilink autocompletion, markdown tooling and inline editor formatting (including Mermaid and LaTeX rendering [[Inline Markdown Editing Mermaid and LaTeX Rendering]]).
