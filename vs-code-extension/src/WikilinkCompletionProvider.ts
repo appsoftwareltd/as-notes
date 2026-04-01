@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { IndexService } from './IndexService.js';
-import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter } from './CompletionUtils.js';
+import { findInnermostOpenBracket, findMatchingCloseBracket, isLineInsideFrontMatter, isPositionInsideCode } from './CompletionUtils.js';
 import { LogService } from './LogService.js';
 
 /**
@@ -59,6 +59,10 @@ export class WikilinkCompletionProvider implements vscode.CompletionItemProvider
             lines.push(document.lineAt(i).text);
         }
         if (isLineInsideFrontMatter(lines, position.line)) {
+            end();
+            return undefined;
+        }
+        if (isPositionInsideCode(lines, position.line, Math.max(0, position.character - 1))) {
             end();
             return undefined;
         }

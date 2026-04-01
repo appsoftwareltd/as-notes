@@ -3,6 +3,7 @@ import * as path from 'path';
 import { WikilinkService, type LinkSegment } from 'as-notes-common';
 import { LogService } from './LogService.js';
 import { isInsideNotesRoot } from './NotesRootService.js';
+import { isPositionInsideCode } from './CompletionUtils.js';
 
 /**
  * Per-line parse cache entry.
@@ -187,6 +188,7 @@ export class WikilinkDecorationManager implements vscode.Disposable {
         this.cacheUri = editor.document.uri.toString();
         this.cacheVersion = editor.document.version;
         this.lineCache.clear();
+        const lines = Array.from({ length: editor.document.lineCount }, (_, index) => editor.document.lineAt(index).text);
 
         let totalWikilinks = 0;
         for (let lineIndex = 0; lineIndex < editor.document.lineCount; lineIndex++) {
@@ -194,9 +196,11 @@ export class WikilinkDecorationManager implements vscode.Disposable {
             const wikilinks = this.wikilinkService.extractWikilinks(lineText);
             if (wikilinks.length === 0) { continue; }
 
-            const segments = this.wikilinkService.computeLinkSegments(wikilinks);
+            const segments = this.wikilinkService.computeLinkSegments(wikilinks)
+                .filter(segment => !isPositionInsideCode(lines, lineIndex, segment.startOffset));
+            if (segments.length === 0) { continue; }
             this.lineCache.set(lineIndex, { segments });
-            totalWikilinks += wikilinks.length;
+            totalWikilinks += segments.length;
         }
 
         this.logger.info('decor', `cached ${this.lineCache.size} lines, ${totalWikilinks} wikilinks`);
