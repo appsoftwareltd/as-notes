@@ -24,6 +24,9 @@ import {
     getOutlinerBranchActionLine,
     canIndentOutlinerBranch,
     moveOutlinerBranch,
+    getOutlinerFenceContentBoundary,
+    isOutlinerFenceBackspaceBlocked,
+    formatOutlinerFencePaste,
 } from '../OutlinerService.js';
 
 // ── isOnBulletLine ─────────────────────────────────────────────────────────
@@ -1510,5 +1513,141 @@ describe('moveOutlinerBranch', () => {
             '- sibling',
         ]);
         expect(result!.endLine).toBe(9);
+    });
+});
+
+// ── getOutlinerFenceContentBoundary ─────────────────────────────────────────
+
+describe('getOutlinerFenceContentBoundary', () => {
+    it('returns contentIndent for a content line inside a bullet fence', () => {
+        const lines = [
+            '- ```ts',
+            '  const x = 1;',
+            '  ```',
+        ];
+        expect(getOutlinerFenceContentBoundary(lines, 1)).toBe(2);
+    });
+
+    it('returns null for the opener line itself', () => {
+        const lines = [
+            '- ```ts',
+            '  const x = 1;',
+            '  ```',
+        ];
+        expect(getOutlinerFenceContentBoundary(lines, 0)).toBeNull();
+    });
+
+    it('returns null for the closer line', () => {
+        const lines = [
+            '- ```ts',
+            '  const x = 1;',
+            '  ```',
+        ];
+        expect(getOutlinerFenceContentBoundary(lines, 2)).toBeNull();
+    });
+
+    it('returns null for a line outside any fence', () => {
+        const lines = [
+            '- plain bullet',
+            '  continuation',
+        ];
+        expect(getOutlinerFenceContentBoundary(lines, 0)).toBeNull();
+        expect(getOutlinerFenceContentBoundary(lines, 1)).toBeNull();
+    });
+
+    it('returns correct boundary for indented bullet fence', () => {
+        const lines = [
+            '- parent',
+            '    - ```js',
+            '      let y = 2;',
+            '      ```',
+        ];
+        expect(getOutlinerFenceContentBoundary(lines, 2)).toBe(6);
+    });
+
+    it('returns boundary for blank lines inside a fence', () => {
+        const lines = [
+            '- ```',
+            '',
+            '  ```',
+        ];
+        expect(getOutlinerFenceContentBoundary(lines, 1)).toBe(2);
+    });
+});
+
+// ── isOutlinerFenceBackspaceBlocked ────────────────────────────────────────
+
+describe('isOutlinerFenceBackspaceBlocked', () => {
+    it('blocks when cursor is at column 0 inside a fence', () => {
+        expect(isOutlinerFenceBackspaceBlocked('code', 0, 2)).toBe(true);
+    });
+
+    it('blocks when cursor is at the boundary and indent is at boundary', () => {
+        expect(isOutlinerFenceBackspaceBlocked('  code', 2, 2)).toBe(true);
+    });
+
+    it('blocks when cursor is before boundary on a line at boundary indent', () => {
+        expect(isOutlinerFenceBackspaceBlocked('  code', 1, 2)).toBe(true);
+    });
+
+    it('allows when cursor is past the boundary', () => {
+        expect(isOutlinerFenceBackspaceBlocked('  code', 3, 2)).toBe(false);
+    });
+
+    it('allows when line indent is above boundary and cursor is at boundary', () => {
+        // Line has 4 spaces indent, boundary is 2. Deleting at col 2 still leaves indent >= 2.
+        expect(isOutlinerFenceBackspaceBlocked('    code', 2, 2)).toBe(false);
+    });
+
+    it('blocks when line indent equals boundary and cursor is within indent', () => {
+        expect(isOutlinerFenceBackspaceBlocked('  code', 2, 2)).toBe(true);
+    });
+
+    it('blocks when line is blank and cursor is at 0', () => {
+        expect(isOutlinerFenceBackspaceBlocked('', 0, 2)).toBe(true);
+    });
+
+    it('blocks when line has less indent than boundary and cursor is at 0', () => {
+        expect(isOutlinerFenceBackspaceBlocked(' x', 0, 2)).toBe(true);
+    });
+});
+
+// ── formatOutlinerFencePaste ───────────────────────────────────────────────
+
+describe('formatOutlinerFencePaste', () => {
+    it('rebases pasted text so minimum indent lands on the boundary', () => {
+        const result = formatOutlinerFencePaste(4, 'if (x) {\n  y();\n}');
+        expect(result).toBe('    if (x) {\n      y();\n    }');
+    });
+
+    it('preserves relative indentation within pasted code', () => {
+        const result = formatOutlinerFencePaste(2, '  a\n    b\n  c');
+        expect(result).toBe('  a\n    b\n  c');
+    });
+
+    it('leaves blank lines blank', () => {
+        const result = formatOutlinerFencePaste(2, 'line1\n\nline2');
+        expect(result).toBe('  line1\n\n  line2');
+    });
+
+    it('handles single-line paste by adding boundary indent', () => {
+        const result = formatOutlinerFencePaste(4, 'hello');
+        expect(result).toBe('    hello');
+    });
+
+    it('normalises CRLF to LF', () => {
+        const result = formatOutlinerFencePaste(2, 'a\r\nb');
+        expect(result).toBe('  a\n  b');
+    });
+
+    it('handles already-indented paste that exceeds boundary', () => {
+        // Minimum indent is 6, boundary is 4. Should shift left by 2.
+        const result = formatOutlinerFencePaste(4, '      x\n        y');
+        expect(result).toBe('    x\n      y');
+    });
+
+    it('handles paste with no indentation at boundary 0', () => {
+        const result = formatOutlinerFencePaste(0, 'a\n  b');
+        expect(result).toBe('a\n  b');
     });
 });

@@ -263,12 +263,12 @@
                 "command": "as-notes.outlinerPaste",
                 "key": "ctrl+v",
                 "mac": "cmd+v",
-                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly"
+                "when": "editorLangId == markdown && as-notes.outlinerMode && (as-notes.onBulletLine || as-notes.insideOutlinerFenceContent) && !editorReadonly"
             },
             {
                 "command": "as-notes.outlinerBackspace",
                 "key": "backspace",
-                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBackspaceMergePoint && !editorReadonly && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible"
+                "when": "editorLangId == markdown && as-notes.outlinerMode && (as-notes.onOutlinerBackspaceMergePoint || as-notes.insideOutlinerFenceContent) && !editorReadonly && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible"
             }
         ],
         "configuration": {

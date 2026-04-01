@@ -46,7 +46,7 @@ import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { toggleFrontMatterField, cycleFrontMatterField, publishToHtml, configurePublish } from './PublishService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
-import { isOnBulletLine, getOutlinerEnterInsert, getFenceTokenCursorZone, getOutlinerFirstChildLine, isOutlinerBackspaceMergeCandidate, getOutlinerBackspaceTargetLine, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, getBulletCodeFenceEnterInsert, formatOutlinerPaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, canIndentOutlinerBranch, getOutlinerBranchRange, getOutlinerBranchActionLine, moveOutlinerBranch } from './OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, getFenceTokenCursorZone, getOutlinerFirstChildLine, isOutlinerBackspaceMergeCandidate, getOutlinerBackspaceTargetLine, getOutlinerFenceContentBoundary, isOutlinerFenceBackspaceBlocked, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, getBulletCodeFenceEnterInsert, formatOutlinerPaste, formatOutlinerFencePaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, canIndentOutlinerBranch, getOutlinerBranchRange, getOutlinerBranchActionLine, moveOutlinerBranch } from './OutlinerService.js';
 import { KanbanStore } from './KanbanStore.js';
 import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
@@ -301,16 +301,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         }),
     );
 
+    const getDocumentLines = (document: vscode.TextDocument): string[] => Array.from(
+        { length: document.lineCount },
+        (_, index) => document.lineAt(index).text,
+    );
+
     // Track whether the active cursor is on a bullet line or a code fence line
     const syncOutlinerLineContext = (editor: vscode.TextEditor | undefined) => {
         if (!editor || editor.document.languageId !== 'markdown') {
             vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', false);
             vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBranchLine', false);
             vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBackspaceMergePoint', false);
+            vscode.commands.executeCommand('setContext', 'as-notes.insideOutlinerFenceContent', false);
             vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', false);
             return;
         }
-        const lines = editor.document.getText().split('\n');
+        const lines = getDocumentLines(editor.document);
         const onBullet = editor.selections.some(
             sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
         );
@@ -323,6 +329,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                 editor.document.lineAt(editor.selection.active.line).text,
                 editor.selection.active.character,
             );
+        const insideOutlinerFenceContent = editor.selections.some(
+            sel => getOutlinerFenceContentBoundary(lines, sel.active.line) !== null,
+        );
         const onCodeFence = editor.selections.some(
             sel => {
                 const text = editor.document.lineAt(sel.active.line).text;
@@ -332,6 +341,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         vscode.commands.executeCommand('setContext', 'as-notes.onBulletLine', onBullet);
         vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBranchLine', onOutlinerBranchLine);
         vscode.commands.executeCommand('setContext', 'as-notes.onOutlinerBackspaceMergePoint', onOutlinerBackspaceMergePoint);
+        vscode.commands.executeCommand('setContext', 'as-notes.insideOutlinerFenceContent', insideOutlinerFenceContent);
         vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', onCodeFence);
     };
 
@@ -506,20 +516,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const clipboardText = await vscode.env.clipboard.readText();
             if (!clipboardText) { return; }
 
-            // Check if any selection is on a bullet line with multi-line clipboard
             const sel = editor.selection;
             const lineText = editor.document.lineAt(sel.active.line).text;
+            const lines = getDocumentLines(editor.document);
+            const fenceContentBoundary = getOutlinerFenceContentBoundary(lines, sel.active.line);
+
+            if (fenceContentBoundary !== null) {
+                const shouldFormatFencePaste = !sel.isEmpty
+                    || lineText.trim().length === 0
+                    || clipboardText.includes('\n')
+                    || clipboardText.includes('\r');
+
+                if (shouldFormatFencePaste) {
+                    const formattedText = formatOutlinerFencePaste(fenceContentBoundary, clipboardText);
+                    void editor.edit(editBuilder => {
+                        editBuilder.replace(sel, formattedText);
+                    });
+                    return;
+                }
+            }
+
             const result = formatOutlinerPaste(lineText, sel.active.character, clipboardText);
 
             if (!result) {
                 // Single-line or empty paste: fall through to default paste
-                vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+                void vscode.commands.executeCommand('editor.action.clipboardPasteAction');
                 return;
             }
 
             // Replace the entire line with the formatted multi-line bullets
             const line = editor.document.lineAt(sel.active.line);
-            editor.edit(editBuilder => {
+            void editor.edit(editBuilder => {
                 editBuilder.replace(line.range, result.text);
             });
         }),
@@ -535,12 +562,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
 
             const lineIndex = editor.selection.active.line;
             const lineText = editor.document.lineAt(lineIndex).text;
+            const lines = getDocumentLines(editor.document);
+            const fenceContentBoundary = getOutlinerFenceContentBoundary(lines, lineIndex);
+
+            if (fenceContentBoundary !== null) {
+                if (isOutlinerFenceBackspaceBlocked(lineText, editor.selection.active.character, fenceContentBoundary)) {
+                    return;
+                }
+
+                void vscode.commands.executeCommand('deleteLeft');
+                return;
+            }
+
             if (!isOutlinerBackspaceMergeCandidate(lineText, editor.selection.active.character)) {
                 void vscode.commands.executeCommand('deleteLeft');
                 return;
             }
 
-            const lines = editor.document.getText().split('\n');
             const targetLine = getOutlinerBackspaceTargetLine(lines, lineIndex);
             if (targetLine === null) {
                 void vscode.commands.executeCommand('deleteLeft');

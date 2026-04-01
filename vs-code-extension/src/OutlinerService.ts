@@ -727,6 +727,115 @@ export function moveOutlinerBranch(
     };
 }
 
+// ── Fence content boundary guard ───────────────────────────────────────────
+
+/**
+ * Returns the minimum indent column (content boundary) for a content line
+ * inside a bullet-owned fenced code block.
+ *
+ * Returns `null` when:
+ * - the line is not inside a bullet fence
+ * - the line is the opener line (bullet + ```) or the closer line (```)
+ */
+export function getOutlinerFenceContentBoundary(
+    lines: string[],
+    lineIndex: number,
+): number | null {
+    const ctx = getBulletCodeFenceContext(lines, lineIndex);
+    if (!ctx) {
+        return null;
+    }
+
+    // Opener line is not a content line
+    if (lineIndex === ctx.openerLine) {
+        return null;
+    }
+
+    // Closer line is not a content line
+    const line = lines[lineIndex];
+    if (
+        isClosingCodeFenceLine(line)
+        && getLineIndent(line) >= ctx.contentIndent
+    ) {
+        return null;
+    }
+
+    return ctx.contentIndent;
+}
+
+/**
+ * Returns `true` when Backspace should be blocked to prevent content from
+ * moving left of the fence content boundary.
+ *
+ * The guard blocks when:
+ * - cursor is at column 0 (prevents line-join escape from the fence)
+ * - cursor is at or before the boundary AND the line's existing indent
+ *   is at or below the boundary (deleting would breach the boundary)
+ *
+ * The guard allows when:
+ * - cursor is past the boundary (normal content editing)
+ * - line indent exceeds the boundary and cursor is within the excess indent
+ *   (deleting still leaves indent >= boundary)
+ */
+export function isOutlinerFenceBackspaceBlocked(
+    lineText: string,
+    cursorCharacter: number,
+    contentBoundary: number,
+): boolean {
+    // Cursor past the boundary — always allow
+    if (cursorCharacter > contentBoundary) {
+        return false;
+    }
+
+    // Cursor at column 0 — always block (prevents line join / escape)
+    if (cursorCharacter === 0) {
+        return true;
+    }
+
+    // Cursor is at or before the boundary.
+    // Allow only when the line's indent exceeds the boundary
+    // (so deleting one space still keeps indent >= boundary).
+    const lineIndent = getLineIndent(lineText);
+    return lineIndent <= contentBoundary;
+}
+
+/**
+ * Transforms clipboard text for pasting inside a bullet-owned fenced code
+ * block, rebasing indentation so the minimum non-blank indent lands on the
+ * content boundary while preserving relative indentation.
+ *
+ * - CRLF is normalised to LF.
+ * - Blank lines remain blank.
+ * - The minimum indent of non-blank lines is shifted to `contentBoundary`.
+ */
+export function formatOutlinerFencePaste(
+    contentBoundary: number,
+    clipboardText: string,
+): string {
+    const normalised = clipboardText.replace(/\r\n/g, '\n');
+    const lines = normalised.split('\n');
+
+    // Find minimum indent across non-blank lines
+    let minIndent = Infinity;
+    for (const line of lines) {
+        if (line.trim().length === 0) { continue; }
+        const indent = getLineIndent(line);
+        if (indent < minIndent) { minIndent = indent; }
+    }
+
+    // All blank — no rebasing needed
+    if (minIndent === Infinity) { minIndent = 0; }
+
+    const delta = contentBoundary - minIndent;
+
+    const result = lines.map(line => {
+        if (line.trim().length === 0) { return ''; }
+        return shiftLineIndent(line, delta);
+    });
+
+    return result.join('\n');
+}
+
 // ── Paste formatting ───────────────────────────────────────────────────────
 
 /** Result of formatting a multi-line paste for outliner mode. */

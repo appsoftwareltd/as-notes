@@ -2747,6 +2747,8 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | `getFenceTokenCursorZone(lineText, cursorCharacter)` | Classifies the cursor as `before`, `inside`, or `after` the first `` ``` `` token on the line |
 | `isOutlinerBackspaceMergeCandidate(lineText, cursorCharacter)` | Returns `true` when the cursor is at the end of an empty bullet shell such as `-` or `- [ ]` |
 | `getOutlinerBackspaceTargetLine(lines, lineIndex)` | Returns the previous sibling bullet or nearest ancestor bullet that an empty shell should collapse into |
+| `getOutlinerFenceContentBoundary(lines, lineIndex)` | Returns the minimum allowed indent column for content lines inside a bullet-owned fence, else `null` |
+| `isOutlinerFenceBackspaceBlocked(lineText, cursorCharacter, contentBoundary)` | Returns `true` when Backspace would move fence content left of its allowed boundary |
 | `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
 | `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
 | `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
@@ -2761,16 +2763,18 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | `getOutlinerFirstChildLine(lines, lineIndex)` | Returns the first descendant bullet line in the branch, or `null` when the bullet has no children |
 | `getMaxOutlinerIndent(lines, lineIndex, tabSize)` | Returns the maximum indent allowed for a bullet — at most one tab stop past the nearest bullet above |
 | `formatOutlinerPaste(lineText, cursorChar, clipboardText)` | Formats multi-line clipboard text as indented bullets |
+| `formatOutlinerFencePaste(contentBoundary, clipboardText)` | Rebases pasted fence content so its leftmost non-blank line starts at the boundary while preserving relative indentation |
 | `toggleOutlinerTodoLine(lineText)` | 3-state cycle: plain bullet → unchecked → done → plain bullet |
 
 ### Context keys
 
-Five context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
+Six context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
 
 - **`as-notes.outlinerMode`** — mirrors the `as-notes.outlinerMode` setting value. Synced on activation and on `onDidChangeConfiguration`.
 - **`as-notes.onBulletLine`** — `true` when any cursor's active line matches `/^\s*- /`. Updated on `onDidChangeTextEditorSelection` and `onDidChangeActiveTextEditor`.
 - **`as-notes.onOutlinerBranchLine`** — `true` when any cursor's active line can resolve to a branch move target via `getOutlinerBranchActionLine(...)`. This includes bullet lines, continuation paragraphs, eligible blank lines, and fence delimiter lines that still belong to an outliner branch.
 - **`as-notes.onOutlinerBackspaceMergePoint`** — `true` when there is a single empty cursor selection at the end of an empty outliner bullet shell that can be structurally collapsed.
+- **`as-notes.insideOutlinerFenceContent`** — `true` when any cursor's active line is a content or blank line inside a bullet-owned fenced code block, excluding the opening and closing fence lines.
 - **`as-notes.onCodeFenceLine`** — `true` when any cursor's active line is a non-bullet code fence (opening or closing). Updated alongside `onBulletLine`.
 
 These context keys are refreshed not only on selection/editor changes but also on active-document text changes, so keybindings that depend on transient line shapes (such as Backspace after deleting down to `-`) become eligible immediately after the preceding edit.
@@ -2874,11 +2878,26 @@ This means structural continuation lines such as fence delimiters still move the
 
 On non-bullet lines Tab retains normal VS Code behaviour with no extra logic.
 
-### Backspace — collapse empty bullet shell
+### Backspace — collapse empty bullet shell and guard fence content
 
-Keybinding: `Backspace` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBackspaceMergePoint && !editorReadonly && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible`.
+Keybinding: `Backspace` when `editorLangId == markdown && as-notes.outlinerMode && (as-notes.onOutlinerBackspaceMergePoint || as-notes.insideOutlinerFenceContent) && !editorReadonly && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible`.
 
-`as-notes.outlinerBackspace` is intentionally narrow. It only runs when all of the following are true:
+`as-notes.outlinerBackspace` now handles two narrow outliner-only cases before falling back to VS Code's normal `deleteLeft` behaviour.
+
+**Case 1 — fence-content left-boundary guard**
+
+When the active line is inside a bullet-owned fenced code block, `getOutlinerFenceContentBoundary(...)` returns the content boundary column (`bulletIndent + 2`). `isOutlinerFenceBackspaceBlocked(...)` blocks Backspace when either of the following is true:
+
+- the cursor is at column `0` (prevents joining the fence-content line with the previous line)
+- the cursor is at or before the boundary and the line's current indent is already at or below that boundary
+
+If the guard blocks, the command becomes a no-op. If the cursor is past the boundary, or the line still has excess indent above the boundary, the command falls through to normal `deleteLeft`.
+
+This ensures text inside bullet-owned fenced code blocks cannot be moved left of the aligned fence-content boundary by Backspace.
+
+**Case 2 — empty bullet structural collapse**
+
+The structural merge path still only runs when all of the following are true:
 
 - there is exactly one empty cursor selection
 - the current line is an empty bullet shell such as `-`, `-`, `- [ ]`, or `- [ ]`
@@ -2895,16 +2914,17 @@ If no such structural predecessor exists, the command falls back to VS Code's no
 
 This first implementation does **not** jump to the end of the target subtree; it deliberately lands at the end of the target bullet line only.
 
-### Paste — multi-line bullet conversion
+### Paste — multi-line bullet conversion and fence-content rebasing
 
-Keybinding: `Ctrl+V` / `Cmd+V` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onBulletLine && !editorReadonly`.
+Keybinding: `Ctrl+V` / `Cmd+V` when `editorLangId == markdown && as-notes.outlinerMode && (as-notes.onBulletLine || as-notes.insideOutlinerFenceContent) && !editorReadonly`.
 
 Command `as-notes.outlinerPaste`:
 
 1. Reads clipboard via `vscode.env.clipboard.readText()`.
-2. Calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
-3. If result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
-4. Otherwise, replaces the entire current line with the formatted bullets.
+2. If the active line is fence content inside a bullet-owned code block and the paste is a multi-line paste, a non-empty selection replacement, or a paste into a blank fence-content line, it calls `formatOutlinerFencePaste(contentBoundary, clipboardText)` and replaces the current selection with the rebased text.
+3. Otherwise it calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
+4. If the bullet-format result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
+5. Otherwise, replaces the entire current bullet line with the formatted bullets.
 
 **`formatOutlinerPaste` rules:**
 
@@ -2914,6 +2934,14 @@ Command `as-notes.outlinerPaste`:
 - Done todo: first line keeps `{indent}- [x]`, subsequent lines get `{indent}- [ ]`.
 - Text before cursor on the current line is preserved; text after cursor is appended to the last pasted line.
 - Single-line clipboard text: no conversion (returns `null`).
+
+**`formatOutlinerFencePaste` rules:**
+
+- CRLF normalised to LF.
+- Blank pasted lines remain blank.
+- Finds the minimum leading indent across non-blank pasted lines.
+- Re-bases the pasted block so that minimum indent lands on the fence content boundary.
+- Preserves relative indentation inside the pasted block instead of flattening all lines to the same column.
 
 ### Todo toggle in outliner mode
 
