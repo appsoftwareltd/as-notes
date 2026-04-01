@@ -46,7 +46,7 @@ import { openDatePicker } from './DatePickerService.js';
 import { insertTaskDueDate, insertTaskCompletionDate, insertTagAtTaskStart } from './TaskHashtagService.js';
 import { toggleFrontMatterField, cycleFrontMatterField, publishToHtml, configurePublish } from './PublishService.js';
 import { generateTable, addColumns, addRows, formatTable, removeCurrentRow, removeCurrentColumn, removeRowsAbove, removeRowsBelow, removeColumnsRight, removeColumnsLeft } from './TableService.js';
-import { isOnBulletLine, getOutlinerEnterInsert, getFenceTokenCursorZone, getOutlinerFirstChildLine, isOutlinerBackspaceMergeCandidate, getOutlinerBackspaceTargetLine, getOutlinerFenceContentBoundary, isOutlinerFenceBackspaceBlocked, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, getBulletCodeFenceEnterInsert, formatOutlinerPaste, formatOutlinerFencePaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, canIndentOutlinerBranch, getOutlinerBranchRange, getOutlinerBranchActionLine, moveOutlinerBranch } from './OutlinerService.js';
+import { isOnBulletLine, getOutlinerEnterInsert, getFenceTokenCursorZone, getOutlinerFirstChildLine, isOutlinerBackspaceMergeCandidate, getOutlinerBackspaceTargetLine, getOutlinerFenceContentBoundary, canJoinOutlinerFenceContentWithPreviousLine, getOutlinerFenceVerticalMoveTarget, getOwningOutlinerBranchLine, isOutlinerFenceBackspaceBlocked, shiftOutlinerFenceContentLine, toggleOutlinerTodoLine, isCodeFenceOpen, getCodeFenceEnterInsert, getBulletCodeFenceEnterInsert, formatOutlinerPaste, formatOutlinerFencePaste, isStandaloneCodeFenceOpen, getStandaloneCodeFenceEnterInsert, isClosingCodeFenceLine, getClosingFenceBulletInsert, isCodeFenceUnbalanced, canIndentOutlinerBranch, getOutlinerBranchRange, getOutlinerBranchActionLine, moveOutlinerBranch } from './OutlinerService.js';
 import { KanbanStore } from './KanbanStore.js';
 import { KanbanBoardConfigStore } from './KanbanBoardConfigStore.js';
 import { KanbanEditorPanel } from './KanbanEditorPanel.js';
@@ -318,13 +318,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         }
         const lines = getDocumentLines(editor.document);
         const onBullet = editor.selections.some(
-            sel => isOnBulletLine(editor.document.lineAt(sel.active.line).text),
+            sel => getOutlinerFenceContentBoundary(lines, sel.active.line) === null
+                && isOnBulletLine(editor.document.lineAt(sel.active.line).text),
         );
         const onOutlinerBranchLine = editor.selections.some(
-            sel => getOutlinerBranchActionLine(lines, sel.active.line) !== null,
+            sel => getOutlinerFenceContentBoundary(lines, sel.active.line) === null
+                && getOutlinerBranchActionLine(lines, sel.active.line) !== null,
         );
         const onOutlinerBackspaceMergePoint = editor.selections.length === 1
             && editor.selection.isEmpty
+            && getOutlinerFenceContentBoundary(lines, editor.selection.active.line) === null
             && isOutlinerBackspaceMergeCandidate(
                 editor.document.lineAt(editor.selection.active.line).text,
                 editor.selection.active.character,
@@ -471,13 +474,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                     // Standalone fence (opening with language, or bare ```)
                     if (isStandaloneCodeFenceOpen(lineText)) {
                         const indent = lineText.match(/^(\s*)/)?.[1]?.length ?? 0;
+                        const branchRoot = getOwningOutlinerBranchLine(allLines, selection.active.line);
+                        const branchBoundary = branchRoot === null
+                            ? indent
+                            : (editor.document.lineAt(branchRoot).text.match(/^(\s*)/)?.[1]?.length ?? 0) + 2;
+                        const cursorIndent = Math.max(indent, branchBoundary);
                         if (isCodeFenceUnbalanced(allLines, selection.active.line)) {
                             editBuilder.insert(lineEnd, getStandaloneCodeFenceEnterInsert(lineText));
-                            const pos = new vscode.Position(selection.active.line + 1, indent);
+                            const pos = new vscode.Position(selection.active.line + 1, cursorIndent);
                             nextSelections.push(new vscode.Selection(pos, pos));
                         } else {
                             editBuilder.insert(lineEnd, '\n');
-                            const pos = new vscode.Position(selection.active.line + 1, indent);
+                            const pos = new vscode.Position(selection.active.line + 1, cursorIndent);
                             nextSelections.push(new vscode.Selection(pos, pos));
                         }
                         continue;
@@ -497,6 +505,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
 
+            if (applyOutlinerFenceContentIndent(editor, 'indent')) {
+                return;
+            }
+
             applyOutlinerBranchMove(editor, 'indent');
         }),
     );
@@ -505,6 +517,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         vscode.commands.registerCommand('as-notes.outlinerOutdent', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { return; }
+
+            if (applyOutlinerFenceContentIndent(editor, 'outdent')) {
+                return;
+            }
+
             applyOutlinerBranchMove(editor, 'outdent');
         }),
     );
@@ -529,11 +546,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
 
                 if (shouldFormatFencePaste) {
                     const formattedText = formatOutlinerFencePaste(fenceContentBoundary, clipboardText);
+                    const replaceRange = sel.isEmpty && lineText.trim().length === 0
+                        ? editor.document.lineAt(sel.active.line).range
+                        : sel;
                     void editor.edit(editBuilder => {
-                        editBuilder.replace(sel, formattedText);
+                        editBuilder.replace(replaceRange, formattedText);
                     });
                     return;
                 }
+
+                void vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+                return;
             }
 
             const result = formatOutlinerPaste(lineText, sel.active.character, clipboardText);
@@ -553,6 +576,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     );
 
     context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerFenceArrowDown', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            applyOutlinerFenceVerticalMove(editor, 'down');
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('as-notes.outlinerFenceArrowUp', () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { return; }
+
+            applyOutlinerFenceVerticalMove(editor, 'up');
+        }),
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand('as-notes.outlinerBackspace', () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor || editor.selections.length !== 1 || !editor.selection.isEmpty) {
@@ -566,6 +607,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
             const fenceContentBoundary = getOutlinerFenceContentBoundary(lines, lineIndex);
 
             if (fenceContentBoundary !== null) {
+                if (editor.selection.active.character === 0) {
+                    if (canJoinOutlinerFenceContentWithPreviousLine(lines, lineIndex)) {
+                        void vscode.commands.executeCommand('deleteLeft');
+                    }
+                    return;
+                }
+
                 if (isOutlinerFenceBackspaceBlocked(lineText, editor.selection.active.character, fenceContentBoundary)) {
                     return;
                 }
@@ -3176,6 +3224,137 @@ function applyOutlinerBranchMove(
             );
             return new vscode.Selection(anchor, active);
         });
+    });
+}
+
+function applyOutlinerFenceContentIndent(
+    editor: vscode.TextEditor,
+    direction: 'indent' | 'outdent',
+): boolean {
+    const tabSize = editor.options.tabSize as number ?? 4;
+    const originalLines = Array.from(
+        { length: editor.document.lineCount },
+        (_, index) => editor.document.lineAt(index).text,
+    );
+    const originalSelections = editor.selections.map(sel => sel);
+    const candidateLines = Array.from(new Set(originalSelections.map(sel => sel.active.line))).sort((a, b) => a - b);
+
+    const shiftResults = candidateLines.map(lineIndex => {
+        const contentBoundary = getOutlinerFenceContentBoundary(originalLines, lineIndex);
+        if (contentBoundary === null) {
+            return null;
+        }
+
+        return {
+            lineIndex,
+            ...shiftOutlinerFenceContentLine(originalLines[lineIndex], tabSize, direction, contentBoundary),
+        };
+    });
+
+    if (shiftResults.some(result => result === null)) {
+        return false;
+    }
+
+    const resolvedShifts = shiftResults as Array<{
+        lineIndex: number;
+        lineText: string;
+        appliedIndentDelta: number;
+    }>;
+
+    if (resolvedShifts.every(result => result.appliedIndentDelta === 0)) {
+        return true;
+    }
+
+    void editor.edit(editBuilder => {
+        for (const result of resolvedShifts) {
+            if (result.appliedIndentDelta === 0) {
+                continue;
+            }
+
+            editBuilder.replace(editor.document.lineAt(result.lineIndex).range, result.lineText);
+        }
+    }).then(success => {
+        if (!success) {
+            return;
+        }
+
+        const deltaByLine = new Map(resolvedShifts.map(result => [result.lineIndex, result.appliedIndentDelta]));
+        editor.selections = originalSelections.map(selection => {
+            const adjustCharacter = (line: number, character: number): number => {
+                const delta = deltaByLine.get(line) ?? 0;
+                return Math.max(0, character + delta);
+            };
+
+            const anchor = new vscode.Position(
+                selection.anchor.line,
+                adjustCharacter(selection.anchor.line, selection.anchor.character),
+            );
+            const active = new vscode.Position(
+                selection.active.line,
+                adjustCharacter(selection.active.line, selection.active.character),
+            );
+            return new vscode.Selection(anchor, active);
+        });
+    });
+
+    return true;
+}
+
+function applyOutlinerFenceVerticalMove(
+    editor: vscode.TextEditor,
+    direction: 'up' | 'down',
+): void {
+    if (editor.selections.length !== 1 || !editor.selection.isEmpty) {
+        void vscode.commands.executeCommand(direction === 'down' ? 'cursorDown' : 'cursorUp');
+        return;
+    }
+
+    const originalLines = Array.from(
+        { length: editor.document.lineCount },
+        (_, index) => editor.document.lineAt(index).text,
+    );
+    const currentLine = editor.selection.active.line;
+    const currentBoundary = getOutlinerFenceContentBoundary(originalLines, currentLine);
+    if (currentBoundary === null) {
+        void vscode.commands.executeCommand(direction === 'down' ? 'cursorDown' : 'cursorUp');
+        return;
+    }
+
+    const targetLine = currentLine + (direction === 'down' ? 1 : -1);
+    if (targetLine < 0 || targetLine >= editor.document.lineCount) {
+        void vscode.commands.executeCommand(direction === 'down' ? 'cursorDown' : 'cursorUp');
+        return;
+    }
+
+    const targetBoundary = getOutlinerFenceContentBoundary(originalLines, targetLine);
+    if (targetBoundary === null) {
+        void vscode.commands.executeCommand(direction === 'down' ? 'cursorDown' : 'cursorUp');
+        return;
+    }
+
+    const target = getOutlinerFenceVerticalMoveTarget(
+        editor.document.lineAt(targetLine).text,
+        editor.selection.active.character,
+        targetBoundary,
+    );
+
+    const moveCursor = () => {
+        const pos = new vscode.Position(targetLine, target.cursorCharacter);
+        editor.selections = [new vscode.Selection(pos, pos)];
+    };
+
+    if (target.lineText === editor.document.lineAt(targetLine).text) {
+        moveCursor();
+        return;
+    }
+
+    void editor.edit(editBuilder => {
+        editBuilder.replace(editor.document.lineAt(targetLine).range, target.lineText);
+    }).then(success => {
+        if (!success) {
+            return;
+        }
+        moveCursor();
     });
 }
 

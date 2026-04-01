@@ -25,7 +25,10 @@ import {
     canIndentOutlinerBranch,
     moveOutlinerBranch,
     getOutlinerFenceContentBoundary,
+    canJoinOutlinerFenceContentWithPreviousLine,
+    getOutlinerFenceVerticalMoveTarget,
     isOutlinerFenceBackspaceBlocked,
+    shiftOutlinerFenceContentLine,
     formatOutlinerFencePaste,
 } from '../OutlinerService.js';
 
@@ -910,6 +913,17 @@ describe('isCodeFenceUnbalanced', () => {
         expect(isCodeFenceUnbalanced(lines, 4)).toBe(true);
     });
 
+    it('treats a new standalone fence under an outliner branch as unbalanced after a prior bullet-owned fence has closed', () => {
+        const lines = [
+            '- ```js',
+            '  const a = 1;',
+            '  ```',
+            '  ```',
+        ];
+
+        expect(isCodeFenceUnbalanced(lines, 3)).toBe(true);
+    });
+
     it('returns false for both fences of a pair with indentation', () => {
         const lines = [
             '    ```javascript',
@@ -1609,6 +1623,122 @@ describe('isOutlinerFenceBackspaceBlocked', () => {
 
     it('blocks when line has less indent than boundary and cursor is at 0', () => {
         expect(isOutlinerFenceBackspaceBlocked(' x', 0, 2)).toBe(true);
+    });
+});
+
+// ── canJoinOutlinerFenceContentWithPreviousLine ───────────────────────────
+
+describe('canJoinOutlinerFenceContentWithPreviousLine', () => {
+    it('returns true when the previous line is content in the same bullet-owned fence', () => {
+        const lines = [
+            '- ```ts',
+            '  const a = 1;',
+            '  const b = 2;',
+            '  ```',
+        ];
+
+        expect(canJoinOutlinerFenceContentWithPreviousLine(lines, 2)).toBe(true);
+    });
+
+    it('returns false when the previous line is the fence opener', () => {
+        const lines = [
+            '- ```ts',
+            '  const a = 1;',
+            '  ```',
+        ];
+
+        expect(canJoinOutlinerFenceContentWithPreviousLine(lines, 1)).toBe(false);
+    });
+
+    it('returns false when the line is not inside bullet-owned fence content', () => {
+        const lines = [
+            '- plain bullet',
+            '  continuation',
+        ];
+
+        expect(canJoinOutlinerFenceContentWithPreviousLine(lines, 1)).toBe(false);
+    });
+
+    it('returns false when the previous line is outside the same fence content region', () => {
+        const lines = [
+            '- ```ts',
+            '  const a = 1;',
+            '  ```',
+            '- next bullet',
+        ];
+
+        expect(canJoinOutlinerFenceContentWithPreviousLine(lines, 3)).toBe(false);
+    });
+});
+
+// ── shiftOutlinerFenceContentLine ─────────────────────────────────────────
+
+describe('shiftOutlinerFenceContentLine', () => {
+    it('indents a fence-content line by one tab stop', () => {
+        expect(shiftOutlinerFenceContentLine('  code', 4, 'indent', 2)).toEqual({
+            lineText: '      code',
+            appliedIndentDelta: 4,
+        });
+    });
+
+    it('outdents a fence-content line but clamps at the boundary', () => {
+        expect(shiftOutlinerFenceContentLine('      code', 4, 'outdent', 4)).toEqual({
+            lineText: '    code',
+            appliedIndentDelta: -2,
+        });
+    });
+
+    it('does not outdent past the boundary', () => {
+        expect(shiftOutlinerFenceContentLine('    code', 4, 'outdent', 4)).toEqual({
+            lineText: '    code',
+            appliedIndentDelta: 0,
+        });
+    });
+
+    it('leaves already-invalid left-shifted lines unchanged on outdent', () => {
+        expect(shiftOutlinerFenceContentLine('  code', 4, 'outdent', 4)).toEqual({
+            lineText: '  code',
+            appliedIndentDelta: 0,
+        });
+    });
+
+    it('indents blank fence-content lines', () => {
+        expect(shiftOutlinerFenceContentLine('    ', 2, 'indent', 4)).toEqual({
+            lineText: '      ',
+            appliedIndentDelta: 2,
+        });
+    });
+});
+
+// ── getOutlinerFenceVerticalMoveTarget ────────────────────────────────────
+
+describe('getOutlinerFenceVerticalMoveTarget', () => {
+    it('clamps the target cursor column to the boundary', () => {
+        expect(getOutlinerFenceVerticalMoveTarget('  code', 0, 2)).toEqual({
+            lineText: '  code',
+            cursorCharacter: 2,
+        });
+    });
+
+    it('preserves a preferred column to the right of the boundary', () => {
+        expect(getOutlinerFenceVerticalMoveTarget('  code', 4, 2)).toEqual({
+            lineText: '  code',
+            cursorCharacter: 4,
+        });
+    });
+
+    it('pads a blank line so the cursor can land at the boundary', () => {
+        expect(getOutlinerFenceVerticalMoveTarget('', 0, 2)).toEqual({
+            lineText: '  ',
+            cursorCharacter: 2,
+        });
+    });
+
+    it('pads short lines up to the boundary before placing the cursor', () => {
+        expect(getOutlinerFenceVerticalMoveTarget('x', 0, 3)).toEqual({
+            lineText: 'x  ',
+            cursorCharacter: 3,
+        });
     });
 });
 

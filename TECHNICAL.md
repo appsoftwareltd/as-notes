@@ -2748,7 +2748,10 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | `isOutlinerBackspaceMergeCandidate(lineText, cursorCharacter)` | Returns `true` when the cursor is at the end of an empty bullet shell such as `-` or `- [ ]` |
 | `getOutlinerBackspaceTargetLine(lines, lineIndex)` | Returns the previous sibling bullet or nearest ancestor bullet that an empty shell should collapse into |
 | `getOutlinerFenceContentBoundary(lines, lineIndex)` | Returns the minimum allowed indent column for content lines inside a bullet-owned fence, else `null` |
+| `canJoinOutlinerFenceContentWithPreviousLine(lines, lineIndex)` | Returns `true` when a column-0 Backspace may join the current fence-content line into the previous line within the same bullet-owned fence |
+| `getOutlinerFenceVerticalMoveTarget(lineText, preferredCharacter, contentBoundary)` | Pads short fence-content lines when needed and returns a cursor column clamped to the fence boundary |
 | `isOutlinerFenceBackspaceBlocked(lineText, cursorCharacter, contentBoundary)` | Returns `true` when Backspace would move fence content left of its allowed boundary |
+| `shiftOutlinerFenceContentLine(lineText, tabSize, direction, contentBoundary)` | Indents or outdents a fence-content line while clamping outdent at the fence boundary |
 | `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
 | `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
 | `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
@@ -2771,9 +2774,9 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 Six context keys are maintained in `activate()` (before full-mode setup, as outliner mode requires no index):
 
 - **`as-notes.outlinerMode`** — mirrors the `as-notes.outlinerMode` setting value. Synced on activation and on `onDidChangeConfiguration`.
-- **`as-notes.onBulletLine`** — `true` when any cursor's active line matches `/^\s*- /`. Updated on `onDidChangeTextEditorSelection` and `onDidChangeActiveTextEditor`.
-- **`as-notes.onOutlinerBranchLine`** — `true` when any cursor's active line can resolve to a branch move target via `getOutlinerBranchActionLine(...)`. This includes bullet lines, continuation paragraphs, eligible blank lines, and fence delimiter lines that still belong to an outliner branch.
-- **`as-notes.onOutlinerBackspaceMergePoint`** — `true` when there is a single empty cursor selection at the end of an empty outliner bullet shell that can be structurally collapsed.
+- **`as-notes.onBulletLine`** — `true` when any cursor's active line matches `/^\s*- /`, excluding lines inside bullet-owned fence content.
+- **`as-notes.onOutlinerBranchLine`** — `true` when any cursor's active line can resolve to a branch move target via `getOutlinerBranchActionLine(...)`, excluding lines inside bullet-owned fence content.
+- **`as-notes.onOutlinerBackspaceMergePoint`** — `true` when there is a single empty cursor selection at the end of an empty outliner bullet shell that can be structurally collapsed, excluding fence-content lines.
 - **`as-notes.insideOutlinerFenceContent`** — `true` when any cursor's active line is a content or blank line inside a bullet-owned fenced code block, excluding the opening and closing fence lines.
 - **`as-notes.onCodeFenceLine`** — `true` when any cursor's active line is a non-bullet code fence (opening or closing). Updated alongside `onBulletLine`.
 
@@ -2819,6 +2822,8 @@ For standalone (non-bullet) opening fences with a language identifier, `isStanda
 ```                    ← closing fence at same indent
 ```
 
+When a standalone fence opener lives inside an outliner-owned continuation block, the post-Enter cursor position is now clamped to at least the continuation boundary (`rootIndent + 2`). This prevents the cursor from landing left of the outliner continuation boundary when a later standalone fence is started in the same branch.
+
 After custom Enter edits, the extension now assigns explicit cursor targets per selection rather than relying on VS Code's default post-edit cursor placement. That keeps the cursor on the inserted continuation or bullet line after both fence skeleton insertion and closing-fence bullet continuation.
 
 ### Enter — code fence completion
@@ -2844,11 +2849,21 @@ For each cursor (in priority order):
 
 Fences at different indent levels are never paired. Bullet-prefixed fences are excluded.
 
+Indented fence lines that belong to an existing bullet-owned fenced block are also excluded from the standalone pairing heuristic. This prevents a later standalone fence in the same outliner branch from being misclassified as already balanced just because a bullet-owned fence closed earlier at the same indent.
+
 ### Tab / Shift+Tab — indent and outdent
 
-Keybinding: `Tab` / `Shift+Tab` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBranchLine`.
+Keybinding: `Tab` / `Shift+Tab` when `editorLangId == markdown && as-notes.outlinerMode && (as-notes.onOutlinerBranchLine || as-notes.insideOutlinerFenceContent)`.
 
 `Tab` and `Shift+Tab` are handled by explicit branch-aware edits rather than delegating to VS Code's generic indent commands, and can now be triggered from any line that still belongs to an outliner-owned branch.
+
+When **all** active selections are on bullet-owned fence-content lines, the commands take a separate fence-content path instead of moving the owning outliner branch:
+
+- `Tab` indents each selected fence-content line by one tab stop
+- `Shift+Tab` outdents each selected fence-content line, but clamps at the fence content boundary so the line cannot move left of the aligned backticks
+- these edits operate on the selected content lines only; they do not move the parent bullet branch
+
+Fence-content lines no longer advertise themselves as generic outliner bullet or branch lines. This prevents code lines such as `- item` inside fenced code blocks from triggering bullet-aware outliner editing.
 
 `applyOutlinerBranchMove(...)` first resolves each selected line through `getOutlinerBranchActionLine(...)`:
 
@@ -2886,7 +2901,10 @@ Keybinding: `Backspace` when `editorLangId == markdown && as-notes.outlinerMode 
 
 **Case 1 — fence-content left-boundary guard**
 
-When the active line is inside a bullet-owned fenced code block, `getOutlinerFenceContentBoundary(...)` returns the content boundary column (`bulletIndent + 2`). `isOutlinerFenceBackspaceBlocked(...)` blocks Backspace when either of the following is true:
+When the active line is inside a bullet-owned fenced code block, `getOutlinerFenceContentBoundary(...)` returns the content boundary column (`bulletIndent + 2`). The command now handles fence content in two stages:
+
+1. **Column-0 join** — if the cursor is at column `0` and `canJoinOutlinerFenceContentWithPreviousLine(...)` returns `true`, the command falls through to normal `deleteLeft`, which joins the current line into the previous fence-content line inside the same bullet-owned fence.
+2. **Boundary guard** — otherwise, `isOutlinerFenceBackspaceBlocked(...)` blocks Backspace when either of the following is true:
 
 - the cursor is at column `0` (prevents joining the fence-content line with the previous line)
 - the cursor is at or before the boundary and the line's current indent is already at or below that boundary
@@ -2921,10 +2939,23 @@ Keybinding: `Ctrl+V` / `Cmd+V` when `editorLangId == markdown && as-notes.outlin
 Command `as-notes.outlinerPaste`:
 
 1. Reads clipboard via `vscode.env.clipboard.readText()`.
-2. If the active line is fence content inside a bullet-owned code block and the paste is a multi-line paste, a non-empty selection replacement, or a paste into a blank fence-content line, it calls `formatOutlinerFencePaste(contentBoundary, clipboardText)` and replaces the current selection with the rebased text.
-3. Otherwise it calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
-4. If the bullet-format result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
-5. Otherwise, replaces the entire current bullet line with the formatted bullets.
+2. If the active line is fence content inside a bullet-owned code block and the paste is a multi-line paste, a non-empty selection replacement, or a paste into a blank fence-content line, it calls `formatOutlinerFencePaste(contentBoundary, clipboardText)`.
+3. For blank fence-content lines with an empty selection, the command replaces the **entire line** rather than the empty selection, so the first pasted row does not inherit the line's existing indentation in addition to the rebased fence indentation.
+4. Otherwise it calls `formatOutlinerPaste(lineText, cursorCharacter, clipboardText)`.
+5. If the bullet-format result is `null` (single-line paste or all-empty lines), falls through to `editor.action.clipboardPasteAction`.
+6. Otherwise, replaces the entire current bullet line with the formatted bullets.
+
+When the active line is inside bullet-owned fence content and the paste does **not** meet the fence-rebasing criteria (for example, a simple single-line insertion into a non-blank line), the command falls through to VS Code's normal paste behaviour rather than trying to treat the line as an outliner bullet.
+
+### Arrow Up / Down — fence-content cursor clamp
+
+Keybinding: `Up` / `Down` when `editorLangId == markdown && as-notes.outlinerMode && as-notes.insideOutlinerFenceContent && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible`.
+
+`as-notes.outlinerFenceArrowUp` and `as-notes.outlinerFenceArrowDown` provide a narrow cursor-movement invariant for bullet-owned fence content:
+
+- when the next/previous line is still fence content, the cursor moves vertically while preserving the preferred column as much as possible but clamps it to at least the fence boundary
+- if the target fence-content line is shorter than the boundary, it is padded with spaces so the cursor can legally land at the boundary column
+- when movement would leave the fence-content region, the commands fall through to VS Code's normal cursor movement
 
 **`formatOutlinerPaste` rules:**
 

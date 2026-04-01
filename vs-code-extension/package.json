@@ -252,12 +252,12 @@
             {
                 "command": "as-notes.outlinerIndent",
                 "key": "tab",
-                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBranchLine"
+                "when": "editorLangId == markdown && as-notes.outlinerMode && (as-notes.onOutlinerBranchLine || as-notes.insideOutlinerFenceContent)"
             },
             {
                 "command": "as-notes.outlinerOutdent",
                 "key": "shift+tab",
-                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.onOutlinerBranchLine"
+                "when": "editorLangId == markdown && as-notes.outlinerMode && (as-notes.onOutlinerBranchLine || as-notes.insideOutlinerFenceContent)"
             },
             {
                 "command": "as-notes.outlinerPaste",
@@ -269,6 +269,16 @@
                 "command": "as-notes.outlinerBackspace",
                 "key": "backspace",
                 "when": "editorLangId == markdown && as-notes.outlinerMode && (as-notes.onOutlinerBackspaceMergePoint || as-notes.insideOutlinerFenceContent) && !editorReadonly && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible"
+            },
+            {
+                "command": "as-notes.outlinerFenceArrowDown",
+                "key": "down",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.insideOutlinerFenceContent && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible"
+            },
+            {
+                "command": "as-notes.outlinerFenceArrowUp",
+                "key": "up",
+                "when": "editorLangId == markdown && as-notes.outlinerMode && as-notes.insideOutlinerFenceContent && editorHasSelection == false && !suggestWidgetVisible && !inlineSuggestionVisible"
             }
         ],
         "configuration": {

@@ -419,6 +419,10 @@ export function isCodeFenceUnbalanced(lines: string[], lineIndex: number): boole
         return false;
     }
 
+    if (getBulletCodeFenceContext(lines, lineIndex) !== null) {
+        return false;
+    }
+
     const indentMatch = targetLine.match(/^(\s*)/);
     const targetIndent = indentMatch ? indentMatch[1].length : 0;
 
@@ -429,6 +433,7 @@ export function isCodeFenceUnbalanced(lines: string[], lineIndex: number): boole
     for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i];
         if (!ANY_STANDALONE_FENCE.test(line) || BULLET_LINE.test(line)) { continue; }
+        if (getBulletCodeFenceContext(lines, i) !== null) { continue; }
         const im = line.match(/^(\s*)/);
         const indent = im ? im[1].length : 0;
         if (indent !== targetIndent) { continue; }
@@ -463,6 +468,7 @@ export function isCodeFenceUnbalanced(lines: string[], lineIndex: number): boole
         if (i === lineIndex) { continue; }
         const line = lines[i];
         if (ANY_STANDALONE_FENCE.test(line) && !BULLET_LINE.test(line)) {
+            if (getBulletCodeFenceContext(lines, i) !== null) { continue; }
             const im = line.match(/^(\s*)/);
             const indent = im ? im[1].length : 0;
             if (indent === targetIndent) {
@@ -797,6 +803,73 @@ export function isOutlinerFenceBackspaceBlocked(
     // (so deleting one space still keeps indent >= boundary).
     const lineIndent = getLineIndent(lineText);
     return lineIndent <= contentBoundary;
+}
+
+export function canJoinOutlinerFenceContentWithPreviousLine(
+    lines: string[],
+    lineIndex: number,
+): boolean {
+    if (lineIndex <= 0) {
+        return false;
+    }
+
+    const currentContext = getBulletCodeFenceContext(lines, lineIndex);
+    const previousContext = getBulletCodeFenceContext(lines, lineIndex - 1);
+    if (!currentContext || !previousContext) {
+        return false;
+    }
+
+    const currentBoundary = getOutlinerFenceContentBoundary(lines, lineIndex);
+    const previousBoundary = getOutlinerFenceContentBoundary(lines, lineIndex - 1);
+    if (currentBoundary === null || previousBoundary === null) {
+        return false;
+    }
+
+    return currentContext.openerLine === previousContext.openerLine;
+}
+
+export interface OutlinerFenceContentShiftResult {
+    lineText: string;
+    appliedIndentDelta: number;
+}
+
+export function shiftOutlinerFenceContentLine(
+    lineText: string,
+    tabSize: number,
+    direction: 'indent' | 'outdent',
+    contentBoundary: number,
+): OutlinerFenceContentShiftResult {
+    const currentIndent = getLineIndent(lineText);
+    const appliedIndentDelta = direction === 'indent'
+        ? tabSize
+        : (currentIndent <= contentBoundary
+            ? 0
+            : Math.max(contentBoundary, currentIndent - tabSize) - currentIndent);
+
+    return {
+        lineText: shiftLineIndent(lineText, appliedIndentDelta),
+        appliedIndentDelta,
+    };
+}
+
+export interface OutlinerFenceVerticalMoveTarget {
+    lineText: string;
+    cursorCharacter: number;
+}
+
+export function getOutlinerFenceVerticalMoveTarget(
+    lineText: string,
+    preferredCharacter: number,
+    contentBoundary: number,
+): OutlinerFenceVerticalMoveTarget {
+    const paddedLineText = lineText.length < contentBoundary
+        ? `${lineText}${' '.repeat(contentBoundary - lineText.length)}`
+        : lineText;
+
+    return {
+        lineText: paddedLineText,
+        cursorCharacter: Math.max(contentBoundary, Math.min(preferredCharacter, paddedLineText.length)),
+    };
 }
 
 /**
