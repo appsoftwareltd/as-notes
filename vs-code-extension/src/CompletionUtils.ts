@@ -107,28 +107,34 @@ export function isLineInsideFrontMatter(lines: string[], lineIndex: number): boo
  */
 export function isPositionInsideCode(lines: string[], lineIndex: number, charIndex: number): boolean {
     // Check fenced code block — scan up to lineIndex tracking open/close state
-    const fencePattern = /^(\s*(`{3,}|~{3,}))/;
+    const standaloneFencePattern = /^\s*(`{3,}|~{3,})/;
+    const bulletOwnedFencePattern = /^\s*-\s(?:\[[ xX]\]\s)?(?:.*\s)?(`{3,}|~{3,})\S*\s*$/;
     let inFence = false;
     let fenceChar = '';
     let fenceLen = 0;
     for (let i = 0; i <= lineIndex; i++) {
-        const m = fencePattern.exec(lines[i]);
-        if (m) {
-            const char = m[2][0]; // ` or ~
-            const len = m[2].length;
-            if (!inFence) {
-                // Opening fence
-                inFence = true;
-                fenceChar = char;
-                fenceLen = len;
-            } else if (char === fenceChar && len >= fenceLen) {
-                // Closing fence — same char, at least as many markers
-                inFence = false;
-                fenceChar = '';
-                fenceLen = 0;
-            }
-            // Otherwise it's a different fence type or shorter — ignored
+        const line = lines[i] ?? '';
+        const standaloneMatch = standaloneFencePattern.exec(line);
+        const bulletOwnedMatch = bulletOwnedFencePattern.exec(line);
+        const marker = standaloneMatch?.[1] ?? bulletOwnedMatch?.[1];
+        if (!marker) {
+            continue;
         }
+
+        const char = marker[0]; // ` or ~
+        const len = marker.length;
+        if (!inFence) {
+            // Opening fence
+            inFence = true;
+            fenceChar = char;
+            fenceLen = len;
+        } else if (char === fenceChar && len >= fenceLen) {
+            // Closing fence — same char, at least as many markers
+            inFence = false;
+            fenceChar = '';
+            fenceLen = 0;
+        }
+        // Otherwise it's a different fence type or shorter — ignored
     }
     // If we're still inside a fence at lineIndex, cursor is in a code block.
     // The opening fence line itself is part of the block, but content starts

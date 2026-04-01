@@ -279,6 +279,12 @@ describe('WikilinkCompletionProvider — isPositionInsideCode', () => {
         expect(check(lines, 4, 0)).toBe(false);
     });
 
+    it('should treat bullet-owned fenced blocks as code', () => {
+        const lines = ['- ```', '  [[Demo]]', '  ```', '- after'];
+        expect(check(lines, 1, 2)).toBe(true);
+        expect(check(lines, 3, 0)).toBe(false);
+    });
+
     it('should return false for empty document', () => {
         expect(check([], 0, 0)).toBe(false);
     });

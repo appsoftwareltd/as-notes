@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WikilinkService } from 'as-notes-common';
 import { WikilinkFileService } from './WikilinkFileService.js';
 import type { IndexService } from './IndexService.js';
+import { isPositionInsideCode } from './CompletionUtils.js';
 
 /**
  * Provides clickable document links for wikilinks in markdown files.
@@ -34,6 +35,7 @@ export class WikilinkDocumentLinkProvider implements vscode.DocumentLinkProvider
         _token: vscode.CancellationToken,
     ): vscode.DocumentLink[] {
         const links: vscode.DocumentLink[] = [];
+        const lines = Array.from({ length: document.lineCount }, (_, index) => document.lineAt(index).text);
 
         for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
             const line = document.lineAt(lineIndex);
@@ -47,6 +49,10 @@ export class WikilinkDocumentLinkProvider implements vscode.DocumentLinkProvider
             const segments = this.wikilinkService.computeLinkSegments(wikilinks);
 
             for (const segment of segments) {
+                if (isPositionInsideCode(lines, lineIndex, segment.startOffset)) {
+                    continue;
+                }
+
                 const range = new vscode.Range(
                     lineIndex, segment.startOffset,
                     lineIndex, segment.endOffset,

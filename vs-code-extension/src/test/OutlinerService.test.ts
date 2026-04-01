@@ -480,14 +480,24 @@ describe('isInsideBulletCodeFence', () => {
 });
 
 describe('getBulletCodeFenceEnterInsert', () => {
-    it('returns null when the cursor is before the opening backticks on a bullet fence line', () => {
+    it('returns null when the cursor is before the fence token on a bullet fence line', () => {
         const lines = [
             '- ```csharp',
             '  Console.WriteLine("hi");',
             '  ```',
         ];
 
-        expect(getBulletCodeFenceEnterInsert(lines, 0, 2)).toBeNull();
+        expect(getBulletCodeFenceEnterInsert(lines, 0, 1)).toBeNull();
+    });
+
+    it('treats the caret at the first backtick as a valid opening-fence Enter position', () => {
+        const lines = [
+            '- ```csharp',
+            '  Console.WriteLine("hi");',
+            '  ```',
+        ];
+
+        expect(getBulletCodeFenceEnterInsert(lines, 0, 2)).toBe('\n  ');
     });
 
     it('returns a full skeleton when a bullet fence has no closing fence yet', () => {
@@ -1731,6 +1741,13 @@ describe('getOutlinerFenceVerticalMoveTarget', () => {
         expect(getOutlinerFenceVerticalMoveTarget('', 0, 2)).toEqual({
             lineText: '  ',
             cursorCharacter: 2,
+        });
+    });
+
+    it('pads whitespace-only lines up to the boundary', () => {
+        expect(getOutlinerFenceVerticalMoveTarget(' ', 0, 3)).toEqual({
+            lineText: '   ',
+            cursorCharacter: 3,
         });
     });
 

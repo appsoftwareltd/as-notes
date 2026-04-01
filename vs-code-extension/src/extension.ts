@@ -305,6 +305,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         { length: document.lineCount },
         (_, index) => document.lineAt(index).text,
     );
+    let isNormalizingOutlinerFenceSelection = false;
 
     // Track whether the active cursor is on a bullet line or a code fence line
     const syncOutlinerLineContext = (editor: vscode.TextEditor | undefined) => {
@@ -348,8 +349,97 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         vscode.commands.executeCommand('setContext', 'as-notes.onCodeFenceLine', onCodeFence);
     };
 
+    const normalizeOutlinerFenceSelections = (editor: vscode.TextEditor | undefined) => {
+        if (isNormalizingOutlinerFenceSelection || !editor || editor.document.languageId !== 'markdown') {
+            return;
+        }
+
+        if (editor.selections.some(sel => !sel.isEmpty)) {
+            return;
+        }
+
+        const lines = getDocumentLines(editor.document);
+        const normalizedTargets = editor.selections.map(sel => {
+            const lineIndex = sel.active.line;
+            const contentBoundary = getOutlinerFenceContentBoundary(lines, lineIndex);
+            if (contentBoundary === null || sel.active.character >= contentBoundary) {
+                return null;
+            }
+
+            const lineText = editor.document.lineAt(lineIndex).text;
+            if (lineText.trim().length !== 0) {
+                return null;
+            }
+
+            const target = getOutlinerFenceVerticalMoveTarget(lineText, sel.active.character, contentBoundary);
+            if (target.lineText === lineText && target.cursorCharacter === sel.active.character) {
+                return null;
+            }
+
+            return {
+                lineIndex,
+                lineText: target.lineText,
+                cursorCharacter: target.cursorCharacter,
+            };
+        });
+
+        if (normalizedTargets.every(target => target === null)) {
+            return;
+        }
+
+        const applySelections = () => {
+            isNormalizingOutlinerFenceSelection = true;
+            try {
+                editor.selections = editor.selections.map((selection, index) => {
+                    const target = normalizedTargets[index];
+                    if (!target) {
+                        return selection;
+                    }
+
+                    const pos = new vscode.Position(target.lineIndex, target.cursorCharacter);
+                    return new vscode.Selection(pos, pos);
+                });
+            } finally {
+                isNormalizingOutlinerFenceSelection = false;
+            }
+
+            syncOutlinerLineContext(editor);
+        };
+
+        const replacementByLine = new Map<number, string>();
+        for (const target of normalizedTargets) {
+            if (!target) {
+                continue;
+            }
+
+            if (target.lineText !== editor.document.lineAt(target.lineIndex).text) {
+                replacementByLine.set(target.lineIndex, target.lineText);
+            }
+        }
+
+        if (replacementByLine.size === 0) {
+            applySelections();
+            return;
+        }
+
+        void editor.edit(editBuilder => {
+            for (const [lineIndex, lineText] of replacementByLine) {
+                editBuilder.replace(editor.document.lineAt(lineIndex).range, lineText);
+            }
+        }).then(success => {
+            if (!success) {
+                return;
+            }
+
+            applySelections();
+        });
+    };
+
     context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorSelection((e) => syncOutlinerLineContext(e.textEditor)),
+        vscode.window.onDidChangeTextEditorSelection((e) => {
+            syncOutlinerLineContext(e.textEditor);
+            normalizeOutlinerFenceSelections(e.textEditor);
+        }),
     );
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor((editor) => syncOutlinerLineContext(editor)),
@@ -382,11 +472,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
                         editor.document.lineAt(selection.active.line).range.end.character,
                     );
                     const cursorCharacter = selection.active.character;
-                    const fenceZone = getFenceTokenCursorZone(lineText, cursorCharacter);
+                    const bulletFenceInsert = isCodeFenceOpen(lineText)
+                        ? getBulletCodeFenceEnterInsert(allLines, selection.active.line, cursorCharacter)
+                        : null;
 
                     // 1. Bullet line ending with opening code fence → open code block
-                    if (isCodeFenceOpen(lineText) && fenceZone !== 'before') {
-                        const insertText = getBulletCodeFenceEnterInsert(allLines, selection.active.line, cursorCharacter) ?? getCodeFenceEnterInsert(lineText);
+                    if (bulletFenceInsert !== null) {
+                        const insertText = bulletFenceInsert;
                         const bulletIndent = lineText.match(/^(\s*)- /)?.[1]?.length ?? 0;
                         editBuilder.insert(lineEnd, insertText);
                         const pos = new vscode.Position(selection.active.line + 1, bulletIndent + 2);

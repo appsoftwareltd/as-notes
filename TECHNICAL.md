@@ -1096,9 +1096,11 @@ The `sortText` prefix ensures pages always appear before aliases in the list. Bo
 
 **Front matter suppression:** `isLineInsideFrontMatter()` checks whether the cursor is between the first two `---` lines. If so, no completions are returned — front matter aliases are plain strings, not wikilinks.
 
+**Code suppression:** `isPositionInsideCode()` is also used to suppress wikilink editor interaction inside inline code spans and fenced code blocks. This includes ordinary standalone fences and bullet-owned fenced blocks opened directly on outliner bullet lines such as `- \`\`\``. When the cursor is inside code, wikilinks are treated as plain text rather than active editor affordances.
+
 All five pure functions — `findInnermostOpenBracket()`, `findMatchingCloseBracket()`, `isLineInsideFrontMatter()`, `isPositionInsideCode()`, and `hasNewCompleteWikilink()` — live in `CompletionUtils.ts` with no VS Code dependency, and are fully unit-tested.
 
-**Code block detection:** `isPositionInsideCode(lines, lineIndex, charIndex)` scans lines 0 through `lineIndex` tracking fenced code block open/close state (supports both `` ` `` and `~` fences, respects fence length — a closing fence must use the same character and at least as many markers as the opener). If a fence is still open at `lineIndex`, the position is inside a code block. Separately checks inline code spans (`` ` ``) on the target line.
+**Code block detection:** `isPositionInsideCode(lines, lineIndex, charIndex)` scans lines 0 through `lineIndex` tracking fenced code block open/close state (supports both `` ` `` and `~` fences, respects fence length — a closing fence must use the same character and at least as many markers as the opener). The fence scanner recognises both standalone fence lines and bullet-owned fence opener lines used by outliner blocks, so a fence opened with `- \`\`\`` suppresses wikilink features until its matching closing fence line. If a fence is still open at `lineIndex`, the position is inside a code block. Separately checks inline code spans (`` ` ``) on the target line.
 
 ### Caching strategy
 
@@ -1130,6 +1132,18 @@ To handle this, a separate `onDidChangeTextDocument` listener in `extension.ts` 
 - **Cursor outside `[[`:** `findInnermostOpenBracket()` returns -1, so no trigger fires.
 
 The listener only fires on deletions (where `rangeLength > 0` and `text` is empty), not on forward typing — forward typing either keeps the existing session alive or opens a new one via the `[` trigger character.
+
+### Wikilink interaction suppression inside code
+
+The same code-context rule now applies across the main wikilink editor surfaces, not just slash commands:
+
+- **Completion** — `WikilinkCompletionProvider` returns no completions when the cursor is inside inline code or a fenced code block.
+- **Hover** — `WikilinkHoverProvider` returns no tooltip when the hovered position is inside code.
+- **Document links** — `WikilinkDocumentLinkProvider` skips link segments whose start offset falls inside code.
+- **Decorations** — `WikilinkDecorationManager` skips decorating wikilink segments inside inline code or fenced code blocks.
+- **Rename tracking** — `WikilinkRenameTracker` does not create pending rename state for edits inside code, and ignores live wikilinks inside code during rename detection.
+
+This applies in both normal markdown flow and outliner-owned fenced code blocks.
 
 ### Completion and rename tracking interaction
 
@@ -2757,7 +2771,7 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
 | `isClosingCodeFenceLine(lineText)` | Returns `true` for non-bullet bare `` ``` `` lines (no language identifier) |
 | `getBulletCodeFenceContext(lines, lineIndex)` | Returns bullet-owned fence context for the current line when the cursor is on an opening fence, its content, or its closing fence |
-| `getBulletCodeFenceEnterInsert(lines, lineIndex)` | Returns the correct Enter insertion for a bullet fence opener: full skeleton when unclosed, continuation line when already balanced |
+| `getBulletCodeFenceEnterInsert(lines, lineIndex)` | Returns the correct Enter insertion for a bullet fence opener: full skeleton when unclosed, continuation line when already balanced, and accepts the caret positioned at the opening fence start |
 | `getClosingFenceBulletInsert(lines, lineIndex)` | Returns new bullet insert if the closing fence belongs to a bullet code block, else `null` |
 | `isCodeFenceUnbalanced(lines, lineIndex)` | Returns `true` when the standalone fence at `lineIndex` has no matching pair at the same indent |
 | `isInsideBulletCodeFence(lines, lineIndex)` | Returns `true` when the current line is within a bullet-owned fenced code block, including the opening and closing fence lines |
@@ -2790,7 +2804,7 @@ Keybinding: `Enter` when `editorLangId == markdown && as-notes.outlinerMode && a
 
 Command `as-notes.outlinerEnter` for each cursor (in priority order):
 
-1. **Bullet code fence open, cursor on/after token** — `isCodeFenceOpen` returns `true` and `getFenceTokenCursorZone(...)` is not `before`: inserts the result of `getBulletCodeFenceEnterInsert(...)`, which either opens a new bullet-owned skeleton or continues into the existing balanced fence block.
+1. **Bullet code fence open, cursor at the fence start or later** — `isCodeFenceOpen` returns `true` and `getBulletCodeFenceEnterInsert(...)` returns a value: inserts that result, which either opens a new bullet-owned skeleton or continues into the existing balanced fence block. This includes the caret position immediately before the first backtick of the opener, so pressing Enter there no longer falls through to generic outliner splitting and strip the opening fence token.
 2. **Bullet with existing children, cursor at end of line** — inserts a new first child before the current first descendant bullet. The new line reuses the first child's indentation and keeps the parent's bullet vs unchecked-todo shape.
 3. **Bullet line fallback** — deletes from cursor to end of line, inserts `getOutlinerEnterInsert(lineText)`. Text after cursor is pushed to the new bullet.
 
@@ -2956,6 +2970,8 @@ Keybinding: `Up` / `Down` when `editorLangId == markdown && as-notes.outlinerMod
 - when the next/previous line is still fence content, the cursor moves vertically while preserving the preferred column as much as possible but clamps it to at least the fence boundary
 - if the target fence-content line is shorter than the boundary, it is padded with spaces so the cursor can legally land at the boundary column
 - when movement would leave the fence-content region, the commands fall through to VS Code's normal cursor movement
+
+The same boundary-padding rule is also reused on empty selection changes for blank bullet-owned fence-content lines. If the user clicks onto a blank or whitespace-only fence-content line left of the boundary, the line is padded as needed and the caret is immediately clamped back to the boundary instead of being left at column `0`.
 
 **`formatOutlinerPaste` rules:**
 

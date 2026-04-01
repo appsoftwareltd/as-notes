@@ -14,6 +14,7 @@ import {
     orderFileRenameOperations,
     remapUrisForFileOperations,
 } from './WikilinkFilenameRefactorService.js';
+import { isPositionInsideCode } from './CompletionUtils.js';
 
 /**
  * Detected rename: a wikilink at the same position now has a different pageName.
@@ -189,6 +190,11 @@ export class WikilinkRenameTracker implements vscode.Disposable {
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.uri.toString() === docKey) {
             const cursorPos = editor.selection.active;
+            const lines = Array.from({ length: event.document.lineCount }, (_, index) => event.document.lineAt(index).text);
+            if (isPositionInsideCode(lines, cursorPos.line, Math.max(0, cursorPos.character - 1))) {
+                this.pendingEdit = undefined;
+                return;
+            }
             const lineText = event.document.lineAt(cursorPos.line).text;
             const wikilinks = this.wikilinkService.extractWikilinks(lineText);
             const outermost = this.findOutermostWikilinkAtOffset(wikilinks, cursorPos.character);
@@ -237,6 +243,11 @@ export class WikilinkRenameTracker implements vscode.Disposable {
 
         const cursorPos = event.selections[0].active;
         const document = event.textEditor.document;
+        const lines = Array.from({ length: document.lineCount }, (_, index) => document.lineAt(index).text);
+        if (isPositionInsideCode(lines, cursorPos.line, Math.max(0, cursorPos.character - 1))) {
+            this.pendingEdit = undefined;
+            return;
+        }
         const lineText = document.lineAt(cursorPos.line).text;
         const wikilinks = this.wikilinkService.extractWikilinks(lineText);
         const outermost = this.findOutermostWikilinkAtOffset(wikilinks, cursorPos.character);
@@ -313,11 +324,15 @@ export class WikilinkRenameTracker implements vscode.Disposable {
             line: number;
         }
         const currentWikilinks: CurrentWikilink[] = [];
+        const lines = Array.from({ length: document.lineCount }, (_, index) => document.lineAt(index).text);
         for (let line = 0; line < document.lineCount; line++) {
             const text = document.lineAt(line).text;
             const wikilinks = this.wikilinkService.extractWikilinks(text);
 
             for (const wl of wikilinks) {
+                if (isPositionInsideCode(lines, line, wl.startPositionInText)) {
+                    continue;
+                }
                 currentWikilinks.push({
                     pageName: wl.pageName,
                     startPosition: wl.startPositionInText,

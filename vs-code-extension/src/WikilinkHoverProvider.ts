@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WikilinkService } from 'as-notes-common';
 import { WikilinkFileService } from './WikilinkFileService.js';
 import type { IndexService } from './IndexService.js';
+import { isPositionInsideCode } from './CompletionUtils.js';
 
 /**
  * Shows a hover tooltip over wikilinks with the target filename,
@@ -28,6 +29,11 @@ export class WikilinkHoverProvider implements vscode.HoverProvider {
         position: vscode.Position,
         _token: vscode.CancellationToken,
     ): Promise<vscode.Hover | undefined> {
+        const lines = Array.from({ length: document.lineCount }, (_, index) => document.lineAt(index).text);
+        if (isPositionInsideCode(lines, position.line, position.character)) {
+            return undefined;
+        }
+
         const line = document.lineAt(position.line);
         const wikilinks = this.wikilinkService.extractWikilinks(line.text);
 

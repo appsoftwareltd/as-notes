@@ -306,8 +306,11 @@ export function getBulletCodeFenceEnterInsert(
         return null;
     }
 
-    if (cursorCharacter !== undefined && getFenceTokenCursorZone(lineText, cursorCharacter) === 'before') {
-        return null;
+    if (cursorCharacter !== undefined) {
+        const fenceStart = lineText.indexOf('```');
+        if (fenceStart !== -1 && cursorCharacter < fenceStart) {
+            return null;
+        }
     }
 
     const contentIndent = getBulletContentIndent(lineText);

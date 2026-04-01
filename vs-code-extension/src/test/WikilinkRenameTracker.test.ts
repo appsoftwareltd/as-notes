@@ -149,6 +149,35 @@ describe('WikilinkRenameTracker — debounce guard integration', () => {
     });
 });
 
+describe('WikilinkRenameTracker — code suppression', () => {
+    it('does not create pending rename state for edits inside inline code', () => {
+        const tracker = makeTracker();
+        const document = {
+            languageId: 'markdown',
+            uri: { fsPath: 'notes/page.md', toString: () => 'file:///notes/page.md' },
+            lineCount: 1,
+            lineAt: () => ({ text: 'Some `[[Demo` code' }),
+        } as unknown as vscode.TextDocument;
+
+        (vscode.workspace.asRelativePath as unknown as ReturnType<typeof vi.fn>).mockReturnValue('notes/page.md');
+        const activeTextEditor = {
+            document,
+            selection: { active: { line: 0, character: 12 } },
+        };
+        (vscode.window as unknown as { activeTextEditor: unknown }).activeTextEditor = activeTextEditor;
+
+        const indexService = (tracker as unknown as { indexService: { getPageByPath: ReturnType<typeof vi.fn> } }).indexService;
+        indexService.getPageByPath.mockReturnValue({ id: 1, path: 'notes/page.md' });
+
+        (tracker as unknown as { onDocumentChanged: (event: vscode.TextDocumentChangeEvent) => void }).onDocumentChanged({
+            document,
+            contentChanges: [{ text: 'x' }],
+        } as vscode.TextDocumentChangeEvent);
+
+        expect(tracker.hasPendingEdit('file:///notes/page.md')).toBe(false);
+    });
+});
+
 // ── isNestingChange ───────────────────────────────────────────────────────────
 
 describe('WikilinkRenameTracker.isNestingChange', () => {
