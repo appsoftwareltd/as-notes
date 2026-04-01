@@ -8,8 +8,9 @@ order: 14
 
 AS Notes is a VS Code extension brings markdown and [[wikilink]] editing for notes, documentation, blogs and wikis directly into VS Code and compatible editors (e.g. Antigravity, Cursor, Windsurf).
 
-> **Install:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes) / [Open VSX](https://open-vsx.org/extension/appsoftwareltd/as-notes)
-> **GitHub:** [github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
+**Install:** [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes) / [Open VSX](https://open-vsx.org/extension/appsoftwareltd/as-notes)
+
+**GitHub:** [github.com/appsoftwareltd/as-notes](https://github.com/appsoftwareltd/as-notes)
 
 ## Editing Github Wikis with AS Notes
 
