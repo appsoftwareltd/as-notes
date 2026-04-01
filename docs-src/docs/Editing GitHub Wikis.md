@@ -6,7 +6,7 @@ order: 14
 
 Every GitHub repository comes with a built-in wiki. It is a separate Git repository that stores markdown files, supports `[[wikilinks]]` between pages, and can be organised into subdirectories.
 
-[AS Notes](https://www.asnotes.io) is compatible with Github Wiki structure. Github wikis can be cloned locally. , Where initialised in the repository root, AS Notes provides wikilink autocompletion, markdown tooling and inline editor formatting (including Mermaid and LaTeX rendering[[Inline Markdown Editing Mermaid and LaTeX Rendering]]).
+[AS Notes](https://www.asnotes.io) is compatible with Github Wiki structure. Github wikis can be cloned locally. , Where initialised in the repository root, AS Notes provides wikilink autocompletion, markdown tooling and inline editor formatting (including Mermaid and LaTeX rendering [[Inline Markdown Editing Mermaid and LaTeX Rendering]]).
 
 **Clone a GitHub wiki locally, open it in VS Code (or Cursor, Antigravity, Windsurf), initialise AS Notes, and you get backlinks, autocomplete, task tracking, inline rendering, and other AS Notes features on top of your wiki content. Edit locally, commit, push, and your changes appear on GitHub immediately.**
 
