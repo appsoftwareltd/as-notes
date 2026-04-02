@@ -93,7 +93,7 @@ A built-in kanban board backed by markdown files for tracking long-running proje
 
 Press a keyboard shortcut to create or open today's journal entry. New entries are generated from a customisable template with placeholder support. A calendar panel in the sidebar shows the current month with journal indicators.
 
-![Daily Journal](../assets/images/image.png)
+![Daily Journal](../assets/images/daily-journal.png)
 
 ### Outliner Mode
 
