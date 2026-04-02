@@ -40,6 +40,7 @@ Using VS Code as your notes app gives you a huge amount for free in addition the
 | [[Daily Journal]] | Open today's journal with a single shortcut |
 | [[Task Management]] | Toggle todos with a keyboard shortcut and browse them all in a panel |
 | [[Slash Commands]] | Insert code blocks, dates, and task tags — type `/` to open the menu |
+| [[Markdown Editing]] | Code block completion and other markdown editing tools |
 | [[Images and Files]] | Drag and drop images, paste from clipboard, hover to preview |
 | [[Publishing a Static Site]] | Convert your notes to a static website and deploy to GitHub Pages |
 
@@ -47,7 +48,8 @@ Using VS Code as your notes app gives you a huge amount for free in addition the
 
 | Feature | Summary |
 |---|---|
-| [[Slash Commands]] (Tables) | Insert and edit markdown tables directly from the slash menu |
+| [[Templates]] | Create reusable note templates with placeholders and insert them via the slash menu |
+| [[Markdown Editing]] (Tables) | Insert and edit markdown tables directly from the slash menu |
 | [[Encrypted Notes]] | Store sensitive notes in AES-256-GCM encrypted `.enc.md` files |
 | [[Inline Markdown Editing Mermaid and LaTeX Rendering]] | Inline markdown editor styling and presentation including Lermaid diagrams and LaTex math |
 
