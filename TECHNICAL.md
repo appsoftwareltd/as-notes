@@ -2745,7 +2745,15 @@ Both use the same regex pattern. If the sanitisation rules change, both must be 
 
 ## Outliner mode
 
-Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a bullet-first outliner. It only affects lines beginning with `-` (hyphen-space) — all other lines retain normal editor behaviour.
+Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a bullet-first outliner. It only affects lines beginning with `-` (hyphen-space) -- all other lines retain normal editor behaviour.
+
+### Outliner indent size
+
+The `as-notes.outlinerIndentSize` setting (default: `2`, range 1-8) controls the branch movement step size (Tab / Shift+Tab) and the `canIndentOutlinerBranch` max-indent guard. It replaces the old behaviour where branch movement read `editor.tabSize`. Because the setting is scoped to AS Notes, a workspace can use 4-space code indentation while keeping 2-space outliner indentation.
+
+Content offset (continuation indent, fence boundaries, cursor placement after Enter) is always `+2`, matching the width of the `-` bullet marker. This is independent of `outlinerIndentSize` so that bullet fences, closing backticks, and continuation lines always align correctly regardless of the tree-spacing setting.
+
+In `OutlinerService.ts`, only `canIndentOutlinerBranch` and `moveOutlinerBranch` accept a `tabSize` parameter for tree-spacing. In `extension.ts`, `applyOutlinerBranchMove` reads the setting and passes it to those two functions.
 
 ### OutlinerService
 
@@ -2766,7 +2774,7 @@ Outliner mode (`as-notes.outlinerMode` setting) turns the markdown editor into a
 | `getOutlinerFenceVerticalMoveTarget(lineText, preferredCharacter, contentBoundary)` | Pads short fence-content lines when needed and returns a cursor column clamped to the fence boundary |
 | `isOutlinerFenceBackspaceBlocked(lineText, cursorCharacter, contentBoundary)` | Returns `true` when Backspace would move fence content left of its allowed boundary |
 | `shiftOutlinerFenceContentLine(lineText, tabSize, direction, contentBoundary)` | Indents or outdents a fence-content line while clamping outdent at the fence boundary |
-| `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented +2 past bullet) |
+| `getCodeFenceEnterInsert(lineText)` | Returns the code block skeleton to insert on Enter (indented by +2 past bullet) |
 | `isStandaloneCodeFenceOpen(lineText)` | Returns `true` for non-bullet lines matching opening `` ``` `` (optionally + language) |
 | `getStandaloneCodeFenceEnterInsert(lineText)` | Returns the code block skeleton at same indent (no +2 offset) |
 | `isClosingCodeFenceLine(lineText)` | Returns `true` for non-bullet bare `` ``` `` lines (no language identifier) |

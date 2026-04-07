@@ -193,10 +193,9 @@ export function getFenceTokenCursorZone(
  * with an opening code fence.
  *
  * Inserts a blank line (for the cursor) and a closing fence, both indented
- * 2 spaces past the bullet's `- ` (matching standard markdown list continuation
- * indent). The 2-space offset is hardcoded by design — see TECHNICAL.md.
+ * 2 spaces past the bullet's `- ` (matching list continuation indent).
  *
- * Example: `    - \`\`\`javascript` → `\n      \n      \`\`\``
+ * Example: `    - \`\`\`javascript` -> `\n      \n      \`\`\``
  * (4 spaces indent + 2 spaces past hyphen = 6 spaces for continuation content)
  */
 export function getCodeFenceEnterInsert(lineText: string): string {
@@ -552,16 +551,34 @@ export function getOutlinerBranchRange(
     const continuationIndent = rootIndent + 2;
     let endLine = lineIndex;
     let pendingBlankStart: number | null = null;
-    let insideFence = false;
+    let insideStandaloneFence = false;
+    let insideBulletFence = false;
+    let bulletFenceContentIndent = 0;
+
+    // Check if root line itself opens a bullet fence
+    if (CODE_FENCE_OPEN.test(rootLine)) {
+        insideBulletFence = true;
+        bulletFenceContentIndent = rootIndent + 2;
+    }
 
     for (let i = lineIndex + 1; i < lines.length; i++) {
         const line = lines[i];
         const indent = getLineIndent(line);
 
-        if (insideFence) {
+        // Inside a bullet-owned fence: consume until matching closer
+        if (insideBulletFence) {
+            endLine = i;
+            if (isClosingCodeFenceLine(line) && indent >= bulletFenceContentIndent) {
+                insideBulletFence = false;
+            }
+            continue;
+        }
+
+        // Inside a standalone fence: consume until next standalone fence
+        if (insideStandaloneFence) {
             endLine = i;
             if (ANY_STANDALONE_FENCE.test(line) && !BULLET_LINE.test(line)) {
-                insideFence = false;
+                insideStandaloneFence = false;
             }
             continue;
         }
@@ -591,8 +608,12 @@ export function getOutlinerBranchRange(
             pendingBlankStart = null;
         }
 
-        if (ANY_STANDALONE_FENCE.test(line) && !BULLET_LINE.test(line)) {
-            insideFence = true;
+        // Check if this line opens a bullet fence
+        if (CODE_FENCE_OPEN.test(line)) {
+            insideBulletFence = true;
+            bulletFenceContentIndent = getLineIndent(line) + 2;
+        } else if (ANY_STANDALONE_FENCE.test(line) && !BULLET_LINE.test(line)) {
+            insideStandaloneFence = true;
         }
     }
 

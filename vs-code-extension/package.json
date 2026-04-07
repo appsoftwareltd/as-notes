@@ -359,6 +359,14 @@
                     "scope": "window",
                     "description": "Enable Outliner Mode for markdown files. In outliner mode, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents the bullet line, and Shift+Tab outdents it. Only applies to lines beginning with `- `."
                 },
+                "as-notes.outlinerIndentSize": {
+                    "type": "number",
+                    "default": 2,
+                    "minimum": 1,
+                    "maximum": 8,
+                    "scope": "window",
+                    "description": "Number of spaces per indentation level in Outliner Mode. Controls branch indent/outdent step size, bullet content offset, and fence content boundary. Independent of the editor's tabSize setting."
+                },
                 "as-notes.inlineEditor.enabled": {
                     "type": "boolean",
                     "default": true,

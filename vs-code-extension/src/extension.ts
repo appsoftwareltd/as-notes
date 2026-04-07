@@ -305,6 +305,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
         { length: document.lineCount },
         (_, index) => document.lineAt(index).text,
     );
+
     let isNormalizingOutlinerFenceSelection = false;
 
     // Track whether the active cursor is on a bullet line or a code fence line
@@ -3224,7 +3225,7 @@ function applyOutlinerBranchMove(
     editor: vscode.TextEditor,
     direction: 'indent' | 'outdent',
 ): void {
-    const tabSize = editor.options.tabSize as number ?? 4;
+    const tabSize = vscode.workspace.getConfiguration('as-notes').get<number>('outlinerIndentSize', 2);
     const originalLines = editor.document.getText().split('\n');
     const originalSelections = editor.selections.map(sel => sel);
     const candidateLines = Array.from(new Set(originalSelections.map(sel => sel.active.line))).sort((a, b) => a - b);
@@ -3323,7 +3324,7 @@ function applyOutlinerFenceContentIndent(
     editor: vscode.TextEditor,
     direction: 'indent' | 'outdent',
 ): boolean {
-    const tabSize = editor.options.tabSize as number ?? 4;
+    const tabSize = vscode.workspace.getConfiguration('as-notes').get<number>('outlinerIndentSize', 2);
     const originalLines = Array.from(
         { length: editor.document.lineCount },
         (_, index) => editor.document.lineAt(index).text,

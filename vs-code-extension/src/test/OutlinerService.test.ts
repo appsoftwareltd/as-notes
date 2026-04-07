@@ -1509,13 +1509,13 @@ describe('moveOutlinerBranch', () => {
         const lines = [
             '- root',
             '    - parent',
-            '      continuation paragraph',
-            '      ```ts',
-            '      const water = true;',
-            '      ```',
-            '      | Col | Val |',
-            '      | --- | --- |',
-            '      | A | B |',
+            '        continuation paragraph',
+            '        ```ts',
+            '        const water = true;',
+            '        ```',
+            '        | Col | Val |',
+            '        | --- | --- |',
+            '        | A | B |',
             '        - child',
             '- sibling',
         ];
@@ -1526,13 +1526,13 @@ describe('moveOutlinerBranch', () => {
         expect(result!.lines).toEqual([
             '- root',
             '- parent',
-            '  continuation paragraph',
-            '  ```ts',
-            '  const water = true;',
-            '  ```',
-            '  | Col | Val |',
-            '  | --- | --- |',
-            '  | A | B |',
+            '    continuation paragraph',
+            '    ```ts',
+            '    const water = true;',
+            '    ```',
+            '    | Col | Val |',
+            '    | --- | --- |',
+            '    | A | B |',
             '    - child',
             '- sibling',
         ]);
@@ -1796,5 +1796,188 @@ describe('formatOutlinerFencePaste', () => {
     it('handles paste with no indentation at boundary 0', () => {
         const result = formatOutlinerFencePaste(0, 'a\n  b');
         expect(result).toBe('a\n  b');
+    });
+});
+
+// ── Non-default outlinerIndentSize (tree-spacing only) ──────────────────────
+
+describe('non-default outlinerIndentSize (tree-spacing)', () => {
+
+    // Content offset is always +2 (the `- ` marker width), regardless of
+    // outlinerIndentSize. The setting only affects Tab/Shift+Tab step size
+    // and `canIndentOutlinerBranch` max-indent guard.
+
+    // ── getOutlinerBranchRange (no indentSize param) ──
+
+    describe('getOutlinerBranchRange always uses +2 continuation', () => {
+        it('includes continuation lines at rootIndent+2 regardless of tree spacing', () => {
+            const lines = [
+                '- parent',
+                '  continuation',
+                '  more content',
+                '- sibling',
+            ];
+            const range = getOutlinerBranchRange(lines, 0);
+            expect(range).not.toBeNull();
+            expect(range!.startLine).toBe(0);
+            expect(range!.endLine).toBe(2);
+        });
+
+        it('includes child bullets at rootIndent+2', () => {
+            const lines = [
+                '- parent',
+                '  - child',
+                '    - grandchild',
+                '- sibling',
+            ];
+            const range = getOutlinerBranchRange(lines, 0);
+            expect(range).not.toBeNull();
+            expect(range!.endLine).toBe(2);
+        });
+
+        it('stops at a bullet with same or less indent', () => {
+            const lines = [
+                '- parent',
+                '  continuation',
+                '- sibling',
+            ];
+            const range = getOutlinerBranchRange(lines, 0);
+            expect(range).not.toBeNull();
+            expect(range!.endLine).toBe(1);
+        });
+    });
+
+    // ── getBulletCodeFenceContext (no indentSize param) ──
+
+    describe('getBulletCodeFenceContext always uses +2 content indent', () => {
+        it('detects fence content at rootIndent+2', () => {
+            const lines = [
+                '- ```ts',
+                '  const x = 1;',
+                '  ```',
+            ];
+            const ctx = getBulletCodeFenceContext(lines, 1);
+            expect(ctx).not.toBeNull();
+            expect(ctx!.contentIndent).toBe(2);
+            expect(ctx!.openerLine).toBe(0);
+        });
+
+        it('detects nested bullet fence at +2 from parent', () => {
+            const lines = [
+                '- parent',
+                '  - ```js',
+                '    let y = 2;',
+                '    ```',
+            ];
+            const ctx = getBulletCodeFenceContext(lines, 2);
+            expect(ctx).not.toBeNull();
+            expect(ctx!.contentIndent).toBe(4);
+        });
+    });
+
+    // ── getOutlinerFenceContentBoundary (no indentSize param) ──
+
+    describe('getOutlinerFenceContentBoundary always uses +2', () => {
+        it('returns boundary at rootIndent+2', () => {
+            const lines = [
+                '- ```ts',
+                '  const x = 1;',
+                '  ```',
+            ];
+            expect(getOutlinerFenceContentBoundary(lines, 1)).toBe(2);
+        });
+
+        it('returns null for opener line', () => {
+            const lines = [
+                '- ```ts',
+                '  const x = 1;',
+                '  ```',
+            ];
+            expect(getOutlinerFenceContentBoundary(lines, 0)).toBeNull();
+        });
+    });
+
+    // ── getCodeFenceEnterInsert (no indentSize param) ──
+
+    describe('getCodeFenceEnterInsert always uses +2 indent', () => {
+        it('inserts 2-space indent for bullet fence Enter', () => {
+            const result = getCodeFenceEnterInsert('- ```ts');
+            expect(result).toBe('\n  \n  ```');
+        });
+
+        it('inserts 4-space indent for nested bullet fence Enter', () => {
+            const result = getCodeFenceEnterInsert('  - ```js');
+            expect(result).toBe('\n    \n    ```');
+        });
+    });
+
+    // ── moveOutlinerBranch (tabSize still used for step) ──
+
+    describe('moveOutlinerBranch with tabSize=4', () => {
+        it('indents a branch with 4-space step, continuation stays +2', () => {
+            const lines = [
+                '- outer',
+                '- target',
+                '  continuation',
+                '  ```ts',
+                '  code',
+                '  ```',
+                '- sibling',
+            ];
+            const result = moveOutlinerBranch(lines, 1, 4, 'indent');
+            expect(result).not.toBeNull();
+            expect(result!.lines[1]).toBe('    - target');
+            expect(result!.lines[2]).toBe('      continuation');
+            expect(result!.lines[3]).toBe('      ```ts');
+            expect(result!.lines[4]).toBe('      code');
+            expect(result!.lines[5]).toBe('      ```');
+        });
+    });
+
+    // ── Branch range with bullet fences ──
+
+    describe('getOutlinerBranchRange bullet-fence tracking', () => {
+        it('does not extend past a bullet closing fence into the next section', () => {
+            const lines = [
+                '- bullet with fence',
+                '  ```ts',
+                '  const x = 1;',
+                '  ```',
+                '- sibling',
+            ];
+            const range = getOutlinerBranchRange(lines, 0);
+            expect(range).not.toBeNull();
+            expect(range!.endLine).toBe(3);
+        });
+
+        it('does not treat bullet fence closer as standalone opener', () => {
+            const lines = [
+                '- code example',
+                '  ```ts',
+                '  const x = 1;',
+                '  ```',
+                '',
+                '## Heading',
+                '',
+                'Paragraph text',
+            ];
+            const range = getOutlinerBranchRange(lines, 0);
+            expect(range).not.toBeNull();
+            expect(range!.endLine).toBe(3);
+        });
+
+        it('handles standalone fence within branch correctly', () => {
+            const lines = [
+                '- parent',
+                '  ```ts',
+                '  code',
+                '  ```',
+                '  - child',
+                '- sibling',
+            ];
+            const range = getOutlinerBranchRange(lines, 0);
+            expect(range).not.toBeNull();
+            expect(range!.endLine).toBe(4);
+        });
     });
 });
