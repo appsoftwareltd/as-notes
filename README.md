@@ -544,8 +544,8 @@ npx @vscode/vsce publish
 ```bash
 cd ..
 git add .
-git commit -m "Release v2.3.2"   # change version
-git tag v2.3.2                   # change version
+git commit -m "Release v2.3.3"   # change version
+git tag v2.3.3                   # change version
 git push origin main --tags
 ```
 
