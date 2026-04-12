@@ -29,9 +29,9 @@ AS Notes provides productivity tooling that turns your favourite IDE into a pers
 
 [![AS Notes demo](https://img.youtube.com/vi/bwYopQ1Sc5o/maxresdefault.jpg)](https://www.youtube.com/watch?v=bwYopQ1Sc5o)
 
-(1 minute demo video)
+(Full demo video)
 
-[![AS Notes demo](https://img.youtube.com/vi/liRULtb8Rm8/maxresdefault.jpg)](https://youtu.be/liRULtb8Rm8)
+[![AS Notes demo](https://img.youtube.com/vi/AF8U5c3i-Uw/maxresdefault.jpg)](https://youtu.be/AF8U5c3i-Uw)
 
 ## Why VS Code?
 
