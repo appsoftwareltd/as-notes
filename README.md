@@ -25,13 +25,13 @@ Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](ht
 
 AS Notes provides productivity tooling that turns your favourite IDE into a personal knowledge management system (PKMS), including a backlinks view, task management, journals, a kanban board, markdown editing tools, mermaid, LaTeX math support and Jekyll / Hugo like publishing.
 
-(Full demo video)
-
-[![AS Notes demo](https://img.youtube.com/vi/AF8U5c3i-Uw/maxresdefault.jpg)](https://youtu.be/AF8U5c3i-Uw)
-
 (1 minute introduction video)
 
 [![AS Notes demo](https://img.youtube.com/vi/bwYopQ1Sc5o/maxresdefault.jpg)](https://www.youtube.com/watch?v=bwYopQ1Sc5o)
+
+(Full demo video)
+
+[![AS Notes demo](https://img.youtube.com/vi/AF8U5c3i-Uw/maxresdefault.jpg)](https://youtu.be/AF8U5c3i-Uw)
 
 ## Why VS Code?
 
