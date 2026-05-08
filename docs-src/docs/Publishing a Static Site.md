@@ -877,7 +877,7 @@ Vercel deploys on every push and provides a preview URL for each branch.
 
 1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and go to **Compute > Workers & Pages**
 2. Click **Create application > Pages > Connect to Git**
-3. Select your repository
+3. Select your repository (if you have already selected repositories without granting access to all, select 'Add a Github account' when selecting Github user / organisation)
 
 ### 2. Configure Build Settings
 
@@ -885,7 +885,7 @@ In **Build configuration**, set the following:
 
 | Setting | Value |
 |---|---|
-| Build command | `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json` |
+| Build command | e.g `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json` with the path to `asnotes-publish.json` |
 | Build output directory | The `outputDir` value from your config file (e.g. `site`) |
 | Root directory | The directory containing your config file (leave empty if at repo root) |
 
@@ -933,6 +933,14 @@ my-repo/
 | Build output directory | `blog-publish` |
 
 The `--config` path and Build output directory are both relative to the Root directory. If Root directory is wrong, the build will fail because Cloudflare cannot find the config file or its referenced directories.
+
+### Custom Domains
+
+Set up a custom domain for your site on the Workers and Pages settings section.
+
+`https://dash.cloudflare.com/><CF-ACCOUNT-ID>/workers/services/view/<GH_REPOSITORY_NAME>/production/settings`
+
+### Deployment
 
 Click **Save and Deploy**. Cloudflare Pages deploys on every push with automatic preview deployments for branches. No `--base-url` is needed since Cloudflare Pages serves from the domain root.
 
