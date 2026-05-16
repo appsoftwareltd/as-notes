@@ -137,6 +137,14 @@ describe('TemplateService', () => {
             expect(applyTemplatePlaceholders('{{YYYY_MM_DD}}', baseContext)).toBe('2026_03_18');
         });
 
+        it('replaces custom date format {{DD/MM/YY}} with 2-digit year', () => {
+            expect(applyTemplatePlaceholders('{{DD/MM/YY}}', baseContext)).toBe('18/03/26');
+        });
+
+        it('does not corrupt {{YYYY}} when YY token is also supported', () => {
+            expect(applyTemplatePlaceholders('{{YYYY}}', baseContext)).toBe('2026');
+        });
+
         // Escape mechanism
 
         it('leaves escaped placeholders as literal text', () => {

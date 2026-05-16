@@ -340,7 +340,7 @@ Create reusable note templates as markdown files in a dedicated templates folder
 | `{{filename}}`     | Current file name without extension                            | `My Page`                             |
 | `{{title}}`        | Alias for `{{filename}}`                                       | `My Page`                             |
 | `{{cursor}}`       | Cursor position after insertion                                | *(cursor lands here)*                 |
-| Custom date format | Any combination of `YYYY`, `MM`, `DD`, `HH`, `mm`, `ss` tokens | `{{DD/MM/YYYY}}` becomes `18/03/2026` |
+| Custom date format | Any combination of `YYYY`, `YY`, `MM`, `DD`, `HH`, `mm`, `ss` tokens | `{{DD/MM/YYYY}}` → `18/03/2026`, `{{DD/MM/YY}}` → `18/03/26` |
 
 To output a literal `{{date}}` in the template, escape with a backslash: `\{{date}}`.
 

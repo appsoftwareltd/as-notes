@@ -49,6 +49,7 @@ export function computeTemplateFolderPath(
  */
 function dateComponents(date: Date): {
     YYYY: string;
+    YY: string;
     MM: string;
     DD: string;
     HH: string;
@@ -57,6 +58,7 @@ function dateComponents(date: Date): {
 } {
     return {
         YYYY: String(date.getFullYear()),
+        YY: String(date.getFullYear()).slice(-2),
         MM: String(date.getMonth() + 1).padStart(2, '0'),
         DD: String(date.getDate()).padStart(2, '0'),
         HH: String(date.getHours()).padStart(2, '0'),
@@ -73,6 +75,7 @@ function applyDateTokens(format: string, date: Date): string {
     const c = dateComponents(date);
     return format
         .replace(/YYYY/g, c.YYYY)
+        .replace(/YY/g, c.YY)  // after YYYY so it doesn't match inside YYYY
         .replace(/MM/g, c.MM)
         .replace(/DD/g, c.DD)
         .replace(/HH/g, c.HH)
@@ -87,7 +90,8 @@ function applyDateTokens(format: string, date: Date): string {
  */
 function isDateFormatString(body: string): boolean {
     const stripped = body
-        .replace(/YYYY/g, '')
+        .replace(/YYYY/g, '')  // must precede YY
+        .replace(/YY/g, '')
         .replace(/MM/g, '')
         .replace(/DD/g, '')
         .replace(/HH/g, '')
