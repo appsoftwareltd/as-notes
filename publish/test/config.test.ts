@@ -422,16 +422,14 @@ describe('data-layout attribute', () => {
         expect(html).toContain('data-layout="minimal"');
     });
 
-    it('should place nav after article in blog layout', () => {
+    it('should show home link instead of nav in blog layout', () => {
         fs.writeFileSync(path.join(inputDir, 'Hello.md'), '---\npublic: true\n---\n# Hello\n');
         fs.writeFileSync(path.join(inputDir, 'World.md'), '---\npublic: true\n---\n# World\n');
         run(['--input', inputDir, '--output', outputDir, '--default-public', '--layout', 'blog']);
         const html = fs.readFileSync(path.join(outputDir, 'hello.html'), 'utf-8');
-        const articleEnd = html.indexOf('</article>');
-        const navStart = html.indexOf('<nav');
-        expect(articleEnd).toBeGreaterThan(-1);
-        expect(navStart).toBeGreaterThan(-1);
-        expect(navStart).toBeGreaterThan(articleEnd);
+        expect(html).toContain('blog-home-link');
+        expect(html).toContain('index.html');
+        expect(html).not.toContain('site-nav');
     });
 
     it('should place nav before article in docs layout', () => {

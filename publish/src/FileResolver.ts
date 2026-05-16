@@ -16,6 +16,9 @@ export interface PageEntry {
     order?: number;
     date?: string;
     description?: string;
+    author?: string;
+    image?: string;
+    excerpt?: string;
 }
 
 /**

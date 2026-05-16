@@ -201,6 +201,16 @@ These commands toggle or cycle publishing-related fields in the file's YAML fron
 | **Retina** | Toggles `retina: true` / `retina: false` in front matter |
 | **Assets** | Toggles `assets: true` / `assets: false` in front matter |
 
+#### Front Matter Presets *(files without existing front matter)*
+
+These commands appear only when the current file has no YAML front matter block. They insert a complete front matter template with tabstop placeholders for easy editing.
+
+| Command | Action |
+|---|---|
+| **Front Matter: Blog Post** | Inserts front matter for a blog post: `title`, `description`, `date` (today), `author`, `public: true`, `layout: blog` |
+| **Front Matter: Docs Page** | Inserts front matter for a docs page: `title`, `description`, `public: true`, `layout: docs`, `order` |
+| **Front Matter: Wiki Page** | Inserts front matter for a wiki page: `title`, `description`, `public: true` |
+
 #### Kanban Card Commands *(kanban card files only)*
 
 The following command only appears when editing a kanban card file (`kanban/card_*.md`).
@@ -522,7 +532,40 @@ The converter is published as an npm package:
 npx asnotes-publish --config ./asnotes-publish.json
 ```
 
-See [Publishing a Static Site](https://docs.asnotes.io/publishing-a-static-site.html) for full documenation
+#### Blog index generation
+
+When the site-wide layout is `blog` (or `blogIndex: true` is set in the config), the auto-generated index page uses a blog-aware layout:
+
+1. **Recent posts** — the most recent posts (configurable via `recentCount`, default 3) shown as cards with title, date, author, description, and optional hero image
+2. **Current year** — remaining posts for the current year as a compact date + title list
+3. **Year archives** — links to auto-generated `archive-YYYY.html` pages for previous years
+4. **Undated** — posts without a `date` in front matter are listed at the bottom
+
+#### Front matter fields for publishing
+
+| Field | Type | Description |
+|---|---|---|
+| `public` | boolean | Include page in published output |
+| `title` | string | Page title (defaults to filename) |
+| `description` | string | Meta description for SEO |
+| `date` | string | Publication date (`YYYY-MM-DD`) — used for blog sorting, RSS, and sitemap |
+| `author` | string | Post author — displayed in blog layout and RSS feed |
+| `image` | string | Hero/thumbnail image path — displayed in blog layout and blog index cards |
+| `layout` | string | Per-page layout override (`docs`, `blog`, `minimal`) |
+| `order` | number | Navigation sort order |
+| `draft` | boolean | Exclude from output unless `--include-drafts` is set |
+| `assets` | boolean | Copy referenced images to output |
+| `retina` | boolean | Enable retina image sizing |
+
+#### Blog config options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `siteTitle` | string | `"AS Notes Site"` | Site title used in RSS feed and blog index |
+| `recentCount` | number | `3` | Number of recent posts shown as cards on the blog index |
+| `blogIndex` | boolean | `false` | Use blog-style index generation (auto-enabled when `layout: "blog"`) |
+
+See [Publishing a Static Site](https://docs.asnotes.io/publishing-a-static-site.html) for full documentation
 
 ### Debugging
 

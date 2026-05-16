@@ -4,78 +4,65 @@ order: 10
 
 # Publishing a Static Site
 
-AS Notes includes a built-in HTML conversion tool that turns your markdown notes into a static website. It supports filtering, layouts, themes, asset pipelines, retina images, SEO metadata, sitemaps, and RSS feeds. You can deploy to GitHub Pages, Netlify, Vercel, Cloudflare Pages, or any static hosting.
+AS Notes converts your markdown notes into a static website you can deploy anywhere. Wikilinks resolve automatically, a navigation sidebar is generated, and output is clean HTML with zero dependencies.
 
-This documentation is itself a working example -- it was written in AS Notes and published using the same tool.
+This documentation site was built with the same tool.
 
-## How It Works
+## Quick Start (VS Code)
 
-The `publish` package recursively scans a folder of markdown files and converts them to HTML. Subdirectories are walked automatically, so notes organised in folders like `notes/`, `journals/`, and `pages/` are all discovered. The `templates` and `node_modules` directories are excluded by default.
+1. Open the command palette (`Ctrl+Shift+P`) and run **AS Notes: Publish to HTML**
+2. The setup wizard walks you through 12 steps (template set, input directory, output directory, layout, theme, etc.)
+3. Your settings are saved to a JSON config file -- subsequent runs use them automatically
 
-[[Wikilinks]] between pages are automatically resolved to the correct HTML links. A navigation sidebar is generated from all public pages. Only pages you mark as public are published.
+That's it. Open the output folder in a browser to preview your site.
 
-Output is flat: all HTML files are written to the output root regardless of source subdirectory depth. Filenames are slugified to clean, URL-friendly kebab-case: `notes/My Page.md` becomes `my-page.html`. This matches how wikilinks work in AS Notes where filenames are globally unique.
-
-Each page is wrapped in a layout template with class names you can style any way you like. Unstyled output is clean, readable HTML with zero dependencies.
-
-## Prerequisites
-
-- [Node.js](https://nodejs.org) 20 or later
-- Your notes in a folder of `.md` files
-
-## Installation
-
-There are two ways to run the converter:
-
-### npm (recommended for CI/CD)
-
-Install the CLI globally or use npx:
+### Quick Start (CLI)
 
 ```bash
-npx asnotes-publish --config ./asnotes-publish.json
+npx asnotes-publish --input ./notes --output ./site --default-public --default-assets --theme default
 ```
-
-Or install globally:
-
-```bash
-npm install -g asnotes-publish
-asnotes-publish --config ./asnotes-publish.json
-```
-
-This is the recommended approach for CI/CD pipelines (GitHub Actions, Netlify, Vercel, Cloudflare Pages).
-
-### Build from source
-
-Alternatively, the `publish` package in the AS Notes repository can be built from source:
-
-```bash
-cd publish
-npm install
-npm run build
-node dist/convert.js --config ../asnotes-publish.json
-```
-
-### VS Code Extension
-
-The converter is also bundled into the AS Notes VS Code extension. Use the command palette (`Ctrl+Shift+P`) and run **AS Notes: Publish to HTML**. This prompts for an output directory and runs the conversion with your configured settings. No separate installation required.
-
-## Quick Start
-
-```bash
-npm run convert -- --input /path/to/notes --output /path/to/site --default-public
-```
-
-This converts all markdown files to HTML. The output folder is wiped and regenerated on every run.
 
 Preview locally:
 
 ```bash
-npx serve /path/to/site
+npx serve ./site
 ```
+
+## Choosing What to Publish
+
+By default, only pages with `public: true` in their front matter are converted:
+
+```yaml
+---
+public: true
+---
+```
+
+Pass `--default-public` (or set `defaultPublic: true` in the config) to invert this -- all pages are published unless they have `public: false`.
+
+### Encrypted Files
+
+Files ending in `.enc.md` are always excluded. This is a hardcoded safety measure.
+
+### Drafts
+
+Pages with `draft: true` are excluded. Include them with `--include-drafts` for preview builds.
+
+### Excluding Directories
+
+`templates` and `node_modules` are excluded by default. Add more with `--exclude`:
+
+```bash
+asnotes-publish --config ./asnotes-publish.json --exclude archive --exclude scratch
+```
+
+### Dead Links
+
+When a public page links to a non-public page via wikilink, the link renders as a dead link and a warning is logged.
 
 ## Front Matter
 
-Control publishing behaviour per-page using YAML front matter at the top of any markdown file:
+Control per-page behaviour with YAML front matter:
 
 ```yaml
 ---
@@ -85,286 +72,149 @@ order: 1
 description: A short description for SEO
 layout: docs
 assets: true
-retina: true
+retina: false
 draft: false
 date: 2025-03-23
+author: Your Name
 ---
 ```
 
-All fields are optional. Here is what each field does:
+All fields are optional.
 
-| Field | Type | Description |
-|---|---|---|
-| `public` | boolean | Page is included in output. Required unless `--default-public` is used |
-| `title` | string | Page title for `<title>` tag and nav. Defaults to filename |
-| `order` | number | Nav sort order. Lower numbers appear first. Unordered pages sort alphabetically after ordered ones |
-| `description` | string | Injected as `<meta name="description">` for SEO |
-| `layout` | string | Per-page layout override (`docs`, `blog`, `minimal`, or custom) |
-| `assets` | boolean | Enable asset copying for this page. Required unless `--default-assets` is used |
-| `retina` | boolean | Apply retina styling to all images on this page |
-| `draft` | boolean | Exclude from output unless `--include-drafts` is passed |
-| `date` | string | Date for blog-style display and RSS feed ordering |
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `public` | boolean | -- | Include in output (required unless `--default-public`) |
+| `title` | string | filename | Page title for `<title>` and nav |
+| `order` | number | -- | Nav sort order (lower first, then alphabetical) |
+| `description` | string | -- | `<meta name="description">` for SEO |
+| `layout` | string | global | Per-page layout override |
+| `assets` | boolean | -- | Enable asset copying for this page |
+| `retina` | boolean | -- | Override global retina setting for this page |
+| `draft` | boolean | false | Exclude unless `--include-drafts` |
+| `date` | string | -- | Date for blog display and RSS ordering |
+| `author` | string | -- | Author name (shown in blog layout) |
 
-### Slash Commands for Front Matter
+### Slash Commands
 
-In VS Code, type `/` in any markdown file to access these slash commands:
+Type `/` in any markdown file in VS Code to quickly toggle front matter fields:
 
-- **/Public** -- toggle `public: true/false` in front matter
-- **/Layout** -- cycle through `docs`, `blog`, `minimal` layouts
+- **/Public** -- toggle `public: true/false`
+- **/Layout** -- cycle through `docs`, `blog`, `minimal`
 - **/Retina** -- toggle `retina: true/false`
 - **/Assets** -- toggle `assets: true/false`
 
-These commands create a front matter block if one doesn't exist, or update existing fields.
+## Home Page
 
-## Public / Private Filtering
+If your notes include `index.md`, it becomes the home page. If no `index.md` exists among your public pages, one is auto-generated with links to all published pages.
 
-By default, only pages with `public: true` in their front matter are converted. All other pages are skipped.
+### Blog Index Page
 
-```yaml
----
-public: true
----
-# This page will be published
-```
+When using the `blog` layout without an `index.md`, the converter auto-generates a blog index with:
 
-Pages without front matter or without `public: true` are skipped silently.
+- **Recent Posts** -- card-style previews of the 3 most recent posts (title, date, excerpt)
+- **More Posts** -- a compact date + title list for remaining posts in the current year
+- **Archive** -- grouped by year for older posts
 
-### Encrypted Files
+The excerpt is the first ~160 characters of the rendered page content.
 
-Files ending in `.enc.md` (AS Notes encrypted files) are always excluded from publishing. This is a hardcoded safety measure -- encrypted notes are never included in the output regardless of `--default-public` or per-file front matter settings.
+## Images and Assets
 
-### Excluding Directories
+### Asset Copying
 
-The converter recursively scans all subdirectories. The `templates` and `node_modules` directories are excluded by default. To exclude additional directories, use `--exclude`:
+Asset copying is opt-in. Enable it per-page with `assets: true` in front matter, or globally with `--default-assets`.
 
-```bash
-npm run convert -- --input ./notes --output ./site --default-public --exclude drafts --exclude archive
-```
-
-Exclude matches directory names at any depth in the tree.
-
-### Default Public Mode
-
-Pass `--default-public` to invert the behaviour: all pages are published unless they have `public: false`:
-
-```bash
-npm run convert -- --input ./notes --output ./site --default-public
-```
-
-### Dead Links
-
-When a public page links to a non-public page via [[wikilink]], the link is rendered as a dead link (the href is still present but points nowhere). The converter logs a warning for each dead link so you can fix them.
-
-### Drafts
-
-Pages with `draft: true` are excluded from the output. To include them (e.g. for a preview build), pass `--include-drafts`:
-
-```bash
-npm run convert -- --input ./notes --output ./site --default-public --include-drafts
-```
-
-### Home Page (Index)
-
-Every site needs a page at `/`. If your notes include a file called `index.md`, it becomes the home page automatically. The index page appears first in navigation and displays as "Home".
-
-If no `index.md` exists among your public pages, the converter auto-generates a simple index page that lists links to all published pages. The console will show:
-
-```
-[info] No index.md found - generating page index
-```
-
-To create a custom home page, add `index.md` to your notes root with `public: true`:
-
-```yaml
----
-public: true
-title: Welcome
----
-# Welcome to my site
-
-This is my home page.
-```
-
-## Asset Pipeline
-
-Images and files referenced in your markdown are automatically discovered and copied to the output directory.
-
-### Enabling Asset Copying
-
-Asset copying is opt-in for safety. You have two options:
-
-**Per-page:** Add `assets: true` to the page's front matter:
-
-```yaml
----
-public: true
-assets: true
----
-![screenshot](../assets/images/screenshot.png)
-```
-
-**Global:** Pass `--default-assets` to enable asset copying for all public pages:
-
-```bash
-npm run convert -- --input ./notes --output ./site --default-public --default-assets
-```
-
-With `--default-assets`, pages can opt out with `assets: false`.
-
-### How It Works
-
-The converter scans rendered HTML for local `<img src="...">` references. Each reference is resolved relative to the page's source location within the input directory. Since all HTML pages are output to a flat directory, the converter rewrites `src` attributes so that asset paths resolve correctly in the published output.
-
-For example, if `pages/My Page.md` references `../assets/images/photo.png`, the converter:
-
-1. Resolves the path relative to the page's source directory (`pages/`)
-2. Copies the file to the output directory as `assets/images/photo.png`
-3. Rewrites the `<img src>` in the HTML to `assets/images/photo.png`
-
-Absolute URLs (`http://`, `https://`) and data URIs are ignored.
-
-If a referenced file is missing, a warning is logged.
+The converter discovers local `<img src="...">` references, resolves paths relative to the source file, copies files to the output directory, and rewrites paths in the HTML. Absolute URLs and data URIs are left untouched.
 
 ### Manual Assets
 
-You can also copy specific files with `--asset`:
+Copy specific files (e.g. favicons) with `--asset`:
 
 ```bash
-npm run convert -- --input ./notes --output ./site --asset /path/to/favicon.ico
+asnotes-publish --config ./asnotes-publish.json --asset ./favicon.ico
 ```
 
-## Stylesheets
+### Retina Images
 
-### CDN Stylesheets
+Retina image sizing is **enabled by default**. The converter reads each image's intrinsic width and sets a `width` attribute at half that value, so images render crisp on high-DPI displays. A `retina` CSS class is added for `image-rendering: crisp-edges`.
 
-Pass `--stylesheet` with a URL:
+To disable retina globally, set `retina: false` in your config file. To disable for a single page, add `retina: false` to its front matter.
 
-```bash
-npm run convert -- \
-  --input ./notes --output ./site \
-  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css
+You can also mark individual images as retina regardless of the global setting by appending `{.retina}` to the alt text:
+
+```markdown
+![screenshot {.retina}](assets/screenshot.png)
 ```
 
-### Local Stylesheets
-
-Local file paths passed to `--stylesheet` are automatically copied to the output directory. No separate `--asset` flag is needed:
-
-```bash
-npm run convert -- \
-  --input ./notes --output ./site \
-  --stylesheet /path/to/my-styles.css
-```
-
-The file is copied to the output and referenced by filename in each page's `<head>`.
-
-### Combining Stylesheets
-
-Pass `--stylesheet` multiple times. Tags are injected in the order specified:
-
-```bash
-npm run convert -- \
-  --input ./notes --output ./site \
-  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css \
-  --stylesheet /path/to/layout.css
-```
+Supported formats for width detection: PNG, JPEG, GIF, WebP, BMP.
 
 ## Layouts
 
-Layouts control the HTML structure of each page. Three built-in layouts are available, and you can define your own.
-
-### Built-in Layouts
-
-Select a layout with `--layout`:
+Three built-in layouts are available:
 
 | Layout | Description |
 |---|---|
-| `docs` | Navigation sidebar + content area with `markdown-body` class (default) |
-| `blog` | Navigation + blog-style article with date display |
+| `docs` | Navigation sidebar + content area (default) |
+| `blog` | Blog-style article with home link, post title, date, and author |
 | `minimal` | Content only, no navigation |
 
-```bash
-npm run convert -- --input ./notes --output ./site --layout blog
-```
-
-### Per-page Layout Override
-
-Set `layout:` in front matter to override the global layout for a specific page:
-
-```yaml
----
-public: true
-layout: minimal
----
-```
+Set the layout globally with `--layout blog` or per-page with `layout: blog` in front matter.
 
 ### Custom Layouts
 
-The setup wizard (Step 8) offers to create a **layouts directory** containing editable copies of all three built-in layouts. You can modify these files to customise the HTML structure of your site.
+The setup wizard offers to create a **layouts directory** with editable copies of all three built-in layouts. You can modify these or create new ones. Reference custom layouts by name (without `.html`).
 
-Point the converter at your layouts directory with `--layouts`:
-
-```bash
-npm run convert -- --input ./notes --output ./site --layouts ./layouts --layout my-layout
-```
-
-The converter looks for `my-layout.html` in the layouts directory first, then falls back to the includes directory, then to built-in layouts.
-
-You can also create entirely new layout files in the layouts directory and reference them by name (without the `.html` extension) in `--layout` or per-page `layout:` front matter.
-
-Template tokens:
+#### Template Tokens
 
 | Token | Replaced with |
 |---|---|
 | `{{title}}` | Page title (escaped) |
-| `{{header}}` | Header partial HTML (from `header.html` in includes dir) |
-| `{{nav}}` | Navigation HTML |
+| `{{heading}}` | `<h1>` post title (blog layout) |
+| `{{header}}` | Header partial HTML |
+| `{{nav}}` | Navigation sidebar HTML |
+| `{{home-link}}` | Back-to-index link (blog posts) |
 | `{{content}}` | Rendered markdown body |
-| `{{stylesheets}}` | `<link>` tags for stylesheets |
+| `{{stylesheets}}` | `<link>` tags |
 | `{{meta}}` | `<meta name="description">` tag |
-| `{{date}}` | `<time>` element (if page has `date:` front matter) |
-| `{{toc}}` | Table of contents HTML |
-| `{{footer}}` | Footer partial HTML (from `footer.html` in includes dir) |
-| `{{base-url}}` | Base URL path prefix |
+| `{{date}}` | `<time>` element |
+| `{{author}}` | Author display |
+| `{{image}}` | Featured image |
+| `{{toc}}` | Table of contents |
+| `{{footer}}` | Footer partial HTML |
+| `{{base-url}}` | URL path prefix |
+| `{{site-title}}` | Site title text |
+| `{{site-icon}}` | Site icon markup |
 
-Example custom layout:
+## Header, Footer, and Site Icon
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{title}}</title>{{stylesheets}}{{meta}}
-</head>
-<body>
-{{header}}
-    <header>{{nav}}</header>
-    <main>
-        {{toc}}
-        {{date}}
-        {{content}}
-    </main>
-{{footer}}
-</body>
-</html>
-```
+The setup wizard creates an **includes directory** with three files:
 
-### Header and Footer Partials
+- `header.html` -- site header (navbar, branding, links)
+- `footer.html` -- site footer
+- `icon.svg` -- site icon displayed in the header
 
-Add a consistent header and footer across all pages by creating `header.html` and `footer.html` in your includes directory.
+### Site Icon
 
-The converter looks for these files when `--includes` is set (or `includes` is set in the config file). If a partial exists, its contents are wrapped in a `<header>` or `<footer>` element and injected into the page. If a partial does not exist, an HTML comment (`<!-- header -->` or `<!-- footer -->`) is emitted as a placeholder.
+The converter looks for an icon file in the includes directory. It checks for `icon.svg`, `icon.png`, `icon.jpg`, `icon.jpeg`, `icon.webp`, and `icon.gif` in that order.
 
-Partials support `{{base-url}}` and `{{title}}` tokens so you can create dynamic links.
+- **SVG** files are inlined directly into the HTML
+- **Raster** files (PNG, JPG, etc.) are base64-encoded and emitted as `<img>` tags
+
+To use your own icon, replace `icon.svg` (or drop in an `icon.png`) in the includes directory.
+
+### Header Tokens
+
+Header and footer partials support these tokens: `{{base-url}}`, `{{title}}`, `{{site-title}}`, `{{site-icon}}`.
 
 Example `header.html`:
 
 ```html
 <div class="site-header">
-    <a class="site-title" href="{{base-url}}/">My Notes</a>
+    <a class="site-title" href="{{base-url}}/">
+        {{site-icon}}
+        {{site-title}}
+    </a>
     <span class="header-sep">|</span>
     <a href="https://github.com/me">GitHub</a>
-    <a href="mailto:me@example.com">Contact</a>
 </div>
 ```
 
@@ -376,15 +226,9 @@ Example `footer.html`:
 </div>
 ```
 
-Both built-in and custom layouts include `{{header}}` and `{{footer}}` tokens, so partials work with any layout.
+## Custom Navigation
 
-When using the VS Code publish wizard, the includes directory step (step 8) offers three options: create default `header.html` and `footer.html` files, browse for an existing includes directory, or skip. Edit the generated files to add your own navigation, branding, and contact information.
-
-### Custom Navigation
-
-By default, the converter auto-generates a sidebar navigation listing all published pages in order. To take full control of navigation content and structure, create a `nav.md` file at the root of your input directory.
-
-`nav.md` is rendered as markdown with full wikilink support, so you can use headings, horizontal rules, lists, and links to organise your navigation however you like:
+By default, the converter generates a sidebar nav listing all public pages. To take full control, create a `nav.md` file at the root of your input directory:
 
 ```markdown
 ## Guides
@@ -400,170 +244,162 @@ By default, the converter auto-generates a sidebar navigation listing all publis
 - [[Wikilinks]]
 ```
 
-The rendered HTML replaces the auto-generated `<nav class="site-nav">` element on every page.
+The rendered HTML replaces the auto-generated navigation. Wikilinks in `nav.md` resolve normally. The file is not published as a standalone page.
 
-**How it works:**
+## Template Sets
 
-- If `nav.md` exists in the input directory root, it is used as the navigation for all pages
-- If `nav.md` does not exist, the auto-generated navigation is used (with `nav-current` highlighting)
-- `nav.md` is not published as a standalone page and does not appear in the sitemap
-- Wikilinks in `nav.md` are resolved to their HTML page slugs, with `--base-url` applied if set
-- The `nav-current` CSS class is not applied when using custom navigation (since the content is user-controlled)
+The setup wizard offers two template sets that define the visual foundation for your site:
 
-**Multi-site support:** Since `nav.md` lives in the input directory, each site configuration can have its own navigation when using multi-site publishing.
+| Template Set | Description |
+|---|---|
+| `tailwind` | Modern — Inter font, zinc palette, auto light/dark via system preference |
+| `github` | Classic — GitHub-inspired system font stack and colours, separate light/dark themes |
+
+The template set determines the default layouts, themes, header, footer, and icon that are scaffolded when you create directories. Both sets produce the same HTML structure (so switching later only means regenerating the scaffold files).
+
+The tailwind set includes a single `default` theme with automatic light/dark mode based on the user's OS preference — no toggle or JavaScript required.
 
 ## Themes
 
-Built-in CSS themes provide ready-made styling without writing CSS:
+Available themes depend on the template set:
 
-```bash
-npm run convert -- --input ./notes --output ./site --theme default
-```
-
-Available themes:
+**Tailwind:**
 
 | Theme | Description |
 |---|---|
-| `default` | Light theme with GitHub-inspired typography |
-| `dark` | Dark theme with dark background |
+| `default` | Auto light/dark based on system preference |
 
-Themes are injected as the first stylesheet, so you can override them with additional `--stylesheet` flags.
+**GitHub:**
 
-## Retina Images
+| Theme | Description |
+|---|---|
+| `default` | Light theme — clean typography and layout |
+| `dark` | Dark theme — inverted colours with comfortable contrast |
 
-Display high-resolution images at half their natural dimensions for crisp rendering on retina displays.
+Set with `--theme default`. Themes are injected as the first stylesheet, so you can layer additional stylesheets on top with `--stylesheet`.
 
-When retina is enabled, the converter:
-
-1. Adds a `retina` CSS class to the `<img>` tag (enables `image-rendering: crisp-edges`)
-2. Reads the image file to determine its intrinsic width
-3. Sets a `width` attribute to half that value, so a 1600px source image displays at 800px
-
-The `{.retina}` marker is stripped from the rendered alt text.
-
-Supported formats for automatic width detection: PNG, JPEG, GIF, WebP, and BMP. If the image file is not found or the format is not recognised, the retina class is still applied but no width is set.
-
-### Three Levels of Control
-
-**Per-image:** Append `{.retina}` to the image alt text in markdown:
-
-```markdown
-![screenshot {.retina}](assets/images/screenshot@2x.png)
-```
-
-**Per-page:** Add `retina: true` to the page's front matter. All images on that page are treated as retina:
-
-```yaml
----
-public: true
-retina: true
----
-```
-
-**Global:** Pass `--retina` to apply retina sizing to all images across the site:
+### Custom Stylesheets
 
 ```bash
-npm run convert -- --input ./notes --output ./site --retina
+asnotes-publish --config ./asnotes-publish.json \
+  --stylesheet https://cdn.example.com/markdown.css \
+  --stylesheet ./my-overrides.css
 ```
 
-## SEO Features
+Local file paths are automatically copied to the output. Multiple `--stylesheet` flags are allowed.
 
-### Page Descriptions
+## SEO
 
-Add `description:` to front matter for SEO metadata:
-
-```yaml
----
-public: true
-description: Learn how to publish AS Notes as a static website
----
-```
-
-This injects `<meta name="description" content="...">` in the page `<head>`.
-
-### Slug URLs
-
-Output filenames are automatically slugified to clean, URL-friendly kebab-case. This produces shorter, more readable URLs that are better for SEO and sharing:
-
-| Source file | Output file |
-|---|---|
-| `Getting Started.md` | `getting-started.html` |
-| `My Cool Page.md` | `my-cool-page.html` |
-| `Page & Notes.md` | `page-notes.html` |
-| `index.md` | `index.html` |
-
-All wikilinks, navigation, sitemap, and RSS feed hrefs use the slugified filenames automatically.
+- `description:` front matter injects `<meta name="description">`
+- Filenames are slugified to clean URLs (`Getting Started.md` → `getting-started.html`)
+- A `sitemap.xml` is auto-generated with all public pages
+- An RSS feed (`feed.xml`) is generated for pages with a `date:` field
 
 ### Base URL
 
-When deploying to a subdirectory (e.g. `https://example.com/docs/`), set the base URL prefix:
+When deploying to a subdirectory (e.g. `https://example.com/docs/`), set a path prefix:
 
 ```bash
-npm run convert -- --input ./notes --output ./site --base-url /docs
+asnotes-publish --config ./asnotes-publish.json --base-url /docs
 ```
-
-This prefixes all navigation links and asset references with `/docs/`.
-
-### Sitemap
-
-A `sitemap.xml` is automatically generated in the output directory containing all public pages. If pages have a `date:` field, it is included as `<lastmod>`.
-
-### RSS / Atom Feed
-
-An RSS feed (`feed.xml`) is generated for pages with a `date:` field, sorted newest-first. This enables blog-style subscriptions.
 
 ## Table of Contents
 
-Every page automatically gets a table of contents generated from its `h2`, `h3`, and `h4` headings. The TOC is rendered as a collapsible `<details>` element at the top of the content area.
+Every page gets a table of contents generated from `h2`--`h4` headings, rendered as a collapsible `<details>` element.
 
-Headings automatically receive `id` attributes for deep linking.
+## Config File
 
-## HTML Structure Reference
+Publish settings are stored in a JSON config file. The VS Code wizard creates this automatically.
 
-Here is the HTML structure the `docs` layout produces:
+### Schema
 
-```html
-<body>
-  <header>
-    <!-- contents of header.html, or an HTML comment if not set -->
-  </header>
-  <nav class="site-nav">
-    <ul>
-      <li><a href="index.html">Home</a></li>
-      <li class="nav-current"><a href="my-page.html">My Page</a></li>
-    </ul>
-  </nav>
-  <article class="markdown-body">
-    <nav class="toc">
-      <details open>
-        <summary>Contents</summary>
-        <ul>
-          <li><a href="#section">Section</a></li>
-        </ul>
-      </details>
-    </nav>
-    <!-- rendered markdown -->
-  </article>
-  <footer>
-    <!-- contents of footer.html, or an HTML comment if not set -->
-  </footer>
-</body>
+```json
+{
+    "inputDir": "",
+    "outputDir": "./site",
+    "defaultPublic": true,
+    "defaultAssets": true,
+    "layout": "docs",
+    "layouts": "./layouts",
+    "includes": "./includes",
+    "theme": "default",
+    "baseUrl": "",
+    "retina": true,
+    "includeDrafts": false,
+    "siteTitle": "My Site",
+    "stylesheets": [],
+    "exclude": []
+}
 ```
 
-Key classes:
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `inputDir` | string | `""` | Input directory (relative to config file) |
+| `outputDir` | string | `""` | Output directory |
+| `defaultPublic` | boolean | `false` | Publish all pages unless `public: false` |
+| `defaultAssets` | boolean | `false` | Copy referenced assets unless `assets: false` |
+| `layout` | string | `"docs"` | Layout: `docs`, `blog`, `minimal` |
+| `layouts` | string | `""` | Custom layouts directory |
+| `includes` | string | `""` | Custom includes directory (header, footer, icon) |
+| `theme` | string | `""` | Built-in theme: `default`, `dark` |
+| `baseUrl` | string | `""` | URL path prefix |
+| `retina` | boolean | `true` | Retina image sizing |
+| `includeDrafts` | boolean | `false` | Include draft pages |
+| `siteTitle` | string | `""` | Site title (shown in header navbar) |
+| `stylesheets` | string[] | `[]` | Stylesheet URLs or local paths |
+| `exclude` | string[] | `[]` | Additional directories to exclude |
 
-| Class | Element | Notes |
-|---|---|---|
-| `site-header` | `<div>` | Default header partial wrapper (customise in `header.html`) |
-| `site-footer` | `<div>` | Default footer partial wrapper (customise in `footer.html`) |
-| `site-nav` | `<nav>` | Sidebar navigation (auto-generated or from `nav.md`) |
-| `nav-current` | `<li>` | Currently active page |
-| `markdown-body` | `<article>` | Content area (docs layout) -- compatible with github-markdown-css |
-| `blog-post` | `<article>` | Content area (blog layout) |
-| `toc` | `<nav>` | Table of contents |
-| `page-date` | `<time>` | Date display (blog layout) |
-| `retina` | `<img>` | Retina image (auto `width` set to half intrinsic size) |
-| `missing-page` | `<p>` | Placeholder page for unresolved wikilinks |
+### Using the Config File
+
+```bash
+asnotes-publish --config ./asnotes-publish.json
+```
+
+CLI flags override config values. A minimal CI invocation is just the line above.
+
+### Multi-Site Publishing
+
+Publish multiple sites from one workspace by creating separate config files. The filename includes the input directory name:
+
+| Input directory | Config filename |
+|---|---|
+| Notes root | `asnotes-publish.json` |
+| `./docs` | `asnotes-publish.docs.json` |
+| `./blog` | `asnotes-publish.blog.json` |
+
+Build each separately:
+
+```bash
+asnotes-publish --config ./asnotes-publish.docs.json
+asnotes-publish --config ./asnotes-publish.blog.json
+```
+
+The VS Code extension discovers all config files and shows a picker when multiple exist.
+
+## VS Code Integration
+
+### Setup Wizard
+
+Run **AS Notes: Publish to HTML** with no existing config to launch the wizard:
+
+1. **Template set** -- tailwind (modern, auto light/dark) or github (classic)
+2. **Input directory** -- notes root or a subdirectory
+3. **Output directory** -- where to write HTML
+4. **Base URL** -- path prefix for deployed site
+5. **Default public** -- publish all pages by default?
+6. **Default assets** -- copy images and files?
+7. **Layout** -- docs, blog, or minimal
+8. **Theme** -- available themes depend on chosen template set
+9. **Themes directory** -- create editable theme CSS, browse, or skip
+10. **Layouts directory** -- create editable layouts, browse, or skip
+11. **Includes directory** -- create header/footer/icon files, browse, or skip
+12. **Site title** -- text shown in the header navbar
+
+Settings are saved to the appropriate config file. Subsequent runs skip the wizard.
+
+### Reconfigure
+
+Run **AS Notes: Configure Publish Settings** to change settings without building.
 
 ## CLI Reference
 
@@ -577,190 +413,44 @@ Options:
   --asset <file>            Copy a file to output (repeatable)
   --default-public          Treat all pages as public unless public: false
   --default-assets          Copy referenced assets unless assets: false
-  --layout <name>           Layout template: docs, blog, minimal (default: docs)
-  --layouts <path>          Directory containing editable layout templates
-  --includes <path>         Directory for custom headers and footers
-  --theme <name>            Built-in CSS theme: default, dark
-  --retina                  Enable retina image sizing globally
+  --layout <name>           Layout: docs, blog, minimal (default: docs)
+  --layouts <path>          Custom layout templates directory
+  --includes <path>         Custom includes directory (header, footer, icon)
+  --theme <name>            Built-in theme: default, dark
+  --themes <path>           Custom theme CSS directory
+  --retina                  Enable retina image sizing (on by default)
+  --no-retina               Disable retina image sizing
   --base-url <prefix>       URL path prefix for links and assets
   --include-drafts          Include pages with draft: true
-  --exclude <dirname>       Exclude a directory from scanning (repeatable)
-
-When --config is used, --input defaults to the config file's directory.
-CLI flags override config file values.
-
-Default excluded directories: templates, node_modules
+  --exclude <dirname>       Exclude a directory (repeatable)
 ```
 
-## Config File
+CLI flags override config file values. Default excluded directories: `templates`, `node_modules`.
 
-Publish settings are stored in a JSON config file at the root of your notes directory (next to `.asnotes/`). Both the VS Code extension and the CLI read from this file.
-
-The default filename is `asnotes-publish.json`. When publishing from a subdirectory, the filename includes the directory name: `asnotes-publish.<dirname>.json` (e.g. `asnotes-publish.docs-src.json`). See [Multi-Site Publishing](#multi-site-publishing) below.
-
-### Schema
-
-```json
-{
-    "inputDir": "",
-    "defaultPublic": true,
-    "defaultAssets": true,
-    "layout": "docs",
-    "layouts": "./layouts",
-    "includes": "./includes",
-    "theme": "default",
-    "baseUrl": "/my-repo",
-    "retina": false,
-    "includeDrafts": false,
-    "stylesheets": [
-        "https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css"
-    ],
-    "exclude": ["drafts", "archive"],
-    "outputDir": "./site"
-}
-```
-
-The wizard writes all fields with their defaults so you can discover every available option by reading the file.
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `inputDir` | string | `""` | Input directory relative to config file. Empty string means notes root |
-| `defaultPublic` | boolean | `false` | Publish all pages unless `public: false` |
-| `defaultAssets` | boolean | `false` | Copy referenced assets unless `assets: false` |
-| `layout` | string | `"docs"` | Layout template: `docs`, `blog`, `minimal` |
-| `layouts` | string | `""` | Directory containing editable layout templates |
-| `includes` | string | `""` | Directory for custom headers and footers |
-| `theme` | string | `""` | Built-in CSS theme: `default`, `dark` |
-| `baseUrl` | string | `""` | URL path prefix for links and assets |
-| `retina` | boolean | `false` | Enable retina image sizing globally |
-| `includeDrafts` | boolean | `false` | Include pages with `draft: true` |
-| `stylesheets` | string[] | `[]` | Stylesheet URLs or local file paths |
-| `exclude` | string[] | `[]` | Additional directory names to exclude |
-| `outputDir` | string | `""` | Output directory (relative to config file or absolute) |
-
-### Using --config
-
-Pass `--config` to the CLI to load settings from the file:
-
-```bash
-asnotes-publish --config ./asnotes-publish.json
-```
-
-When `--config` is used:
-
-- `--input` defaults to `inputDir` from the config (resolved relative to the config file), then falls back to the config file's parent directory
-- `--output` defaults to the `outputDir` value in the config (resolved relative to the config file)
-- CLI flags override any config file values
-
-This means a minimal CI/CD invocation with a config file is:
-
-```bash
-npx asnotes-publish --config ./asnotes-publish.json
-```
-
-You can override individual settings:
-
-```bash
-npx asnotes-publish --config ./asnotes-publish.json --include-drafts --output ./preview
-```
-
-### Multi-Site Publishing
-
-You can publish multiple sites from the same workspace by creating separate config files. Each config file targets a different input directory.
-
-The config filename is derived from the input directory name:
-
-| Input directory | Config filename |
-|---|---|
-| Notes root | `asnotes-publish.json` |
-| `./docs-src` | `asnotes-publish.docs-src.json` |
-| `./blog` | `asnotes-publish.blog.json` |
-| `./pages` | `asnotes-publish.pages.json` |
-
-For example, a workspace with both documentation and a blog might have:
-
-```
-my-notes/
-  .asnotes/
-  asnotes-publish.docs-src.json    # publishes docs-src/ to site/
-  asnotes-publish.blog.json        # publishes blog/ to blog-site/
-  docs-src/
-    pages/
-      Getting Started.md
-      ...
-  blog/
-    2025-01-01 First Post.md
-    ...
-```
-
-Build each site separately:
-
-```bash
-npx asnotes-publish --config ./asnotes-publish.docs-src.json
-npx asnotes-publish --config ./asnotes-publish.blog.json
-```
-
-The VS Code extension discovers all config files automatically and shows a picker when multiple exist.
-
-### Settings to CLI Flag Mapping
-
-If you prefer CLI flags over a config file, here is the mapping:
+### Config to CLI Mapping
 
 | Config field | CLI flag |
 |---|---|
-| `inputDir` | `--input <dir>` |
+| `inputDir` | `--input` |
+| `outputDir` | `--output` |
 | `defaultPublic` | `--default-public` |
 | `defaultAssets` | `--default-assets` |
-| `layout` | `--layout <name>` |
-| `layouts` | `--layouts <path>` |
-| `includes` | `--includes <path>` |
-| `theme` | `--theme <name>` |
-| `baseUrl` | `--base-url <prefix>` |
-| `retina` | `--retina` |
+| `layout` | `--layout` |
+| `layouts` | `--layouts` |
+| `includes` | `--includes` |
+| `theme` | `--theme` |
+| `retina` | `--retina` / `--no-retina` |
+| `baseUrl` | `--base-url` |
 | `includeDrafts` | `--include-drafts` |
-| `stylesheets` | `--stylesheet <url>` (repeatable) |
-| `exclude` | `--exclude <dirname>` (repeatable) |
-| `outputDir` | `--output <dir>` |
+| `stylesheets` | `--stylesheet` (repeatable) |
+| `exclude` | `--exclude` (repeatable) |
 
-## VS Code Integration
+## Deploying
 
-### Publish Command
+### GitHub Pages
 
-Use the command palette (`Ctrl+Shift+P`) and run **AS Notes: Publish to HTML**.
-
-If no publish config exists, a setup wizard walks you through:
-
-1. **Input directory** -- notes root or a subdirectory
-2. **Default public** -- publish all pages by default?
-3. **Default assets** -- copy referenced images and files?
-4. **Layout** -- docs, blog, or minimal
-5. **Theme** -- default, dark, or none
-6. **Base URL** -- path prefix for deployed site
-7. **Output directory** -- where to write the HTML
-8. **Layouts directory** -- create default editable layouts, browse for an existing directory, or skip
-9. **Includes directory** -- create default includes, browse for an existing directory, or skip
-
-The wizard saves your choices to the appropriate config file (e.g. `asnotes-publish.json` or `asnotes-publish.docs-src.json`). All fields are written with defaults so you can discover every option by reading the JSON file.
-
-On subsequent runs with a single config, the converter uses the saved settings immediately -- no wizard, no prompts. With multiple config files, a picker lets you choose which site to publish or create a new configuration.
-
-### Configure Publish Settings
-
-To change your publish settings without building, run **AS Notes: Configure Publish Settings** from the command palette. This shows a picker of existing configs to edit or creates a new one. If you change the input directory, the config file is renamed automatically to match.
-
-You can also edit config files directly -- they are standard JSON.
-
-```
-
-## Publishing to GitHub Pages
-
-### 1. Enable GitHub Pages
-
-In your repository, go to **Settings > Pages** and set the source to **GitHub Actions**.
-
-### 2. Add a CI Workflow
-
-Create `.github/workflows/pages.yml`:
+1. Go to **Settings > Pages** and set the source to **GitHub Actions**
+2. Add `.github/workflows/pages.yml`:
 
 ```yaml
 name: Deploy to GitHub Pages
@@ -791,40 +481,15 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
-Adjust `--config` path and any flag overrides to match your repository layout. The `--base-url` override is needed for GitHub Pages subdirectory deployment. All other settings come from `asnotes-publish.json`.
-
-Alternatively, you can use explicit flags instead of a config file:
+For a custom domain, add a CNAME step after the build and remove `--base-url`:
 
 ```yaml
-      - run: >
-          npx asnotes-publish
-          --input ./notes
-          --output ./site
-          --default-public
-          --default-assets
-          --theme default
-          --base-url /${{ github.event.repository.name }}
+      - run: echo "docs.example.com" > ./site/CNAME
 ```
 
-### Custom Domain
+### Netlify
 
-To serve from a custom domain (e.g. `docs.example.com`):
-
-1. Add a DNS `CNAME` record pointing to `<your-github-username>.github.io`
-2. Add a step after the convert step to write the `CNAME` file (the converter wipes output on each run):
-
-   ```yaml
-   - run: echo "docs.example.com" > ./site/CNAME
-   ```
-
-3. Enter the domain in **Settings > Pages > Custom domain** and enable **Enforce HTTPS**
-4. Remove `--base-url` since you're serving from the domain root
-
-## Publishing to Netlify
-
-### 1. Create a `netlify.toml`
-
-Add this to your repository root:
+Add `netlify.toml` to your repo root:
 
 ```toml
 [build]
@@ -835,24 +500,11 @@ Add this to your repository root:
   NODE_VERSION = "20"
 ```
 
-### 2. Connect Your Repository
+Connect your repository in Netlify. No `--base-url` needed.
 
-1. Log in to [Netlify](https://www.netlify.com) and click **Add new site > Import an existing project**
-2. Connect your Git provider and select your repository
-3. Netlify auto-detects the `netlify.toml` settings
-4. Click **Deploy site**
+### Vercel
 
-Netlify automatically builds and deploys on every push. No `--base-url` is needed since Netlify serves from the domain root.
-
-### Custom Domain
-
-In **Site settings > Domain management**, add your custom domain and follow Netlify's DNS instructions.
-
-## Publishing to Vercel
-
-### 1. Configure Vercel
-
-Create `vercel.json` in your repository root:
+Add `vercel.json` to your repo root:
 
 ```json
 {
@@ -862,140 +514,64 @@ Create `vercel.json` in your repository root:
 }
 ```
 
-### 2. Connect Your Repository
+Import your repository in Vercel.
 
-1. Log in to [Vercel](https://vercel.com) and click **Add New > Project**
-2. Import your Git repository
-3. Vercel reads `vercel.json` for build settings
-4. Click **Deploy**
+### Cloudflare Pages
 
-Vercel deploys on every push and provides a preview URL for each branch.
+1. Go to **Compute > Workers & Pages > Create application > Pages > Connect to Git**
+2. Set the build command to `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json`
+3. Set the output directory to match your `outputDir` (e.g. `site`)
+4. Add a `NODE_VERSION = 20` environment variable
 
-## Publishing to Cloudflare Pages
+If your config file is in a subdirectory, set the **Root directory** to that subdirectory. All relative paths in the config resolve from the root directory.
 
-### 1. Connect Your Repository
+## HTML Structure Reference
 
-1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and go to **Compute > Workers & Pages**
-2. Click **Create application > Pages > Connect to Git**
-3. Select your repository (if you have already selected repositories without granting access to all, select 'Add a Github account' when selecting Github user / organisation)
+The `docs` layout produces this structure:
 
-### 2. Configure Build Settings
-
-In **Build configuration**, set the following:
-
-| Setting | Value |
-|---|---|
-| Build command | e.g `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json` with the path to `asnotes-publish.json` |
-| Build output directory | The `outputDir` value from your config file (e.g. `site`) |
-| Root directory | The directory containing your config file (leave empty if at repo root) |
-
-Under **Variables and secrets**, add:
-
-| Variable | Value |
-|---|---|
-| `NODE_VERSION` | `20` |
-
-### Root Directory
-
-The **Root directory** setting controls the working directory for the build. Cloudflare changes to this directory before running the build command. All relative paths in your config file (inputDir, outputDir, layouts, includes, themes) resolve from there.
-
-If your config file is at the repository root, leave Root directory empty. If your config file lives in a subdirectory, set Root directory to that subdirectory.
-
-**Example: config at repo root**
-
-```
-my-notes/
-  asnotes-publish.json       # inputDir: "./notes", outputDir: "./site"
-  notes/
-    Getting Started.md
+```html
+<body>
+  <header><!-- header.html contents --></header>
+  <nav class="site-nav">
+    <ul>
+      <li><a href="index.html">Home</a></li>
+      <li class="nav-current"><a href="my-page.html">My Page</a></li>
+    </ul>
+  </nav>
+  <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul><li><a href="#section">Section</a></li></ul>
+      </details>
+    </nav>
+    <!-- rendered markdown -->
+  </article>
+  <footer><!-- footer.html contents --></footer>
+</body>
 ```
 
-| Setting | Value |
-|---|---|
-| Root directory | *(empty)* |
-| Build command | `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json` |
-| Build output directory | `site` |
+Key CSS classes:
 
-**Example: config in a subdirectory**
-
-```
-my-repo/
-  docs-src/
-    asnotes-publish.blog.json   # inputDir: "./blog", outputDir: "./blog-publish"
-    blog/
-      Welcome Post.md
-```
-
-| Setting | Value |
-|---|---|
-| Root directory | `/docs-src` |
-| Build command | `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.blog.json` |
-| Build output directory | `blog-publish` |
-
-The `--config` path and Build output directory are both relative to the Root directory. If Root directory is wrong, the build will fail because Cloudflare cannot find the config file or its referenced directories.
-
-### Custom Domains
-
-Set up a custom domain for your site on the Workers and Pages settings section.
-
-`https://dash.cloudflare.com/><CF-ACCOUNT-ID>/workers/services/view/<GH_REPOSITORY_NAME>/production/settings`
-
-### Deployment
-
-Click **Save and Deploy**. Cloudflare Pages deploys on every push with automatic preview deployments for branches. No `--base-url` is needed since Cloudflare Pages serves from the domain root.
-
-## Writing a Custom Layout CSS
-
-This documentation site uses a two-column grid layout. Save this as `layout.css`:
-
-```css
-*, *::before, *::after { box-sizing: border-box; }
-
-body {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-nav.site-nav {
-  background: #f6f8fa;
-  border-right: 1px solid #d0d7de;
-  padding: 1.5rem 1rem;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-}
-
-nav.site-nav ul { list-style: none; margin: 0; padding: 0; }
-
-nav.site-nav a {
-  display: block;
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
-  text-decoration: none;
-  color: #24292f;
-  font-size: 0.875rem;
-}
-
-nav.site-nav a:hover { background: #eaeef2; color: #0550ae; }
-nav.site-nav .nav-current a { background: #ddf4ff; color: #0550ae; font-weight: 600; }
-
-article.markdown-body { padding: 2rem 3rem; max-width: 900px; }
-
-@media (max-width: 700px) {
-  body { grid-template-columns: 1fr; }
-  nav.site-nav { position: relative; height: auto; border-right: none; border-bottom: 1px solid #d0d7de; }
-  article.markdown-body { padding: 1.5rem; }
-}
-```
-
-Then convert:
-
-```bash
-npm run convert -- \
-  --input ./notes --output ./site \
-  --default-public --default-assets \
-  --stylesheet /path/to/layout.css
-```
+| Class | Element | Description |
+|---|---|---|
+| `site-header` | `<div>` | Header partial wrapper |
+| `site-footer` | `<div>` | Footer partial wrapper |
+| `site-nav` | `<nav>` | Navigation sidebar |
+| `nav-current` | `<li>` | Active page in nav |
+| `markdown-body` | `<article>` | Content area (docs layout) |
+| `blog-post` | `<article>` | Content area (blog layout) |
+| `blog-home-link` | `<nav>` | Back-to-index link (blog posts) |
+| `post-title` | `<h1>` | Post title (blog layout) |
+| `blog-recent` | `<section>` | Recent posts section on blog index |
+| `blog-cards` | `<div>` | Card grid container for recent posts |
+| `blog-card` | `<div>` | Individual post card (title, date, excerpt) |
+| `blog-card-meta` | `<div>` | Date/metadata inside a card |
+| `blog-card-excerpt` | `<p>` | Excerpt text inside a card |
+| `blog-year-posts` | `<section>` | Year group section on blog index |
+| `blog-post-list` | `<ul>` | Compact date + title post list |
+| `blog-archives` | `<section>` | Archive section on blog index |
+| `toc` | `<nav>` | Table of contents |
+| `page-date` | `<time>` | Date display |
+| `retina` | `<img>` | Retina image |
+| `site-icon` | `<img>` | Raster site icon (SVG icons are inlined) |

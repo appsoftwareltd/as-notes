@@ -22,6 +22,9 @@ interface PublishConfig {
     stylesheets?: string[];
     exclude?: string[];
     outputDir?: string;
+    siteTitle?: string;
+    recentCount?: number;
+    blogIndex?: boolean;
 }
 
 interface CliArgs {
@@ -41,6 +44,9 @@ interface CliArgs {
     retina: boolean;
     baseUrl: string;
     includeDrafts: boolean;
+    siteTitle: string;
+    recentCount: number;
+    blogIndex: boolean;
 }
 
 const DEFAULT_EXCLUDES = ['templates', 'node_modules'];
@@ -79,9 +85,12 @@ function parseArgs(argv: string[]): CliArgs {
     let includes = '';
     let theme = '';
     let themes = '';
-    let retina = false;
+    let retina = true;
     let baseUrl = '';
     let includeDrafts = false;
+    let siteTitle = '';
+    let recentCount = 3;
+    let blogIndex = false;
 
     // Track which flags were explicitly set on the CLI
     const cliSet = new Set<string>();
@@ -113,6 +122,8 @@ function parseArgs(argv: string[]): CliArgs {
             theme = argv[++i]; cliSet.add('theme');
         } else if (argv[i] === '--retina') {
             retina = true; cliSet.add('retina');
+        } else if (argv[i] === '--no-retina') {
+            retina = false; cliSet.add('retina');
         } else if (argv[i] === '--base-url' && i + 1 < argv.length) {
             baseUrl = argv[++i].replace(/\/+$/, ''); cliSet.add('baseUrl');
         } else if (argv[i] === '--include-drafts') {
@@ -134,6 +145,9 @@ function parseArgs(argv: string[]): CliArgs {
         if (!cliSet.has('baseUrl') && cfg.baseUrl != null) baseUrl = String(cfg.baseUrl).replace(/\/+$/, '');
         if (!cliSet.has('retina') && cfg.retina != null) retina = cfg.retina;
         if (!cliSet.has('includeDrafts') && cfg.includeDrafts != null) includeDrafts = cfg.includeDrafts;
+        if (cfg.siteTitle) siteTitle = cfg.siteTitle;
+        if (cfg.recentCount != null) recentCount = cfg.recentCount;
+        if (cfg.blogIndex != null) blogIndex = cfg.blogIndex;
         if (!cliSet.has('stylesheets') && Array.isArray(cfg.stylesheets)) {
             for (const s of cfg.stylesheets) { if (typeof s === 'string') stylesheets.push(s); }
         }
@@ -181,7 +195,7 @@ function parseArgs(argv: string[]): CliArgs {
         process.exit(1);
     }
 
-    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts };
+    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts, siteTitle, recentCount, blogIndex };
 }
 
 interface ScannedFile {
@@ -218,6 +232,33 @@ function scanMarkdownFiles(dir: string, excludeDirs: string[] = []): ScannedFile
 
 function stripBrackets(text: string): string {
     return text.replace(/\[\[|\]\]/g, '');
+}
+
+/**
+ * Extract a plain-text excerpt from markdown content (front matter already stripped).
+ * Strips headings, images, links (keeps text), code fences, HTML tags, and leading bullets.
+ * Returns the first `maxLength` characters followed by "…" if truncated.
+ */
+function extractExcerpt(markdown: string, maxLength = 200): string {
+    const text = markdown
+        .replace(/^#+\s+.*/gm, '')            // remove headings
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, '')  // remove images
+        .replace(/\[[^\]]*\]\([^)]*\)/g, (m) => m.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')) // links → text
+        .replace(/```[\s\S]*?```/g, '')        // remove fenced code
+        .replace(/`[^`]+`/g, '')               // remove inline code
+        .replace(/<[^>]+>/g, '')               // remove HTML tags
+        .replace(/^\s*[-*]\s+/gm, '')          // remove list markers
+        .replace(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g, '$1') // wikilinks → text
+        .replace(/[*_~]+/g, '')                // remove emphasis markers
+        .replace(/\n{2,}/g, ' ')               // collapse blank lines to space
+        .replace(/\n/g, ' ')                   // remaining newlines to space
+        .trim();
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    // Truncate at last word boundary before maxLength
+    const truncated = text.substring(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return (lastSpace > maxLength * 0.5 ? truncated.substring(0, lastSpace) : truncated) + '…';
 }
 
 /** Render a page name as wikilink-aware HTML. Names containing [[ ]] are
@@ -265,25 +306,60 @@ function loadPartial(includesDir: string | undefined, filename: string): string 
     return fs.readFileSync(partialPath, 'utf-8');
 }
 
+const ICON_EXTENSIONS = ['.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif'] as const;
+const RASTER_MIME: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+};
+
+/**
+ * Look for icon.svg, icon.png, icon.jpg etc. in the includes directory.
+ * SVG files are returned as raw markup (for inlining).
+ * Raster files are returned as an <img> tag with a base64 data URI.
+ */
+function loadSiteIcon(includesDir: string | undefined): string | undefined {
+    if (!includesDir) return undefined;
+    for (const ext of ICON_EXTENSIONS) {
+        const iconPath = path.join(includesDir, `icon${ext}`);
+        if (!fs.existsSync(iconPath)) continue;
+        if (ext === '.svg') {
+            return fs.readFileSync(iconPath, 'utf-8');
+        }
+        const mime = RASTER_MIME[ext];
+        const data = fs.readFileSync(iconPath).toString('base64');
+        return `<img src="data:${mime};base64,${data}" alt="" class="site-icon">`;
+    }
+    return undefined;
+}
+
 function wrapHtml(title: string, nav: string, body: string, options: {
     stylesheets?: string[];
     description?: string;
     date?: string;
+    author?: string;
+    image?: string;
     toc?: string;
     layout?: string;
     layoutsDir?: string;
     includesDir?: string;
     baseUrl?: string;
+    homeLink?: boolean;
+    heading?: boolean;
+    siteTitle?: string;
 } = {}): string {
-    const { stylesheets = [], description, date, toc, layout = 'docs', layoutsDir, includesDir, baseUrl = '' } = options;
+    const { stylesheets = [], description, date, author, image, toc, layout = 'docs', layoutsDir, includesDir, baseUrl = '', homeLink = false, heading = false, siteTitle = '' } = options;
 
     const escapedTitle = escapeHtml(title);
     const headerPartial = loadPartial(includesDir, 'header.html');
     const footerPartial = loadPartial(includesDir, 'footer.html');
+    const siteIconPartial = loadSiteIcon(includesDir);
 
     const templateVars = {
-        title: escapedTitle, nav, content: body, stylesheets, description, date, toc, baseUrl,
-        header: headerPartial, footer: footerPartial,
+        title: escapedTitle, nav, content: body, stylesheets, description, date, author, image, toc, baseUrl,
+        header: headerPartial, footer: footerPartial, homeLink, heading, siteTitle, siteIcon: siteIconPartial,
     };
 
     // Try user-defined layout: layoutsDir first, then includesDir (backwards compat), then built-in
@@ -307,8 +383,8 @@ function wrapHtml(title: string, nav: string, body: string, options: {
 
 function applyTemplate(template: string, vars: {
     title: string; nav: string; content: string; stylesheets: string[];
-    description?: string; date?: string; toc?: string; baseUrl: string;
-    header?: string; footer?: string;
+    description?: string; date?: string; author?: string; image?: string; toc?: string; baseUrl: string;
+    header?: string; footer?: string; homeLink?: boolean; heading?: boolean; siteTitle?: string; siteIcon?: string;
 }): string {
     const linkTags = vars.stylesheets.length > 0
         ? '\n' + vars.stylesheets.map(s => `    <link rel="stylesheet" href="${escapeHtml(s)}">`).join('\n')
@@ -319,7 +395,21 @@ function applyTemplate(template: string, vars: {
     const dateHtml = vars.date
         ? `    <time class="page-date" datetime="${escapeHtml(vars.date)}">${escapeHtml(vars.date)}</time>\n`
         : '';
+    const authorHtml = vars.author
+        ? `    <span class="page-author">${escapeHtml(vars.author)}</span>\n`
+        : '';
+    const imageHtml = vars.image
+        ? `    <img class="page-image" src="${escapeHtml(vars.image)}" alt="${vars.title}">\n`
+        : '';
     const tocHtml = vars.toc || '';
+    const homeLinkHtml = vars.homeLink
+        ? '    <nav class="blog-home-link"><a href="index.html">\u2190 Home</a></nav>\n'
+        : '';
+    const headingHtml = vars.heading
+        ? `    <h1 class="post-title">${vars.title}</h1>\n`
+        : '';
+    const siteTitleHtml = vars.siteTitle ? escapeHtml(vars.siteTitle) : '';
+    const siteIconHtml = vars.siteIcon ?? '';
 
     // Process header/footer partials: wrap in semantic elements if content exists, otherwise emit HTML comments
     let headerHtml: string;
@@ -327,7 +417,9 @@ function applyTemplate(template: string, vars: {
         // Apply token replacement within the partial itself
         const processedHeader = vars.header
             .replace(/\{\{base-url\}\}/g, vars.baseUrl)
-            .replace(/\{\{title\}\}/g, vars.title);
+            .replace(/\{\{title\}\}/g, vars.title)
+            .replace(/\{\{site-title\}\}/g, siteTitleHtml)
+            .replace(/\{\{site-icon\}\}/g, siteIconHtml);
         headerHtml = `<header>\n${processedHeader}\n</header>\n`;
     } else {
         headerHtml = '<!-- header -->\n';
@@ -345,14 +437,20 @@ function applyTemplate(template: string, vars: {
 
     return template
         .replace(/\{\{title\}\}/g, vars.title)
+        .replace(/\{\{heading\}\}/g, headingHtml)
         .replace(/\{\{header\}\}/g, headerHtml)
         .replace(/\{\{nav\}\}/g, vars.nav)
+        .replace(/\{\{home-link\}\}/g, homeLinkHtml)
         .replace(/\{\{content\}\}/g, vars.content)
         .replace(/\{\{stylesheets\}\}/g, linkTags)
         .replace(/\{\{meta\}\}/g, metaDesc)
         .replace(/\{\{date\}\}/g, dateHtml)
+        .replace(/\{\{author\}\}/g, authorHtml)
+        .replace(/\{\{image\}\}/g, imageHtml)
         .replace(/\{\{toc\}\}/g, tocHtml)
         .replace(/\{\{footer\}\}/g, footerHtml)
+        .replace(/\{\{site-title\}\}/g, siteTitleHtml)
+        .replace(/\{\{site-icon\}\}/g, siteIconHtml)
         .replace(/\{\{base-url\}\}/g, vars.baseUrl);
 }
 
@@ -368,10 +466,10 @@ function getBuiltInLayout(name: string): string {
 </head>
 <body data-layout="blog">
 {{header}}    <article class="blog-post">
-{{date}}{{toc}}
+{{home-link}}{{heading}}{{image}}{{date}}{{author}}{{toc}}
 {{content}}
     </article>
-{{nav}}{{footer}}</body>
+{{footer}}</body>
 </html>
 `;
         case 'minimal':
@@ -704,6 +802,116 @@ function getRetinaCss(): string {
     }`;
 }
 
+/**
+ * Generate a blog-style index page body.
+ * Shows recent posts as cards with excerpts, remaining posts from the
+ * last 12 months as a simple list, then older posts grouped by year
+ * under an "Archive" heading.
+ */
+function generateBlogIndexBody(pages: PageEntry[], baseUrl: string, recentCount: number): string {
+    // Separate dated and undated posts (exclude 'index')
+    const posts = pages.filter(p => p.name !== 'index');
+    const dated = posts.filter(p => p.date).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const undated = posts.filter(p => !p.date);
+
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutoffStr = cutoff.toISOString().substring(0, 10);
+
+    const lines: string[] = [];
+
+    // Recent posts as cards
+    const recentPosts = dated.slice(0, recentCount);
+    const remainingDated = dated.slice(recentCount);
+
+    if (recentPosts.length > 0) {
+        lines.push('<section class="blog-recent">');
+        lines.push('<h2 id="recent-posts">Recent Posts</h2>');
+        lines.push('<div class="blog-cards">');
+        for (const p of recentPosts) {
+            const href = baseUrl ? baseUrl + '/' + p.href : p.href;
+            const title = escapeHtml(stripBrackets(p.title || p.name));
+            lines.push('<div class="blog-card">');
+            if (p.image) {
+                const imgSrc = baseUrl ? baseUrl + '/' + p.image : p.image;
+                lines.push(`  <a href="${href}" class="blog-card-image"><img src="${escapeHtml(imgSrc)}" alt="${title}"></a>`);
+            }
+            lines.push(`  <h3><a href="${href}">${title}</a></h3>`);
+            const meta: string[] = [];
+            if (p.date) meta.push(`<time datetime="${escapeHtml(p.date)}">${escapeHtml(p.date)}</time>`);
+            if (p.author) meta.push(`<span class="blog-card-author">${escapeHtml(p.author)}</span>`);
+            if (meta.length > 0) lines.push(`  <div class="blog-card-meta">${meta.join(' · ')}</div>`);
+            const blurb = p.description || p.excerpt;
+            if (blurb) lines.push(`  <p class="blog-card-excerpt">${escapeHtml(blurb)}</p>`);
+            lines.push('</div>');
+        }
+        lines.push('</div>');
+        lines.push('</section>');
+    }
+
+    // Remaining posts within the last 12 months
+    const recentRemaining = remainingDated.filter(p => p.date! >= cutoffStr);
+    const olderPosts = remainingDated.filter(p => p.date! < cutoffStr);
+
+    if (recentRemaining.length > 0) {
+        lines.push('<section class="blog-year-posts">');
+        lines.push('<h2 id="more-posts">More Posts</h2>');
+        lines.push('<ul class="blog-post-list">');
+        for (const p of recentRemaining) {
+            const href = baseUrl ? baseUrl + '/' + p.href : p.href;
+            const title = escapeHtml(stripBrackets(p.title || p.name));
+            const datePart = p.date ? `<time datetime="${escapeHtml(p.date)}">${escapeHtml(p.date)}</time> - ` : '';
+            lines.push(`<li>${datePart}<a href="${href}">${title}</a></li>`);
+        }
+        lines.push('</ul>');
+        lines.push('</section>');
+    }
+
+    // Older posts grouped by year under Archive
+    const archivePosts = [...olderPosts, ...undated];
+    if (archivePosts.length > 0) {
+        const byYear = new Map<string, PageEntry[]>();
+        const undatedGroup: PageEntry[] = [];
+        for (const p of archivePosts) {
+            if (p.date) {
+                const year = p.date.substring(0, 4);
+                if (!byYear.has(year)) byYear.set(year, []);
+                byYear.get(year)!.push(p);
+            } else {
+                undatedGroup.push(p);
+            }
+        }
+        const years = [...byYear.keys()].sort((a, b) => b.localeCompare(a));
+
+        lines.push('<section class="blog-archives">');
+        lines.push('<h2 id="archives">Archive</h2>');
+        for (const year of years) {
+            lines.push(`<h3 id="archive-${year}">${year}</h3>`);
+            lines.push('<ul class="blog-post-list">');
+            for (const p of byYear.get(year)!) {
+                const href = baseUrl ? baseUrl + '/' + p.href : p.href;
+                const title = escapeHtml(stripBrackets(p.title || p.name));
+                const datePart = p.date ? `<time datetime="${escapeHtml(p.date)}">${escapeHtml(p.date)}</time> - ` : '';
+                lines.push(`<li>${datePart}<a href="${href}">${title}</a></li>`);
+            }
+            lines.push('</ul>');
+        }
+        if (undatedGroup.length > 0) {
+            lines.push('<h3 id="archive-undated">Undated</h3>');
+            lines.push('<ul class="blog-post-list">');
+            for (const p of undatedGroup) {
+                const href = baseUrl ? baseUrl + '/' + p.href : p.href;
+                const title = escapeHtml(stripBrackets(p.title || p.name));
+                lines.push(`<li><a href="${href}">${title}</a></li>`);
+            }
+            lines.push('</ul>');
+        }
+        lines.push('</section>');
+    }
+
+    return lines.join('\n');
+}
+
 function generateSitemap(pages: PageEntry[], baseUrl: string): string {
     const lines = ['<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'];
@@ -731,6 +939,7 @@ function generateRssFeed(pages: PageEntry[], baseUrl: string, siteTitle: string)
       <title>${escapeXml(p.title || p.name)}</title>
       <link>${escapeXml(link)}</link>
       ${p.description ? `<description>${escapeXml(p.description)}</description>` : ''}
+      ${p.author ? `<author>${escapeXml(p.author)}</author>` : ''}
       <pubDate>${escapeXml(p.date || '')}</pubDate>
     </item>`;
     });
@@ -757,7 +966,7 @@ function escapeXml(text: string): string {
 
 function main(): void {
     const args = parseArgs(process.argv);
-    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts } = args;
+    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts, siteTitle, recentCount, blogIndex } = args;
     const frontMatterService = new FrontMatterService();
     const resolvedLayoutsDir = layouts ? path.resolve(layouts) : undefined;
     const resolvedThemesDir = themes ? path.resolve(themes) : undefined;
@@ -899,12 +1108,16 @@ function main(): void {
         .filter(p => publicPages.has(p.name))
         .map(p => {
             const meta = pageMetadata.get(p.name);
+            const strippedContent = meta ? frontMatterService.stripFrontMatter(meta.content) : '';
             return {
                 ...p,
                 title: meta?.fields.title,
                 order: meta?.fields.order,
                 date: meta?.fields.date,
                 description: meta?.fields.description,
+                author: meta?.fields.author,
+                image: meta?.fields.image,
+                excerpt: extractExcerpt(strippedContent),
             };
         });
 
@@ -1055,11 +1268,16 @@ function main(): void {
             stylesheets: pageStylesheets,
             description: meta.fields.description,
             date: meta.fields.date,
+            author: meta.fields.author,
+            image: meta.fields.image,
             toc,
             layout: pageLayout,
             layoutsDir: resolvedLayoutsDir,
             includesDir: resolvedIncludesDir,
             baseUrl,
+            homeLink: pageLayout === 'blog' && pageName !== 'index',
+            heading: pageLayout === 'blog' && pageName !== 'index',
+            siteTitle,
         });
 
         // Inject mermaid script before </body> if page has mermaid diagrams
@@ -1092,31 +1310,45 @@ mermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });
     // Auto-generate index.html if no index.md was found (Iteration 11B)
     // Generate as direct HTML to handle page names with brackets cleanly (Iteration 12F)
     if (needsAutoIndex) {
-        const indexItems = navPages
-            .filter(p => p.name !== 'index')
-            .map(p => {
-                const rawName = p.title || p.name;
-                if (rawName.includes('[[')) {
-                    const rendered = renderPageName(navMd, rawName, baseUrl);
-                    return `<li>${rendered}</li>`;
-                }
-                const href = baseUrl ? baseUrl + '/' + p.href : p.href;
-                return `<li><a href="${href}">${escapeHtml(stripBrackets(rawName))}</a></li>`;
-            });
-        const indexBody = `<h1 id="home">Home</h1>\n<ul>\n${indexItems.join('\n')}\n</ul>`;
+        const useBlogIndex = blogIndex || layout === 'blog';
+        let indexBody: string;
+
+        if (useBlogIndex) {
+            // Blog-aware index: recent cards, year list, archives
+            indexBody = generateBlogIndexBody(navPages, baseUrl, recentCount);
+        } else {
+            // Standard flat index
+            const indexItems = navPages
+                .filter(p => p.name !== 'index')
+                .map(p => {
+                    const rawName = p.title || p.name;
+                    if (rawName.includes('[[')) {
+                        const rendered = renderPageName(navMd, rawName, baseUrl);
+                        return `<li>${rendered}</li>`;
+                    }
+                    const href = baseUrl ? baseUrl + '/' + p.href : p.href;
+                    return `<li><a href="${href}">${escapeHtml(stripBrackets(rawName))}</a></li>`;
+                });
+            indexBody = `<h1 id="home">Home</h1>\n<ul>\n${indexItems.join('\n')}\n</ul>`;
+        }
+
         const indexToc = generateToc(indexBody);
+        const titleText = siteTitle || 'Home';
 
         const nav = customNav ?? buildNav(navPages, 'index', baseUrl, navMd);
-        const indexHtml = wrapHtml('Home', nav, indexBody, {
+        const indexHtml = wrapHtml(titleText, nav, indexBody, {
             stylesheets: resolvedStylesheets,
             toc: indexToc,
             layout,
             layoutsDir: resolvedLayoutsDir,
             includesDir: resolvedIncludesDir,
             baseUrl,
+            siteTitle,
         });
         fs.writeFileSync(path.join(output, 'index.html'), indexHtml, 'utf-8');
-        console.log('  [info] No index.md found - generating page index');
+        console.log(`  [info] No index.md found - generating ${useBlogIndex ? 'blog' : 'page'} index`);
+
+
     }
     for (const pageName of missingTargets) {
         if (nonPublicPages.has(pageName) || flatFilenames.some(f => f.replace(/\.md$/i, '').toLowerCase() === pageName.toLowerCase() && nonPublicPages.has(f.replace(/\.md$/i, '')))) {
@@ -1138,7 +1370,7 @@ mermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });
     console.log('  [sitemap] sitemap.xml');
 
     // Generate RSS feed (Iteration 6C)
-    const rssFeed = generateRssFeed(navPages, baseUrl, 'AS Notes Site');
+    const rssFeed = generateRssFeed(navPages, baseUrl, siteTitle || 'AS Notes Site');
     fs.writeFileSync(path.join(output, 'feed.xml'), rssFeed, 'utf-8');
     console.log('  [rss] feed.xml');
 
@@ -1527,6 +1759,19 @@ body[data-layout="blog"] .site-nav ul {
         padding: 1.5rem;
     }
 }
+
+.blog-home-link {
+    margin-bottom: 1rem;
+}
+
+.blog-home-link a {
+    text-decoration: none;
+    opacity: 0.7;
+}
+
+.blog-home-link a:hover {
+    opacity: 1;
+}
 `;
         case 'dark':
             return `/* AS Notes dark theme */
@@ -1898,6 +2143,19 @@ body[data-layout="blog"] .site-nav ul {
     article.blog-post {
         padding: 1.5rem;
     }
+}
+
+.blog-home-link {
+    margin-bottom: 1rem;
+}
+
+.blog-home-link a {
+    text-decoration: none;
+    opacity: 0.7;
+}
+
+.blog-home-link a:hover {
+    opacity: 1;
 }
 `;
         default:

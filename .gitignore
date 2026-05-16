@@ -16,3 +16,7 @@ node_modules
 # Test outputs
 
 test-results.txt
+
+# AgentKanban
+
+.vscode/mcp.json

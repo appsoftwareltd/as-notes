@@ -7,7 +7,8 @@
             "request": "launch",
             "args": [
                 "--extensionDevelopmentPath=${workspaceFolder}/vs-code-extension",
-                "--disable-extensions"
+                "--disable-extensions",
+                "${env:HOME}/src/as-notes-demo-notes"
             ],
             "outFiles": [
                 "${workspaceFolder}/vs-code-extension/dist/**/*.js"

@@ -1,0 +1,11 @@
+{
+    "name": "asnotes-tailwind-template",
+    "private": true,
+    "description": "Tailwind CSS v4 source for the AS Notes tailwind template set",
+    "scripts": {
+        "build": "pnpx @tailwindcss/cli -i ./src/theme.css -o ./dist/default.css --minify"
+    },
+    "devDependencies": {
+        "@tailwindcss/cli": "^4.2.0"
+    }
+}

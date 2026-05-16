@@ -396,6 +396,49 @@ export class SlashCommandProvider implements vscode.CompletionItemProvider {
             items.push(convertToCardItem);
         }
 
+        // ── Front Matter Presets (only when no front matter exists) ───────
+        const hasFrontMatter = lines.length > 0 && lines[0].trim() === '---';
+        if (!hasFrontMatter) {
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const d = String(today.getDate()).padStart(2, '0');
+            const todayStr = `${y}-${m}-${d}`;
+
+            // Front Matter: Blog Post
+            const fmBlogItem = new vscode.CompletionItem('Front Matter: Blog Post', vscode.CompletionItemKind.Snippet);
+            fmBlogItem.detail = 'Insert blog post front matter (title, date, author, description)';
+            fmBlogItem.sortText = 'ea-fm-blog';
+            fmBlogItem.filterText = '/Front Matter Blog Post';
+            fmBlogItem.insertText = new vscode.SnippetString(
+                `---\ntitle: \${1:$TM_FILENAME_BASE}\ndescription: \${2}\ndate: ${todayStr}\nauthor: \${3}\npublic: true\nlayout: blog\n---\n\n\$0`,
+            );
+            fmBlogItem.range = range;
+            items.push(fmBlogItem);
+
+            // Front Matter: Docs Page
+            const fmDocsItem = new vscode.CompletionItem('Front Matter: Docs Page', vscode.CompletionItemKind.Snippet);
+            fmDocsItem.detail = 'Insert docs page front matter (title, description, order)';
+            fmDocsItem.sortText = 'eb-fm-docs';
+            fmDocsItem.filterText = '/Front Matter Docs Page';
+            fmDocsItem.insertText = new vscode.SnippetString(
+                `---\ntitle: \${1:$TM_FILENAME_BASE}\ndescription: \${2}\npublic: true\nlayout: docs\norder: \${3}\n---\n\n\$0`,
+            );
+            fmDocsItem.range = range;
+            items.push(fmDocsItem);
+
+            // Front Matter: Wiki Page
+            const fmWikiItem = new vscode.CompletionItem('Front Matter: Wiki Page', vscode.CompletionItemKind.Snippet);
+            fmWikiItem.detail = 'Insert wiki page front matter (title, description)';
+            fmWikiItem.sortText = 'ec-fm-wiki';
+            fmWikiItem.filterText = '/Front Matter Wiki Page';
+            fmWikiItem.insertText = new vscode.SnippetString(
+                `---\ntitle: \${1:$TM_FILENAME_BASE}\ndescription: \${2}\npublic: true\n---\n\n\$0`,
+            );
+            fmWikiItem.range = range;
+            items.push(fmWikiItem);
+        }
+
         return new vscode.CompletionList(items, false);
     }
 }

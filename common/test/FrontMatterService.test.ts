@@ -258,6 +258,16 @@ describe('FrontMatterService — parseFrontMatterFields', () => {
         expect(service.parseFrontMatterFields(content).date).toBe('2026-03-23');
     });
 
+    it('should parse author field', () => {
+        const content = '---\nauthor: Jane Doe\n---\n\n# Page';
+        expect(service.parseFrontMatterFields(content).author).toBe('Jane Doe');
+    });
+
+    it('should parse image field', () => {
+        const content = '---\nimage: assets/images/hero.png\n---\n\n# Page';
+        expect(service.parseFrontMatterFields(content).image).toBe('assets/images/hero.png');
+    });
+
     it('should parse aliases via parseFrontMatterFields', () => {
         const content = '---\naliases: [Alias A, Alias B]\n---\n\n# Page';
         expect(service.parseFrontMatterFields(content).aliases).toEqual(['Alias A', 'Alias B']);

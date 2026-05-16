@@ -39,6 +39,8 @@ export interface FrontMatterFields {
     retina?: boolean;
     draft?: boolean;
     date?: string;
+    author?: string;
+    image?: string;
     aliases?: string[];
 }
 
@@ -142,6 +144,12 @@ export class FrontMatterService {
                     break;
                 case 'date':
                     fields.date = this.parseStringValue(rawValue);
+                    break;
+                case 'author':
+                    fields.author = this.parseStringValue(rawValue);
+                    break;
+                case 'image':
+                    fields.image = this.parseStringValue(rawValue);
                     break;
                 case 'aliases':
                     fields.aliases = this.parseAliasesFromLine(rawValue, lines, i);
