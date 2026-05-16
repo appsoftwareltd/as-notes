@@ -4,6 +4,10 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.4.0] - 2026-04-01
+
+- Feature: New publish options including Tailwind theme and front matter options
+
 ## [2.3.2] - 2026-04-01
 
 - Feature: Improved outliner mode editing behaviours, particularly around fenced code blocks.

@@ -515,7 +515,8 @@ npm run lint          # Type-check all three packages
 
 ```bash
 cd vs-code-extension
-npm install
+npm run build    # builds dist/convert.js
+npm publish --access public install
 npm run build    # Build the extension
 npm run watch    # Watch mode (rebuilds on changes)
 npm test         # Run unit tests
