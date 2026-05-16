@@ -1,0 +1,10 @@
+{
+    "name": "as-notes-monorepo",
+    "private": true,
+    "scripts": {
+        "install:all": "npm --prefix common install && npm --prefix publish install && npm --prefix vs-code-extension install",
+        "build": "npm --prefix publish run build && npm --prefix vs-code-extension run build",
+        "test": "npm --prefix common test && npm --prefix publish test && npm --prefix vs-code-extension test",
+        "lint": "npm --prefix common run lint && npm --prefix publish run lint && npm --prefix vs-code-extension run lint"
+    }
+}

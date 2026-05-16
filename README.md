@@ -488,6 +488,19 @@ The repository is structured as a monorepo with three packages:
 
 Documentation source lives in `docs-src/` (an AS Notes workspace). The `publish` tool converts it to `docs/`.
 
+### Installing dependencies and building all packages
+
+A root `package.json` provides convenience scripts for working across all packages. From the repository root:
+
+```bash
+npm run install:all   # Install dependencies for common/, publish/, and vs-code-extension/ in order
+npm run build         # Build publish/ then vs-code-extension/
+npm test              # Run unit tests for all three packages
+npm run lint          # Type-check all three packages
+```
+
+> **Note:** The `vs-code-extension` build bundles `../publish/src/convert.ts` directly, so `publish/` (and its dependency on `common/`) must have their dependencies installed before the extension can be built. Use `npm run install:all` from the repository root to install everything in the correct order.
+
 ### VS Code Extension
 
 ```bash
@@ -498,6 +511,8 @@ npm run watch    # Watch mode (rebuilds on changes)
 npm test         # Run unit tests
 npm run lint     # Type-check
 ```
+
+> **Prerequisite:** `common/` and `publish/` must have their dependencies installed first (`npm --prefix common install && npm --prefix publish install`), or use `npm run install:all` from the repository root.
 
 ### Publishing to HTML from AS Notes (HTML Conversion)
 

@@ -2,5 +2,25 @@
     "as-notes.rootDirectory": "docs-src",
     "markdown.copyFiles.destination": {
         "**/*.md": "/docs-src/assets/${fileName}"
-    }
+    },
+    "workbench.colorCustomizations": {
+        "activityBar.activeBackground": "#eebc08",
+        "activityBar.background": "#eebc08",
+        "activityBar.foreground": "#15202b",
+        "activityBar.inactiveForeground": "#15202b99",
+        "activityBarBadge.background": "#059a7a",
+        "activityBarBadge.foreground": "#e7e7e7",
+        "commandCenter.border": "#15202b99",
+        "sash.hoverBorder": "#eebc08",
+        "statusBar.background": "#bd9506",
+        "statusBar.foreground": "#15202b",
+        "statusBarItem.hoverBackground": "#8c6e04",
+        "statusBarItem.remoteBackground": "#bd9506",
+        "statusBarItem.remoteForeground": "#15202b",
+        "titleBar.activeBackground": "#bd9506",
+        "titleBar.activeForeground": "#15202b",
+        "titleBar.inactiveBackground": "#bd950699",
+        "titleBar.inactiveForeground": "#15202b99"
+    },
+    "peacock.color": "#bd9506"
 }
