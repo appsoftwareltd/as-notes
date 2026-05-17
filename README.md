@@ -1,4 +1,4 @@
-# AS Notes (Personal Knowledge Management VS Code Extension)
+# AS Notes (PKMS, Static Site Publishing and Blogging VS Code Extension)
 
 Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
 
