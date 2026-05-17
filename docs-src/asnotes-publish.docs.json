@@ -5,12 +5,13 @@
     "layout": "docs",
     "layouts": "./asnotes-publish.layouts.docs",
     "includes": "./asnotes-publish.includes.docs",
-    "theme": "dark",
+    "theme": "default",
     "themes": "./asnotes-publish.themes.docs",
     "baseUrl": "",
-    "retina": false,
+    "retina": true,
     "includeDrafts": false,
     "stylesheets": [],
     "exclude": [],
-    "outputDir": "./docs-publish"
+    "outputDir": "./docs-publish",
+    "siteTitle": ""
 }

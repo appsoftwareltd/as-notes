@@ -1,0 +1,8 @@
+
+    img.retina {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+    img.retina[width] {
+        /* When width attribute is present, retina images render at that explicit size */
+    }

@@ -1,16 +1,17 @@
 {
     "inputDir": "./blog",
-    "defaultPublic": true,
+    "defaultPublic": false,
     "defaultAssets": true,
     "layout": "blog",
     "layouts": "./asnotes-publish.layouts.blog",
     "includes": "./asnotes-publish.includes.blog",
-    "theme": "dark",
+    "theme": "default",
     "themes": "./asnotes-publish.themes.blog",
     "baseUrl": "",
-    "retina": false,
+    "retina": true,
     "includeDrafts": false,
     "stylesheets": [],
     "exclude": [],
-    "outputDir": "./blog-publish"
+    "outputDir": "./blog-publish",
+    "siteTitle": ""
 }

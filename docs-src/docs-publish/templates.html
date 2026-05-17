@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Templates</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="theme-default.css">
+    <link rel="stylesheet" href="retina.css">
+</head>
+<body data-layout="docs">
+<header>
+<div class="site-header">
+    <a class="site-title" href="/">
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+
+        
+    </a>
+</div>
+
+</header>
+<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+<div class="nav-backdrop"></div>
+    <nav class="site-nav">
+      <ul>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="getting-started.html">Getting Started</a></li>
+        <li><a href="why-as-notes.html">Why AS Notes</a></li>
+        <li><a href="wikilinks.html">Wikilinks</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="kanban-board.html">Kanban Board</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="inline-markdown-editing-mermaid-and-latex-rendering.html">Inline Markdown Editing Mermaid and LaTeX Rendering</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="editing-github-wikis.html">Editing GitHub Wikis</a></li>
+        <li class="nav-current"><a href="templates.html">Templates</a></li>
+        <li><a href="markdown-editing.html">Markdown Editing</a></li>
+        <li><a href="development-roadmap.html">Development Roadmap</a></li>
+        <li><a href="licence.html">Licence</a></li>
+      </ul>
+    </nav>
+    <article class="markdown-body">
+    <nav class="toc">
+      <details open>
+        <summary>Contents</summary>
+        <ul>
+          <li><a href="#as-notes-pro">AS Notes Pro</a></li>
+          <li><a href="#template-folder">Template Folder</a></li>
+          <li><a href="#creating-a-template">Creating a Template</a></li>
+          <li><a href="#inserting-a-template">Inserting a Template</a></li>
+          <li><a href="#placeholders">Placeholders</a></li>
+                    <li><a href="#escaping-placeholders">Escaping Placeholders</a></li>
+                    <li><a href="#custom-date-formats">Custom Date Formats</a></li>
+          <li><a href="#example-template">Example Template</a></li>
+          <li><a href="#journal-template">Journal Template</a></li>
+        </ul>
+      </details>
+    </nav>
+<h1 id="templates">Templates</h1>
+<p>AS Notes Pro lets you create reusable note templates as markdown files. Insert them anywhere via the <code>/Template</code> slash command.</p>
+<h2 id="as-notes-pro">AS Notes Pro</h2>
+<p>Templates are a <strong>Pro feature</strong>. To unlock them:</p>
+<ol>
+<li>Obtain a licence key from <a href="https://www.asnotes.io/pricing">asnotes.io</a></li>
+<li>Enter your key using one of these methods:
+<ul>
+<li>Run <strong>AS Notes: Enter Licence Key</strong> from the Command Palette (<code>Ctrl+Shift+P</code>)</li>
+<li>Or open VS Code Settings (<code>Ctrl+,</code>), search for <code>as-notes.licenceKey</code>, and paste your key there</li>
+</ul>
+</li>
+</ol>
+<p>When active, the status bar shows <strong>AS Notes (Pro)</strong>.</p>
+<h2 id="template-folder">Template Folder</h2>
+<p>Templates are stored in a dedicated folder within your AS Notes workspace. The default folder is <code>templates/</code> and can be changed in <a href="settings.html" class="wikilink">Settings</a> via <code>as-notes.templateFolder</code>.</p>
+<p>A default <code>Journal.md</code> template is created automatically when you initialise a workspace. This template is used for new daily journal entries (see <a href="daily-journal.html" class="wikilink">Daily Journal</a>).</p>
+<h2 id="creating-a-template">Creating a Template</h2>
+<p>Add any <code>.md</code> file to your templates folder. The filename (without extension) becomes the template name shown in the picker.</p>
+<p>Subdirectories are supported. Templates in subfolders appear as <code>folder/name</code> in the picker, so you can organise templates by category:</p>
+<pre><code>templates/
+  Journal.md
+  Meeting Notes.md
+  project/
+    Sprint Review.md
+    Retrospective.md
+</code></pre>
+<h2 id="inserting-a-template">Inserting a Template</h2>
+<ol>
+<li>Type <code>/</code> in any markdown file to open the slash command menu</li>
+<li>Select <strong>Template</strong></li>
+<li>Pick a template from the list</li>
+</ol>
+<p>The template content is inserted at the cursor position with all placeholders replaced.</p>
+<p>See <a href="slash-commands.html" class="wikilink">Slash Commands</a> for the full list of available commands.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Templates support placeholders that are replaced with dynamic values when the template is inserted.</p>
+<table>
+<thead>
+<tr>
+<th>Placeholder</th>
+<th>Description</th>
+<th>Example output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code></code></td>
+<td>Current date (YYYY-MM-DD)</td>
+<td><code>2026-03-18</code></td>
+</tr>
+<tr>
+<td><code>{{time}}</code></td>
+<td>Current time (HH:mm:ss)</td>
+<td><code>14:30:45</code></td>
+</tr>
+<tr>
+<td><code>{{datetime}}</code></td>
+<td>Full date and time (YYYY-MM-DD HH:mm:ss)</td>
+<td><code>2026-03-18 14:30:45</code></td>
+</tr>
+<tr>
+<td><code>{{filename}}</code></td>
+<td>Current file name without extension</td>
+<td><code>My Page</code></td>
+</tr>
+<tr>
+<td><code>{{title}}</code></td>
+<td>Alias for <code>{{filename}}</code></td>
+<td><code>My Page</code></td>
+</tr>
+<tr>
+<td><code>{{cursor}}</code></td>
+<td>Position where the cursor is placed after insertion</td>
+<td><em>(cursor lands here)</em></td>
+</tr>
+<tr>
+<td>Custom date format</td>
+<td>Any combination of <code>YYYY</code>, <code>MM</code>, <code>DD</code>, <code>HH</code>, <code>mm</code>, <code>ss</code> tokens</td>
+<td><code>{{DD/MM/YYYY}}</code> becomes <code>18/03/2026</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="escaping-placeholders">Escaping Placeholders</h3>
+<p>To output a literal placeholder without replacement, prefix it with a backslash:</p>
+<pre><code>\
+</code></pre>
+<p>This inserts the text <code></code> as-is, without substituting the current date.</p>
+<h3 id="custom-date-formats">Custom Date Formats</h3>
+<p>Any placeholder containing date/time tokens (<code>YYYY</code>, <code>MM</code>, <code>DD</code>, <code>HH</code>, <code>mm</code>, <code>ss</code>) is treated as a custom date format. For example:</p>
+<table>
+<thead>
+<tr>
+<th>Placeholder</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>{{DD/MM/YYYY}}</code></td>
+<td><code>18/03/2026</code></td>
+</tr>
+<tr>
+<td><code>{{YYYY-MM-DD HH:mm}}</code></td>
+<td><code>2026-03-18 14:30</code></td>
+</tr>
+<tr>
+<td><code>{{MM-DD}}</code></td>
+<td><code>03-18</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-template">Example Template</h2>
+<p>A meeting notes template (<code>templates/Meeting Notes.md</code>):</p>
+<pre><code class="language-markdown"># Meeting: 
+
+**Attendees:**
+
+-
+
+## Agenda
+
+{{cursor}}
+
+## Actions
+
+- [ ] 
+</code></pre>
+<p>When inserted, <code></code> is replaced with the current date and the cursor is placed at the <code>{{cursor}}</code> position.</p>
+<h2 id="journal-template">Journal Template</h2>
+<p>The file <code>Journal.md</code> in the templates folder is used as the template for new daily journal entries created with <code>Ctrl+Alt+J</code> (Cmd+Alt+J on macOS). Edit it to customise future journal pages.</p>
+<p>All placeholders listed above are supported in the journal template. See <a href="daily-journal.html" class="wikilink">Daily Journal</a> for more on the daily journal workflow.</p>
+
+    </article>
+<footer>
+<div class="site-footer">
+    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
+</div>
+
+</footer>
+<script>
+(function() {
+    var btn = document.querySelector('.nav-toggle');
+    var bd = document.querySelector('.nav-backdrop');
+    function toggle() {
+        document.body.classList.toggle('nav-open');
+        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+    }
+    function close() {
+        document.body.classList.remove('nav-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+    if (btn) btn.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>

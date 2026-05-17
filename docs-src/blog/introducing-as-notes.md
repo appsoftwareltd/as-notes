@@ -2,8 +2,11 @@
 title: Introducing AS Notes
 description: AS Notes brings wikilink-style note-taking into VS Code. Capture ideas, link concepts, manage tasks, and now publish your notes as a static website.
 date: 2026-03-24
-order: 1
+author: Gareth Brown
+public: true
+layout: blog
 ---
+
 
 # Introducing AS Notes
 

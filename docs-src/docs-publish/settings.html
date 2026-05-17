@@ -4,13 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings</title>
-    <link rel="stylesheet" href="theme-dark.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="theme-default.css">
+    <link rel="stylesheet" href="retina.css">
 </head>
 <body data-layout="docs">
 <header>
 <div class="site-header">
     <a class="site-title" href="/">
         <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+
+        
     </a>
 </div>
 
@@ -20,18 +27,25 @@
     <nav class="site-nav">
       <ul>
         <li><a href="index.html">Home</a></li>
-        <li><a href="backlinks.html">Backlinks</a></li>
-        <li><a href="daily-journal.html">Daily Journal</a></li>
-        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
         <li><a href="getting-started.html">Getting Started</a></li>
-        <li><a href="images-and-files.html">Images and Files</a></li>
-        <li><a href="licence.html">Licence</a></li>
-        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
-        <li class="nav-current"><a href="settings.html">Settings</a></li>
-        <li><a href="slash-commands.html">Slash Commands</a></li>
-        <li><a href="task-management.html">Task Management</a></li>
-        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="why-as-notes.html">Why AS Notes</a></li>
         <li><a href="wikilinks.html">Wikilinks</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="kanban-board.html">Kanban Board</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="inline-markdown-editing-mermaid-and-latex-rendering.html">Inline Markdown Editing Mermaid and LaTeX Rendering</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li class="nav-current"><a href="settings.html">Settings</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="editing-github-wikis.html">Editing GitHub Wikis</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="markdown-editing.html">Markdown Editing</a></li>
+        <li><a href="development-roadmap.html">Development Roadmap</a></li>
+        <li><a href="licence.html">Licence</a></li>
       </ul>
     </nav>
     <article class="markdown-body">
@@ -40,9 +54,12 @@
         <summary>Contents</summary>
         <ul>
           <li><a href="#general-settings">General Settings</a></li>
+          <li><a href="#notes-and-templates-settings">Notes and Templates Settings</a></li>
           <li><a href="#journal-settings">Journal Settings</a></li>
           <li><a href="#backlinks-panel-settings">Backlinks Panel Settings</a></li>
+          <li><a href="#kanban-settings">Kanban Settings</a></li>
           <li><a href="#pro-settings">Pro Settings</a></li>
+          <li><a href="#inline-editor-settings">Inline Editor Settings</a></li>
           <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
         </ul>
       </details>
@@ -60,6 +77,11 @@
 </thead>
 <tbody>
 <tr>
+<td><code>as-notes.rootDirectory</code></td>
+<td><em>(empty)</em></td>
+<td>Subdirectory within the workspace to use as the AS Notes root (e.g. <code>docs</code> or <code>notes</code>). When empty, the workspace root is used. All AS Notes data (<code>.asnotes/</code>, journals, templates, etc.) lives within this directory. Configure per workspace, not globally. Changing this after initialisation requires manually moving your notes directory.</td>
+</tr>
+<tr>
 <td><code>as-notes.periodicScanInterval</code></td>
 <td><code>300</code></td>
 <td>Seconds between automatic background scans for file changes. Set to <code>0</code> to disable periodic scanning. Minimum effective value: <code>30</code>.</td>
@@ -67,12 +89,49 @@
 <tr>
 <td><code>as-notes.assetPath</code></td>
 <td><code>assets/images</code></td>
-<td>Workspace-relative folder where dropped and pasted files (images, etc.) are saved. See <a href="images-and-files.html" class="wikilink">Images and Files</a>.</td>
+<td>Folder where dropped and pasted files are saved by VS Code's built-in markdown editor, relative to the AS Notes root directory. See <a href="images-and-files.html" class="wikilink">Images and Files</a>.</td>
+</tr>
+<tr>
+<td><code>as-notes.wikilinkColour</code></td>
+<td><em>(empty)</em></td>
+<td>Hex colour for wikilinks in the editor (e.g. <code>#3794ff</code>). Leave empty to use your theme's link colour.</td>
+</tr>
+<tr>
+<td><code>as-notes.outlinerMode</code></td>
+<td><code>false</code></td>
+<td>Enable Outliner Mode for markdown files. When enabled, Enter on a bullet line inserts a new bullet at the same indentation, Tab indents it, and Shift+Tab outdents it. Only applies to lines beginning with <code>-</code>.</td>
 </tr>
 <tr>
 <td><code>as-notes.enableLogging</code></td>
 <td><code>false</code></td>
-<td>Enable diagnostic logging to <code>.asnotes/logs/</code>. Uses rolling 10 MB files (max 5). Requires a VS Code window reload after changing. Also activated by setting the <code>AS_NOTES_DEBUG=1</code> environment variable.</td>
+<td>Enable diagnostic logging to <code>.asnotes/logs/</code>. Rolling 10 MB files, max 5. Requires a VS Code window reload after changing. Also activated by the <code>AS_NOTES_DEBUG=1</code> environment variable.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes-and-templates-settings">Notes and Templates Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.notesFolder</code></td>
+<td><code>notes</code></td>
+<td>Folder for new notes, relative to the AS Notes root directory. Used when creating pages via wikilink navigation and the <strong>Create Note</strong> / <strong>Create Encrypted Note</strong> commands.</td>
+</tr>
+<tr>
+<td><code>as-notes.createNotesInCurrentDirectory</code></td>
+<td><code>false</code></td>
+<td>When enabled, new notes created via wikilink navigation are placed in the same directory as the currently open file, rather than the notes folder. Ignored when the source file is in the journal folder.</td>
+</tr>
+<tr>
+<td><code>as-notes.templateFolder</code></td>
+<td><code>templates</code></td>
+<td>Folder for note templates, relative to the AS Notes root directory. Templates are markdown files insertable via the <code>/Template</code> slash command. See <a href="slash-commands.html" class="wikilink">Slash Commands</a>.</td>
 </tr>
 </tbody>
 </table>
@@ -89,7 +148,7 @@
 <tr>
 <td><code>as-notes.journalFolder</code></td>
 <td><code>journals</code></td>
-<td>Folder for daily journal files, relative to the workspace root. See <a href="daily-journal.html" class="wikilink">Daily Journal</a>.</td>
+<td>Folder for daily journal files, relative to the AS Notes root directory. See <a href="daily-journal.html" class="wikilink">Daily Journal</a>.</td>
 </tr>
 </tbody>
 </table>
@@ -115,6 +174,23 @@
 </tr>
 </tbody>
 </table>
+<h2 id="kanban-settings">Kanban Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.kanbanAssetSizeWarningMB</code></td>
+<td><code>10</code></td>
+<td>Warn when attaching files larger than this size (in MB) to a Kanban card. Set to <code>0</code> to disable the warning.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="pro-settings">Pro Settings</h2>
 <table>
 <thead>
@@ -128,7 +204,157 @@
 <tr>
 <td><code>as-notes.licenceKey</code></td>
 <td><em>(empty)</em></td>
-<td>AS Notes Pro licence key (format: <code>ASNO-XXXX-XXXX-XXXX-XXXX</code>). Unlocks table commands and encrypted notes. Enter via <strong>AS Notes: Enter Licence Key</strong> in the Command Palette, or paste directly here. Stored at machine scope (not synced across devices). See <a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a>.</td>
+<td>AS Notes Pro licence key (format: <code>ASNO-XXXX-XXXX-XXXX-XXXX</code>). Unlocks Pro features including table commands, templates, and encrypted notes. Enter via <strong>AS Notes: Enter Licence Key</strong> in the Command Palette, or paste directly here. Stored at machine scope (not synced across devices). See <a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="inline-editor-settings">Inline Editor Settings</h2>
+<p>The inline editor renders Markdown formatting directly in the text editor (Typora-like syntax shadowing). All settings are under the <code>as-notes.inlineEditor</code> namespace.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.inlineEditor.enabled</code></td>
+<td><code>true</code></td>
+<td>Enable/disable inline Markdown rendering. Also togglable via the <strong>AS Notes: Toggle Inline Editor</strong> command or the eye icon in the editor title bar.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.decorations.ghostFaintOpacity</code></td>
+<td><code>0.3</code></td>
+<td>Opacity (0-1) for syntax characters in ghost state (cursor on the same line but outside the construct).</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.decorations.frontmatterDelimiterOpacity</code></td>
+<td><code>0.3</code></td>
+<td>Opacity for YAML frontmatter <code>---</code> delimiters when not actively editing them.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.decorations.codeBlockLanguageOpacity</code></td>
+<td><code>0.3</code></td>
+<td>Opacity for the language identifier on fenced code block opening fences.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.defaultBehaviors.diffView.applyDecorations</code></td>
+<td><code>false</code></td>
+<td>Apply inline editor decorations in diff/compare views. When <code>false</code>, diff views show raw Markdown.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.links.singleClickOpen</code></td>
+<td><code>false</code></td>
+<td>Open links with a single click instead of Ctrl+Click.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.emojis.enabled</code></td>
+<td><code>true</code></td>
+<td>Render <code>:emoji:</code> shortcodes as emoji characters inline.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.math.enabled</code></td>
+<td><code>true</code></td>
+<td>Render LaTeX math expressions (<code>$...$</code>, <code>$...$</code>) inline using KaTeX.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.mentions.enabled</code></td>
+<td><code>true</code></td>
+<td>Enable GitHub-style <code>@mention</code> and <code>#issue</code> reference detection and styling.</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.mentions.linksEnabled</code></td>
+<td><em>(auto)</em></td>
+<td>Force mention and issue links on or off. When unset, auto-detects from the git remote.</td>
+</tr>
+</tbody>
+</table>
+<p>Colour overrides (leave empty to use theme defaults):</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>as-notes.inlineEditor.colors.heading1</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for H1 headings</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.heading2</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for H2 headings</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.heading3</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for H3 headings</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.heading4</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for H4 headings</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.heading5</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for H5 headings</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.heading6</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for H6 headings</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.emphasis</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for bold and italic text</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.link</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for link text</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.listMarker</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for list markers (<code>-</code>, <code>*</code>, <code>+</code>)</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.inlineCode</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for inline code text</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.inlineCodeBackground</code></td>
+<td><em>(empty)</em></td>
+<td>Background colour for inline code</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.blockquote</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for blockquote markers</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.image</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for image placeholder text</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.horizontalRule</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for horizontal rule lines</td>
+</tr>
+<tr>
+<td><code>as-notes.inlineEditor.colors.checkbox</code></td>
+<td><em>(empty)</em></td>
+<td>Colour for checkbox symbols</td>
 </tr>
 </tbody>
 </table>

@@ -4,13 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Publishing a Static Site</title>
-    <link rel="stylesheet" href="theme-dark.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="theme-default.css">
+    <link rel="stylesheet" href="retina.css">
 </head>
 <body data-layout="docs">
 <header>
 <div class="site-header">
     <a class="site-title" href="/">
         <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+
+        
     </a>
 </div>
 
@@ -20,18 +27,25 @@
     <nav class="site-nav">
       <ul>
         <li><a href="index.html">Home</a></li>
-        <li><a href="backlinks.html">Backlinks</a></li>
-        <li><a href="daily-journal.html">Daily Journal</a></li>
-        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
         <li><a href="getting-started.html">Getting Started</a></li>
-        <li><a href="images-and-files.html">Images and Files</a></li>
-        <li><a href="licence.html">Licence</a></li>
-        <li class="nav-current"><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
-        <li><a href="settings.html">Settings</a></li>
-        <li><a href="slash-commands.html">Slash Commands</a></li>
-        <li><a href="task-management.html">Task Management</a></li>
-        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="why-as-notes.html">Why AS Notes</a></li>
         <li><a href="wikilinks.html">Wikilinks</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="kanban-board.html">Kanban Board</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="inline-markdown-editing-mermaid-and-latex-rendering.html">Inline Markdown Editing Mermaid and LaTeX Rendering</a></li>
+        <li class="nav-current"><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="editing-github-wikis.html">Editing GitHub Wikis</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="markdown-editing.html">Markdown Editing</a></li>
+        <li><a href="development-roadmap.html">Development Roadmap</a></li>
+        <li><a href="licence.html">Licence</a></li>
       </ul>
     </nav>
     <article class="markdown-body">
@@ -39,114 +53,92 @@
       <details open>
         <summary>Contents</summary>
         <ul>
-          <li><a href="#how-it-works">How It Works</a></li>
-          <li><a href="#prerequisites">Prerequisites</a></li>
-          <li><a href="#installation">Installation</a></li>
-                    <li><a href="#npm-recommended-for-cicd">npm (recommended for CI/CD)</a></li>
-                    <li><a href="#build-from-source">Build from source</a></li>
-                    <li><a href="#vs-code-extension">VS Code Extension</a></li>
-          <li><a href="#quick-start">Quick Start</a></li>
-          <li><a href="#front-matter">Front Matter</a></li>
-                    <li><a href="#slash-commands-for-front-matter">Slash Commands for Front Matter</a></li>
-          <li><a href="#public-private-filtering">Public / Private Filtering</a></li>
+          <li><a href="#quick-start-vs-code">Quick Start (VS Code)</a></li>
+                    <li><a href="#quick-start-cli">Quick Start (CLI)</a></li>
+          <li><a href="#choosing-what-to-publish">Choosing What to Publish</a></li>
                     <li><a href="#encrypted-files">Encrypted Files</a></li>
-                    <li><a href="#excluding-directories">Excluding Directories</a></li>
-                    <li><a href="#default-public-mode">Default Public Mode</a></li>
-                    <li><a href="#dead-links">Dead Links</a></li>
                     <li><a href="#drafts">Drafts</a></li>
-                    <li><a href="#home-page-index">Home Page (Index)</a></li>
-          <li><a href="#asset-pipeline">Asset Pipeline</a></li>
-                    <li><a href="#enabling-asset-copying">Enabling Asset Copying</a></li>
-                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#excluding-directories">Excluding Directories</a></li>
+                    <li><a href="#dead-links">Dead Links</a></li>
+          <li><a href="#front-matter">Front Matter</a></li>
+                    <li><a href="#slash-commands">Slash Commands</a></li>
+          <li><a href="#home-page">Home Page</a></li>
+                    <li><a href="#blog-index-page">Blog Index Page</a></li>
+          <li><a href="#images-and-assets">Images and Assets</a></li>
+                    <li><a href="#asset-copying">Asset Copying</a></li>
                     <li><a href="#manual-assets">Manual Assets</a></li>
-          <li><a href="#stylesheets">Stylesheets</a></li>
-                    <li><a href="#cdn-stylesheets">CDN Stylesheets</a></li>
-                    <li><a href="#local-stylesheets">Local Stylesheets</a></li>
-                    <li><a href="#combining-stylesheets">Combining Stylesheets</a></li>
+                    <li><a href="#retina-images">Retina Images</a></li>
           <li><a href="#layouts">Layouts</a></li>
-                    <li><a href="#built-in-layouts">Built-in Layouts</a></li>
-                    <li><a href="#per-page-layout-override">Per-page Layout Override</a></li>
                     <li><a href="#custom-layouts">Custom Layouts</a></li>
-                    <li><a href="#header-and-footer-partials">Header and Footer Partials</a></li>
-                    <li><a href="#custom-navigation">Custom Navigation</a></li>
+                              <li><a href="#template-tokens">Template Tokens</a></li>
+          <li><a href="#header-footer-and-site-icon">Header, Footer, and Site Icon</a></li>
+                    <li><a href="#site-icon">Site Icon</a></li>
+                    <li><a href="#header-tokens">Header Tokens</a></li>
+          <li><a href="#custom-navigation">Custom Navigation</a></li>
+          <li><a href="#template-sets">Template Sets</a></li>
           <li><a href="#themes">Themes</a></li>
-          <li><a href="#retina-images">Retina Images</a></li>
-                    <li><a href="#three-levels-of-control">Three Levels of Control</a></li>
-          <li><a href="#seo-features">SEO Features</a></li>
-                    <li><a href="#page-descriptions">Page Descriptions</a></li>
-                    <li><a href="#slug-urls">Slug URLs</a></li>
+                    <li><a href="#custom-stylesheets">Custom Stylesheets</a></li>
+          <li><a href="#seo">SEO</a></li>
                     <li><a href="#base-url">Base URL</a></li>
-                    <li><a href="#sitemap">Sitemap</a></li>
-                    <li><a href="#rss-atom-feed">RSS / Atom Feed</a></li>
           <li><a href="#table-of-contents">Table of Contents</a></li>
-          <li><a href="#html-structure-reference">HTML Structure Reference</a></li>
-          <li><a href="#cli-reference">CLI Reference</a></li>
           <li><a href="#config-file">Config File</a></li>
                     <li><a href="#schema">Schema</a></li>
-                    <li><a href="#using-config">Using --config</a></li>
+                    <li><a href="#using-the-config-file">Using the Config File</a></li>
                     <li><a href="#multi-site-publishing">Multi-Site Publishing</a></li>
-                    <li><a href="#settings-to-cli-flag-mapping">Settings to CLI Flag Mapping</a></li>
           <li><a href="#vs-code-integration">VS Code Integration</a></li>
-                    <li><a href="#publish-command">Publish Command</a></li>
-                    <li><a href="#configure-publish-settings">Configure Publish Settings</a></li>
-                    <li><a href="#custom-domain">Custom Domain</a></li>
-          <li><a href="#publishing-to-netlify">Publishing to Netlify</a></li>
-                    <li><a href="#1-create-a-netlifytoml">1. Create a netlify.toml</a></li>
-                    <li><a href="#2-connect-your-repository">2. Connect Your Repository</a></li>
-                    <li><a href="#custom-domain">Custom Domain</a></li>
-          <li><a href="#publishing-to-vercel">Publishing to Vercel</a></li>
-                    <li><a href="#1-configure-vercel">1. Configure Vercel</a></li>
-                    <li><a href="#2-connect-your-repository">2. Connect Your Repository</a></li>
-          <li><a href="#publishing-to-cloudflare-pages">Publishing to Cloudflare Pages</a></li>
-                    <li><a href="#1-connect-your-repository">1. Connect Your Repository</a></li>
-                    <li><a href="#2-configure-build-settings">2. Configure Build Settings</a></li>
-                    <li><a href="#root-directory">Root Directory</a></li>
-          <li><a href="#writing-a-custom-layout-css">Writing a Custom Layout CSS</a></li>
+                    <li><a href="#setup-wizard">Setup Wizard</a></li>
+                    <li><a href="#reconfigure">Reconfigure</a></li>
+          <li><a href="#cli-reference">CLI Reference</a></li>
+                    <li><a href="#config-to-cli-mapping">Config to CLI Mapping</a></li>
+          <li><a href="#deploying">Deploying</a></li>
+                    <li><a href="#github-pages">GitHub Pages</a></li>
+                    <li><a href="#netlify">Netlify</a></li>
+                    <li><a href="#vercel">Vercel</a></li>
+                    <li><a href="#cloudflare-pages">Cloudflare Pages</a></li>
+                              <li><a href="#multiple-sites-on-cloudflare-pages">Multiple Sites on Cloudflare Pages</a></li>
+          <li><a href="#html-structure-reference">HTML Structure Reference</a></li>
         </ul>
       </details>
     </nav>
 <h1 id="publishing-a-static-site">Publishing a Static Site</h1>
-<p>AS Notes includes a built-in HTML conversion tool that turns your markdown notes into a static website. It supports filtering, layouts, themes, asset pipelines, retina images, SEO metadata, sitemaps, and RSS feeds. You can deploy to GitHub Pages, Netlify, Vercel, Cloudflare Pages, or any static hosting.</p>
-<p>This documentation is itself a working example -- it was written in AS Notes and published using the same tool.</p>
-<h2 id="how-it-works">How It Works</h2>
-<p>The <code>publish</code> package recursively scans a folder of markdown files and converts them to HTML. Subdirectories are walked automatically, so notes organised in folders like <code>notes/</code>, <code>journals/</code>, and <code>pages/</code> are all discovered. The <code>templates</code> and <code>node_modules</code> directories are excluded by default.</p>
-<p><a href="wikilinks.html" class="wikilink">Wikilinks</a> between pages are automatically resolved to the correct HTML links. A navigation sidebar is generated from all public pages. Only pages you mark as public are published.</p>
-<p>Output is flat: all HTML files are written to the output root regardless of source subdirectory depth. Filenames are slugified to clean, URL-friendly kebab-case: <code>notes/My Page.md</code> becomes <code>my-page.html</code>. This matches how wikilinks work in AS Notes where filenames are globally unique.</p>
-<p>Each page is wrapped in a layout template with class names you can style any way you like. Unstyled output is clean, readable HTML with zero dependencies.</p>
-<h2 id="prerequisites">Prerequisites</h2>
-<ul>
-<li><a href="https://nodejs.org">Node.js</a> 20 or later</li>
-<li>Your notes in a folder of <code>.md</code> files</li>
-</ul>
-<h2 id="installation">Installation</h2>
-<p>There are two ways to run the converter:</p>
-<h3 id="npm-recommended-for-cicd">npm (recommended for CI/CD)</h3>
-<p>Install the CLI globally or use npx:</p>
-<pre><code class="language-bash">npx asnotes-publish --config ./asnotes-publish.json
+<p>AS Notes converts your markdown notes into a static website you can deploy anywhere. Wikilinks resolve automatically, a navigation sidebar is generated, and output is clean HTML with zero dependencies.</p>
+<p>This documentation website was built with the same tool.</p>
+<h2 id="quick-start-vs-code">Quick Start (VS Code)</h2>
+<ol>
+<li>Open the command palette (<code>Ctrl+Shift+P</code>) and run <strong>AS Notes: Publish to HTML</strong></li>
+<li>The setup wizard walks you through 12 steps (template set, input directory, output directory, layout, theme, etc.)</li>
+<li>Your settings are saved to a JSON config file (e.g. <code>asnotes-publish.json</code>) -- subsequent runs use them automatically</li>
+</ol>
+<p>Open the output folder in a browser to preview your site.</p>
+<h3 id="quick-start-cli">Quick Start (CLI)</h3>
+<p>You can pass options directly:</p>
+<pre><code class="language-bash">npx @appsoftwareltd/asnotes-publish --input ./notes --output ./docs-publish --default-public --default-assets --theme default
 </code></pre>
-<p>Or install globally:</p>
-<pre><code class="language-bash">npm install -g asnotes-publish
-asnotes-publish --config ./asnotes-publish.json
+<p>Or use a config file (created by the wizard, or written by hand):</p>
+<pre><code class="language-bash">npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json
 </code></pre>
-<p>This is the recommended approach for CI/CD pipelines (GitHub Actions, Netlify, Vercel, Cloudflare Pages).</p>
-<h3 id="build-from-source">Build from source</h3>
-<p>Alternatively, the <code>publish</code> package in the AS Notes repository can be built from source:</p>
-<pre><code class="language-bash">cd publish
-npm install
-npm run build
-node dist/convert.js --config ../asnotes-publish.json
-</code></pre>
-<h3 id="vs-code-extension">VS Code Extension</h3>
-<p>The converter is also bundled into the AS Notes VS Code extension. Use the command palette (<code>Ctrl+Shift+P</code>) and run <strong>AS Notes: Publish to HTML</strong>. This prompts for an output directory and runs the conversion with your configured settings. No separate installation required.</p>
-<h2 id="quick-start">Quick Start</h2>
-<pre><code class="language-bash">npm run convert -- --input /path/to/notes --output /path/to/site --default-public
-</code></pre>
-<p>This converts all markdown files to HTML. The output folder is wiped and regenerated on every run.</p>
 <p>Preview locally:</p>
-<pre><code class="language-bash">npx serve /path/to/site
+<pre><code class="language-bash">npx serve ./docs-publish
 </code></pre>
+<h2 id="choosing-what-to-publish">Choosing What to Publish</h2>
+<p>By default, only pages with <code>public: true</code> in their front matter are converted:</p>
+<pre><code class="language-yaml">---
+public: true
+---
+</code></pre>
+<p>Pass <code>--default-public</code> (or set <code>defaultPublic: true</code> in the config) to invert this -- all pages are published unless they have <code>public: false</code>.</p>
+<h3 id="encrypted-files">Encrypted Files</h3>
+<p>Files ending in <code>.enc.md</code> are always excluded. This is a hardcoded safety measure.</p>
+<h3 id="drafts">Drafts</h3>
+<p>Pages with <code>draft: true</code> are excluded. Include them with <code>--include-drafts</code> for preview builds.</p>
+<h3 id="excluding-directories">Excluding Directories</h3>
+<p><code>templates</code> and <code>node_modules</code> are excluded by default. Add more with <code>--exclude</code>:</p>
+<pre><code class="language-bash">asnotes-publish --config ./asnotes-publish.json --exclude archive --exclude scratch
+</code></pre>
+<h3 id="dead-links">Dead Links</h3>
+<p>When a public page links to a non-public page via wikilink, the link renders as a dead link and a warning is logged.</p>
 <h2 id="front-matter">Front Matter</h2>
-<p>Control publishing behaviour per-page using YAML front matter at the top of any markdown file:</p>
+<p>Control per-page behaviour with YAML front matter:</p>
 <pre><code class="language-yaml">---
 public: true
 title: My Page Title
@@ -154,17 +146,19 @@ order: 1
 description: A short description for SEO
 layout: docs
 assets: true
-retina: true
+retina: false
 draft: false
 date: 2025-03-23
+author: Your Name
 ---
 </code></pre>
-<p>All fields are optional. Here is what each field does:</p>
+<p>All fields are optional.</p>
 <table>
 <thead>
 <tr>
 <th>Field</th>
 <th>Type</th>
+<th>Default</th>
 <th>Description</th>
 </tr>
 </thead>
@@ -172,152 +166,100 @@ date: 2025-03-23
 <tr>
 <td><code>public</code></td>
 <td>boolean</td>
-<td>Page is included in output. Required unless <code>--default-public</code> is used</td>
+<td>--</td>
+<td>Include in output (required unless <code>--default-public</code>)</td>
 </tr>
 <tr>
 <td><code>title</code></td>
 <td>string</td>
-<td>Page title for <code>&lt;title&gt;</code> tag and nav. Defaults to filename</td>
+<td>filename</td>
+<td>Page title for <code>&lt;title&gt;</code> and nav</td>
 </tr>
 <tr>
 <td><code>order</code></td>
 <td>number</td>
-<td>Nav sort order. Lower numbers appear first. Unordered pages sort alphabetically after ordered ones</td>
+<td>--</td>
+<td>Nav sort order (lower first, then alphabetical)</td>
 </tr>
 <tr>
 <td><code>description</code></td>
 <td>string</td>
-<td>Injected as <code>&lt;meta name=&quot;description&quot;&gt;</code> for SEO</td>
+<td>--</td>
+<td><code>&lt;meta name=&quot;description&quot;&gt;</code> for SEO</td>
 </tr>
 <tr>
 <td><code>layout</code></td>
 <td>string</td>
-<td>Per-page layout override (<code>docs</code>, <code>blog</code>, <code>minimal</code>, or custom)</td>
+<td>global</td>
+<td>Per-page layout override</td>
 </tr>
 <tr>
 <td><code>assets</code></td>
 <td>boolean</td>
-<td>Enable asset copying for this page. Required unless <code>--default-assets</code> is used</td>
+<td>--</td>
+<td>Enable asset copying for this page</td>
 </tr>
 <tr>
 <td><code>retina</code></td>
 <td>boolean</td>
-<td>Apply retina styling to all images on this page</td>
+<td>--</td>
+<td>Override global retina setting for this page</td>
 </tr>
 <tr>
 <td><code>draft</code></td>
 <td>boolean</td>
-<td>Exclude from output unless <code>--include-drafts</code> is passed</td>
+<td>false</td>
+<td>Exclude unless <code>--include-drafts</code></td>
 </tr>
 <tr>
 <td><code>date</code></td>
 <td>string</td>
-<td>Date for blog-style display and RSS feed ordering</td>
+<td>--</td>
+<td>Date for blog display and RSS ordering</td>
+</tr>
+<tr>
+<td><code>author</code></td>
+<td>string</td>
+<td>--</td>
+<td>Author name (shown in blog layout)</td>
 </tr>
 </tbody>
 </table>
-<h3 id="slash-commands-for-front-matter">Slash Commands for Front Matter</h3>
-<p>In VS Code, type <code>/</code> in any markdown file to access these slash commands:</p>
+<h3 id="slash-commands">Slash Commands</h3>
+<p>Type <code>/</code> in any markdown file in VS Code to quickly toggle front matter fields:</p>
 <ul>
-<li><strong>/Public</strong> -- toggle <code>public: true/false</code> in front matter</li>
-<li><strong>/Layout</strong> -- cycle through <code>docs</code>, <code>blog</code>, <code>minimal</code> layouts</li>
+<li><strong>/Public</strong> -- toggle <code>public: true/false</code></li>
+<li><strong>/Layout</strong> -- cycle through <code>docs</code>, <code>blog</code>, <code>minimal</code></li>
 <li><strong>/Retina</strong> -- toggle <code>retina: true/false</code></li>
 <li><strong>/Assets</strong> -- toggle <code>assets: true/false</code></li>
 </ul>
-<p>These commands create a front matter block if one doesn't exist, or update existing fields.</p>
-<h2 id="public-private-filtering">Public / Private Filtering</h2>
-<p>By default, only pages with <code>public: true</code> in their front matter are converted. All other pages are skipped.</p>
-<pre><code class="language-yaml">---
-public: true
----
-# This page will be published
-</code></pre>
-<p>Pages without front matter or without <code>public: true</code> are skipped silently.</p>
-<h3 id="encrypted-files">Encrypted Files</h3>
-<p>Files ending in <code>.enc.md</code> (AS Notes encrypted files) are always excluded from publishing. This is a hardcoded safety measure -- encrypted notes are never included in the output regardless of <code>--default-public</code> or per-file front matter settings.</p>
-<h3 id="excluding-directories">Excluding Directories</h3>
-<p>The converter recursively scans all subdirectories. The <code>templates</code> and <code>node_modules</code> directories are excluded by default. To exclude additional directories, use <code>--exclude</code>:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --default-public --exclude drafts --exclude archive
-</code></pre>
-<p>Exclude matches directory names at any depth in the tree.</p>
-<h3 id="default-public-mode">Default Public Mode</h3>
-<p>Pass <code>--default-public</code> to invert the behaviour: all pages are published unless they have <code>public: false</code>:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --default-public
-</code></pre>
-<h3 id="dead-links">Dead Links</h3>
-<p>When a public page links to a non-public page via <a href="wikilink.html" class="wikilink">wikilink</a>, the link is rendered as a dead link (the href is still present but points nowhere). The converter logs a warning for each dead link so you can fix them.</p>
-<h3 id="drafts">Drafts</h3>
-<p>Pages with <code>draft: true</code> are excluded from the output. To include them (e.g. for a preview build), pass <code>--include-drafts</code>:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --default-public --include-drafts
-</code></pre>
-<h3 id="home-page-index">Home Page (Index)</h3>
-<p>Every site needs a page at <code>/</code>. If your notes include a file called <code>index.md</code>, it becomes the home page automatically. The index page appears first in navigation and displays as &quot;Home&quot;.</p>
-<p>If no <code>index.md</code> exists among your public pages, the converter auto-generates a simple index page that lists links to all published pages. The console will show:</p>
-<pre><code>[info] No index.md found - generating page index
-</code></pre>
-<p>To create a custom home page, add <code>index.md</code> to your notes root with <code>public: true</code>:</p>
-<pre><code class="language-yaml">---
-public: true
-title: Welcome
----
-# Welcome to my site
-
-This is my home page.
-</code></pre>
-<h2 id="asset-pipeline">Asset Pipeline</h2>
-<p>Images and files referenced in your markdown are automatically discovered and copied to the output directory.</p>
-<h3 id="enabling-asset-copying">Enabling Asset Copying</h3>
-<p>Asset copying is opt-in for safety. You have two options:</p>
-<p><strong>Per-page:</strong> Add <code>assets: true</code> to the page's front matter:</p>
-<pre><code class="language-yaml">---
-public: true
-assets: true
----
-![screenshot](../assets/images/screenshot.png)
-</code></pre>
-<p><strong>Global:</strong> Pass <code>--default-assets</code> to enable asset copying for all public pages:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --default-public --default-assets
-</code></pre>
-<p>With <code>--default-assets</code>, pages can opt out with <code>assets: false</code>.</p>
-<h3 id="how-it-works">How It Works</h3>
-<p>The converter scans rendered HTML for local <code>&lt;img src=&quot;...&quot;&gt;</code> references. Each reference is resolved relative to the page's source location within the input directory. Since all HTML pages are output to a flat directory, the converter rewrites <code>src</code> attributes so that asset paths resolve correctly in the published output.</p>
-<p>For example, if <code>pages/My Page.md</code> references <code>../assets/images/photo.png</code>, the converter:</p>
-<ol>
-<li>Resolves the path relative to the page's source directory (<code>pages/</code>)</li>
-<li>Copies the file to the output directory as <code>assets/images/photo.png</code></li>
-<li>Rewrites the <code>&lt;img src&gt;</code> in the HTML to <code>assets/images/photo.png</code></li>
-</ol>
-<p>Absolute URLs (<code>http://</code>, <code>https://</code>) and data URIs are ignored.</p>
-<p>If a referenced file is missing, a warning is logged.</p>
+<h2 id="home-page">Home Page</h2>
+<p>If your notes include <code>index.md</code>, it becomes the home page. If no <code>index.md</code> exists among your public pages, one is auto-generated with links to all published pages.</p>
+<h3 id="blog-index-page">Blog Index Page</h3>
+<p>When using the <code>blog</code> layout without an <code>index.md</code>, the converter auto-generates a blog index with:</p>
+<ul>
+<li><strong>Recent Posts</strong> -- card-style previews of the 3 most recent posts (title, date, excerpt)</li>
+<li><strong>More Posts</strong> -- a compact date + title list for remaining posts in the current year</li>
+<li><strong>Archive</strong> -- grouped by year for older posts</li>
+</ul>
+<p>The excerpt is the first ~160 characters of the rendered page content.</p>
+<h2 id="images-and-assets">Images and Assets</h2>
+<h3 id="asset-copying">Asset Copying</h3>
+<p>Asset copying is opt-in. Enable it per-page with <code>assets: true</code> in front matter, or globally with <code>--default-assets</code>.</p>
+<p>The converter discovers local <code>&lt;img src=&quot;...&quot;&gt;</code> references, resolves paths relative to the source file, copies files to the output directory, and rewrites paths in the HTML. Absolute URLs and data URIs are left untouched.</p>
 <h3 id="manual-assets">Manual Assets</h3>
-<p>You can also copy specific files with <code>--asset</code>:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --asset /path/to/favicon.ico
+<p>Copy specific files (e.g. favicons) with <code>--asset</code>:</p>
+<pre><code class="language-bash">asnotes-publish --config ./asnotes-publish.json --asset ./favicon.ico
 </code></pre>
-<h2 id="stylesheets">Stylesheets</h2>
-<h3 id="cdn-stylesheets">CDN Stylesheets</h3>
-<p>Pass <code>--stylesheet</code> with a URL:</p>
-<pre><code class="language-bash">npm run convert -- \
-  --input ./notes --output ./site \
-  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css
+<h3 id="retina-images">Retina Images</h3>
+<p>Retina image sizing is <strong>enabled by default</strong>. The converter reads each image's intrinsic width and sets a <code>width</code> attribute at half that value, so images render crisp on high-DPI displays. A <code>retina</code> CSS class is added for <code>image-rendering: crisp-edges</code>.</p>
+<p>To disable retina globally, set <code>retina: false</code> in your config file. To disable for a single page, add <code>retina: false</code> to its front matter.</p>
+<p>You can also mark individual images as retina regardless of the global setting by appending <code>{.retina}</code> to the alt text:</p>
+<pre><code class="language-markdown">![screenshot {.retina}](assets/screenshot.png)
 </code></pre>
-<h3 id="local-stylesheets">Local Stylesheets</h3>
-<p>Local file paths passed to <code>--stylesheet</code> are automatically copied to the output directory. No separate <code>--asset</code> flag is needed:</p>
-<pre><code class="language-bash">npm run convert -- \
-  --input ./notes --output ./site \
-  --stylesheet /path/to/my-styles.css
-</code></pre>
-<p>The file is copied to the output and referenced by filename in each page's <code>&lt;head&gt;</code>.</p>
-<h3 id="combining-stylesheets">Combining Stylesheets</h3>
-<p>Pass <code>--stylesheet</code> multiple times. Tags are injected in the order specified:</p>
-<pre><code class="language-bash">npm run convert -- \
-  --input ./notes --output ./site \
-  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css \
-  --stylesheet /path/to/layout.css
-</code></pre>
+<p>Supported formats for width detection: PNG, JPEG, GIF, WebP, BMP.</p>
 <h2 id="layouts">Layouts</h2>
-<p>Layouts control the HTML structure of each page. Three built-in layouts are available, and you can define your own.</p>
-<h3 id="built-in-layouts">Built-in Layouts</h3>
-<p>Select a layout with <code>--layout</code>:</p>
+<p>Three built-in layouts are available:</p>
 <table>
 <thead>
 <tr>
@@ -328,11 +270,11 @@ assets: true
 <tbody>
 <tr>
 <td><code>docs</code></td>
-<td>Navigation sidebar + content area with <code>markdown-body</code> class (default)</td>
+<td>Navigation sidebar + content area (default)</td>
 </tr>
 <tr>
 <td><code>blog</code></td>
-<td>Navigation + blog-style article with date display</td>
+<td>Blog-style article with home link, post title, date, and author</td>
 </tr>
 <tr>
 <td><code>minimal</code></td>
@@ -340,23 +282,10 @@ assets: true
 </tr>
 </tbody>
 </table>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --layout blog
-</code></pre>
-<h3 id="per-page-layout-override">Per-page Layout Override</h3>
-<p>Set <code>layout:</code> in front matter to override the global layout for a specific page:</p>
-<pre><code class="language-yaml">---
-public: true
-layout: minimal
----
-</code></pre>
+<p>Set the layout globally with <code>--layout blog</code> or per-page with <code>layout: blog</code> in front matter.</p>
 <h3 id="custom-layouts">Custom Layouts</h3>
-<p>The setup wizard (Step 8) offers to create a <strong>layouts directory</strong> containing editable copies of all three built-in layouts. You can modify these files to customise the HTML structure of your site.</p>
-<p>Point the converter at your layouts directory with <code>--layouts</code>:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --layouts ./layouts --layout my-layout
-</code></pre>
-<p>The converter looks for <code>my-layout.html</code> in the layouts directory first, then falls back to the includes directory, then to built-in layouts.</p>
-<p>You can also create entirely new layout files in the layouts directory and reference them by name (without the <code>.html</code> extension) in <code>--layout</code> or per-page <code>layout:</code> front matter.</p>
-<p>Template tokens:</p>
+<p>The setup wizard offers to create a <strong>layouts directory</strong> with editable copies of all three built-in layouts. You can modify these or create new ones. Reference custom layouts by name (without <code>.html</code>).</p>
+<h4 id="template-tokens">Template Tokens</h4>
 <table>
 <thead>
 <tr>
@@ -370,12 +299,20 @@ layout: minimal
 <td>Page title (escaped)</td>
 </tr>
 <tr>
+<td><code>{{heading}}</code></td>
+<td><code>&lt;h1&gt;</code> post title (blog layout)</td>
+</tr>
+<tr>
 <td><code>{{header}}</code></td>
-<td>Header partial HTML (from <code>header.html</code> in includes dir)</td>
+<td>Header partial HTML</td>
 </tr>
 <tr>
 <td><code>{{nav}}</code></td>
-<td>Navigation HTML</td>
+<td>Navigation sidebar HTML</td>
+</tr>
+<tr>
+<td><code>{{home-link}}</code></td>
+<td>Back-to-index link (blog posts)</td>
 </tr>
 <tr>
 <td><code>{{content}}</code></td>
@@ -383,8 +320,9 @@ layout: minimal
 </tr>
 <tr>
 <td><code>
-    <link rel="stylesheet" href="theme-dark.css"></code></td>
-<td><code>&lt;link&gt;</code> tags for stylesheets</td>
+    <link rel="stylesheet" href="theme-default.css">
+    <link rel="stylesheet" href="retina.css"></code></td>
+<td><code>&lt;link&gt;</code> tags</td>
 </tr>
 <tr>
 <td><code></code></td>
@@ -392,80 +330,69 @@ layout: minimal
 </tr>
 <tr>
 <td><code></code></td>
-<td><code>&lt;time&gt;</code> element (if page has <code>date:</code> front matter)</td>
+<td><code>&lt;time&gt;</code> element</td>
+</tr>
+<tr>
+<td><code></code></td>
+<td>Author display</td>
+</tr>
+<tr>
+<td><code></code></td>
+<td>Featured image</td>
 </tr>
 <tr>
 <td><code>    <nav class="toc">
       <details open>
         <summary>Contents</summary>
         <ul>
-          <li><a href="#how-it-works">How It Works</a></li>
-          <li><a href="#prerequisites">Prerequisites</a></li>
-          <li><a href="#installation">Installation</a></li>
-                    <li><a href="#npm-recommended-for-cicd">npm (recommended for CI/CD)</a></li>
-                    <li><a href="#build-from-source">Build from source</a></li>
-                    <li><a href="#vs-code-extension">VS Code Extension</a></li>
-          <li><a href="#quick-start">Quick Start</a></li>
-          <li><a href="#front-matter">Front Matter</a></li>
-                    <li><a href="#slash-commands-for-front-matter">Slash Commands for Front Matter</a></li>
-          <li><a href="#public-private-filtering">Public / Private Filtering</a></li>
+          <li><a href="#quick-start-vs-code">Quick Start (VS Code)</a></li>
+                    <li><a href="#quick-start-cli">Quick Start (CLI)</a></li>
+          <li><a href="#choosing-what-to-publish">Choosing What to Publish</a></li>
                     <li><a href="#encrypted-files">Encrypted Files</a></li>
-                    <li><a href="#excluding-directories">Excluding Directories</a></li>
-                    <li><a href="#default-public-mode">Default Public Mode</a></li>
-                    <li><a href="#dead-links">Dead Links</a></li>
                     <li><a href="#drafts">Drafts</a></li>
-                    <li><a href="#home-page-index">Home Page (Index)</a></li>
-          <li><a href="#asset-pipeline">Asset Pipeline</a></li>
-                    <li><a href="#enabling-asset-copying">Enabling Asset Copying</a></li>
-                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#excluding-directories">Excluding Directories</a></li>
+                    <li><a href="#dead-links">Dead Links</a></li>
+          <li><a href="#front-matter">Front Matter</a></li>
+                    <li><a href="#slash-commands">Slash Commands</a></li>
+          <li><a href="#home-page">Home Page</a></li>
+                    <li><a href="#blog-index-page">Blog Index Page</a></li>
+          <li><a href="#images-and-assets">Images and Assets</a></li>
+                    <li><a href="#asset-copying">Asset Copying</a></li>
                     <li><a href="#manual-assets">Manual Assets</a></li>
-          <li><a href="#stylesheets">Stylesheets</a></li>
-                    <li><a href="#cdn-stylesheets">CDN Stylesheets</a></li>
-                    <li><a href="#local-stylesheets">Local Stylesheets</a></li>
-                    <li><a href="#combining-stylesheets">Combining Stylesheets</a></li>
+                    <li><a href="#retina-images">Retina Images</a></li>
           <li><a href="#layouts">Layouts</a></li>
-                    <li><a href="#built-in-layouts">Built-in Layouts</a></li>
-                    <li><a href="#per-page-layout-override">Per-page Layout Override</a></li>
                     <li><a href="#custom-layouts">Custom Layouts</a></li>
-                    <li><a href="#header-and-footer-partials">Header and Footer Partials</a></li>
-                    <li><a href="#custom-navigation">Custom Navigation</a></li>
+                              <li><a href="#template-tokens">Template Tokens</a></li>
+          <li><a href="#header-footer-and-site-icon">Header, Footer, and Site Icon</a></li>
+                    <li><a href="#site-icon">Site Icon</a></li>
+                    <li><a href="#header-tokens">Header Tokens</a></li>
+          <li><a href="#custom-navigation">Custom Navigation</a></li>
+          <li><a href="#template-sets">Template Sets</a></li>
           <li><a href="#themes">Themes</a></li>
-          <li><a href="#retina-images">Retina Images</a></li>
-                    <li><a href="#three-levels-of-control">Three Levels of Control</a></li>
-          <li><a href="#seo-features">SEO Features</a></li>
-                    <li><a href="#page-descriptions">Page Descriptions</a></li>
-                    <li><a href="#slug-urls">Slug URLs</a></li>
+                    <li><a href="#custom-stylesheets">Custom Stylesheets</a></li>
+          <li><a href="#seo">SEO</a></li>
                     <li><a href="#base-url">Base URL</a></li>
-                    <li><a href="#sitemap">Sitemap</a></li>
-                    <li><a href="#rss-atom-feed">RSS / Atom Feed</a></li>
           <li><a href="#table-of-contents">Table of Contents</a></li>
-          <li><a href="#html-structure-reference">HTML Structure Reference</a></li>
-          <li><a href="#cli-reference">CLI Reference</a></li>
           <li><a href="#config-file">Config File</a></li>
                     <li><a href="#schema">Schema</a></li>
-                    <li><a href="#using-config">Using --config</a></li>
+                    <li><a href="#using-the-config-file">Using the Config File</a></li>
                     <li><a href="#multi-site-publishing">Multi-Site Publishing</a></li>
-                    <li><a href="#settings-to-cli-flag-mapping">Settings to CLI Flag Mapping</a></li>
           <li><a href="#vs-code-integration">VS Code Integration</a></li>
-                    <li><a href="#publish-command">Publish Command</a></li>
-                    <li><a href="#configure-publish-settings">Configure Publish Settings</a></li>
-                    <li><a href="#custom-domain">Custom Domain</a></li>
-          <li><a href="#publishing-to-netlify">Publishing to Netlify</a></li>
-                    <li><a href="#1-create-a-netlifytoml">1. Create a netlify.toml</a></li>
-                    <li><a href="#2-connect-your-repository">2. Connect Your Repository</a></li>
-                    <li><a href="#custom-domain">Custom Domain</a></li>
-          <li><a href="#publishing-to-vercel">Publishing to Vercel</a></li>
-                    <li><a href="#1-configure-vercel">1. Configure Vercel</a></li>
-                    <li><a href="#2-connect-your-repository">2. Connect Your Repository</a></li>
-          <li><a href="#publishing-to-cloudflare-pages">Publishing to Cloudflare Pages</a></li>
-                    <li><a href="#1-connect-your-repository">1. Connect Your Repository</a></li>
-                    <li><a href="#2-configure-build-settings">2. Configure Build Settings</a></li>
-                    <li><a href="#root-directory">Root Directory</a></li>
-          <li><a href="#writing-a-custom-layout-css">Writing a Custom Layout CSS</a></li>
+                    <li><a href="#setup-wizard">Setup Wizard</a></li>
+                    <li><a href="#reconfigure">Reconfigure</a></li>
+          <li><a href="#cli-reference">CLI Reference</a></li>
+                    <li><a href="#config-to-cli-mapping">Config to CLI Mapping</a></li>
+          <li><a href="#deploying">Deploying</a></li>
+                    <li><a href="#github-pages">GitHub Pages</a></li>
+                    <li><a href="#netlify">Netlify</a></li>
+                    <li><a href="#vercel">Vercel</a></li>
+                    <li><a href="#cloudflare-pages">Cloudflare Pages</a></li>
+                              <li><a href="#multiple-sites-on-cloudflare-pages">Multiple Sites on Cloudflare Pages</a></li>
+          <li><a href="#html-structure-reference">HTML Structure Reference</a></li>
         </ul>
       </details>
     </nav></code></td>
-<td>Table of contents HTML</td>
+<td>Table of contents</td>
 </tr>
 <tr>
 <td><code><footer>
@@ -475,120 +402,49 @@ layout: minimal
 
 </footer>
 </code></td>
-<td>Footer partial HTML (from <code>footer.html</code> in includes dir)</td>
+<td>Footer partial HTML</td>
 </tr>
 <tr>
 <td><code></code></td>
-<td>Base URL path prefix</td>
+<td>URL path prefix</td>
+</tr>
+<tr>
+<td><code></code></td>
+<td>Site title text</td>
+</tr>
+<tr>
+<td><code><svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+</code></td>
+<td>Site icon markup</td>
 </tr>
 </tbody>
 </table>
-<p>Example custom layout:</p>
-<pre><code class="language-html">&lt;!DOCTYPE html&gt;
-&lt;html lang=&quot;en&quot;&gt;
-&lt;head&gt;
-    &lt;meta charset=&quot;UTF-8&quot;&gt;
-    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
-    &lt;title&gt;{{title}}&lt;/title&gt;
-    <link rel="stylesheet" href="theme-dark.css">
-&lt;/head&gt;
-&lt;body&gt;
-{{header}}
-    &lt;header&gt;{{nav}}&lt;/header&gt;
-    &lt;main&gt;
-            <nav class="toc">
-      <details open>
-        <summary>Contents</summary>
-        <ul>
-          <li><a href="#how-it-works">How It Works</a></li>
-          <li><a href="#prerequisites">Prerequisites</a></li>
-          <li><a href="#installation">Installation</a></li>
-                    <li><a href="#npm-recommended-for-cicd">npm (recommended for CI/CD)</a></li>
-                    <li><a href="#build-from-source">Build from source</a></li>
-                    <li><a href="#vs-code-extension">VS Code Extension</a></li>
-          <li><a href="#quick-start">Quick Start</a></li>
-          <li><a href="#front-matter">Front Matter</a></li>
-                    <li><a href="#slash-commands-for-front-matter">Slash Commands for Front Matter</a></li>
-          <li><a href="#public-private-filtering">Public / Private Filtering</a></li>
-                    <li><a href="#encrypted-files">Encrypted Files</a></li>
-                    <li><a href="#excluding-directories">Excluding Directories</a></li>
-                    <li><a href="#default-public-mode">Default Public Mode</a></li>
-                    <li><a href="#dead-links">Dead Links</a></li>
-                    <li><a href="#drafts">Drafts</a></li>
-                    <li><a href="#home-page-index">Home Page (Index)</a></li>
-          <li><a href="#asset-pipeline">Asset Pipeline</a></li>
-                    <li><a href="#enabling-asset-copying">Enabling Asset Copying</a></li>
-                    <li><a href="#how-it-works">How It Works</a></li>
-                    <li><a href="#manual-assets">Manual Assets</a></li>
-          <li><a href="#stylesheets">Stylesheets</a></li>
-                    <li><a href="#cdn-stylesheets">CDN Stylesheets</a></li>
-                    <li><a href="#local-stylesheets">Local Stylesheets</a></li>
-                    <li><a href="#combining-stylesheets">Combining Stylesheets</a></li>
-          <li><a href="#layouts">Layouts</a></li>
-                    <li><a href="#built-in-layouts">Built-in Layouts</a></li>
-                    <li><a href="#per-page-layout-override">Per-page Layout Override</a></li>
-                    <li><a href="#custom-layouts">Custom Layouts</a></li>
-                    <li><a href="#header-and-footer-partials">Header and Footer Partials</a></li>
-                    <li><a href="#custom-navigation">Custom Navigation</a></li>
-          <li><a href="#themes">Themes</a></li>
-          <li><a href="#retina-images">Retina Images</a></li>
-                    <li><a href="#three-levels-of-control">Three Levels of Control</a></li>
-          <li><a href="#seo-features">SEO Features</a></li>
-                    <li><a href="#page-descriptions">Page Descriptions</a></li>
-                    <li><a href="#slug-urls">Slug URLs</a></li>
-                    <li><a href="#base-url">Base URL</a></li>
-                    <li><a href="#sitemap">Sitemap</a></li>
-                    <li><a href="#rss-atom-feed">RSS / Atom Feed</a></li>
-          <li><a href="#table-of-contents">Table of Contents</a></li>
-          <li><a href="#html-structure-reference">HTML Structure Reference</a></li>
-          <li><a href="#cli-reference">CLI Reference</a></li>
-          <li><a href="#config-file">Config File</a></li>
-                    <li><a href="#schema">Schema</a></li>
-                    <li><a href="#using-config">Using --config</a></li>
-                    <li><a href="#multi-site-publishing">Multi-Site Publishing</a></li>
-                    <li><a href="#settings-to-cli-flag-mapping">Settings to CLI Flag Mapping</a></li>
-          <li><a href="#vs-code-integration">VS Code Integration</a></li>
-                    <li><a href="#publish-command">Publish Command</a></li>
-                    <li><a href="#configure-publish-settings">Configure Publish Settings</a></li>
-                    <li><a href="#custom-domain">Custom Domain</a></li>
-          <li><a href="#publishing-to-netlify">Publishing to Netlify</a></li>
-                    <li><a href="#1-create-a-netlifytoml">1. Create a netlify.toml</a></li>
-                    <li><a href="#2-connect-your-repository">2. Connect Your Repository</a></li>
-                    <li><a href="#custom-domain">Custom Domain</a></li>
-          <li><a href="#publishing-to-vercel">Publishing to Vercel</a></li>
-                    <li><a href="#1-configure-vercel">1. Configure Vercel</a></li>
-                    <li><a href="#2-connect-your-repository">2. Connect Your Repository</a></li>
-          <li><a href="#publishing-to-cloudflare-pages">Publishing to Cloudflare Pages</a></li>
-                    <li><a href="#1-connect-your-repository">1. Connect Your Repository</a></li>
-                    <li><a href="#2-configure-build-settings">2. Configure Build Settings</a></li>
-                    <li><a href="#root-directory">Root Directory</a></li>
-          <li><a href="#writing-a-custom-layout-css">Writing a Custom Layout CSS</a></li>
-        </ul>
-      </details>
-    </nav>
-        
-        {{content}}
-    &lt;/main&gt;
-<footer>
-<div class="site-footer">
-    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
-</div>
-
-</footer>
-
-&lt;/body&gt;
-&lt;/html&gt;
-</code></pre>
-<h3 id="header-and-footer-partials">Header and Footer Partials</h3>
-<p>Add a consistent header and footer across all pages by creating <code>header.html</code> and <code>footer.html</code> in your includes directory.</p>
-<p>The converter looks for these files when <code>--includes</code> is set (or <code>includes</code> is set in the config file). If a partial exists, its contents are wrapped in a <code>&lt;header&gt;</code> or <code>&lt;footer&gt;</code> element and injected into the page. If a partial does not exist, an HTML comment (<code>&lt;!-- header --&gt;</code> or <code>&lt;!-- footer --&gt;</code>) is emitted as a placeholder.</p>
-<p>Partials support <code></code> and <code>{{title}}</code> tokens so you can create dynamic links.</p>
+<h2 id="header-footer-and-site-icon">Header, Footer, and Site Icon</h2>
+<p>The setup wizard creates an <strong>includes directory</strong> with three files:</p>
+<ul>
+<li><code>header.html</code> -- site header (navbar, branding, links)</li>
+<li><code>footer.html</code> -- site footer</li>
+<li><code>icon.svg</code> -- site icon displayed in the header</li>
+</ul>
+<h3 id="site-icon">Site Icon</h3>
+<p>The converter looks for an icon file in the includes directory. It checks for <code>icon.svg</code>, <code>icon.png</code>, <code>icon.jpg</code>, <code>icon.jpeg</code>, <code>icon.webp</code>, and <code>icon.gif</code> in that order.</p>
+<ul>
+<li><strong>SVG</strong> files are inlined directly into the HTML</li>
+<li><strong>Raster</strong> files (PNG, JPG, etc.) are base64-encoded and emitted as <code>&lt;img&gt;</code> tags</li>
+</ul>
+<p>To use your own icon, replace <code>icon.svg</code> (or drop in an <code>icon.png</code>) in the includes directory.</p>
+<h3 id="header-tokens">Header Tokens</h3>
+<p>Header and footer partials support these tokens: <code></code>, <code>{{title}}</code>, <code></code>, <code><svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+</code>.</p>
 <p>Example <code>header.html</code>:</p>
 <pre><code class="language-html">&lt;div class=&quot;site-header&quot;&gt;
-    &lt;a class=&quot;site-title&quot; href=&quot;/&quot;&gt;My Notes&lt;/a&gt;
+    &lt;a class=&quot;site-title&quot; href=&quot;/&quot;&gt;
+        <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+
+        
+    &lt;/a&gt;
     &lt;span class=&quot;header-sep&quot;&gt;|&lt;/span&gt;
     &lt;a href=&quot;https://github.com/me&quot;&gt;GitHub&lt;/a&gt;
-    &lt;a href=&quot;mailto:me@example.com&quot;&gt;Contact&lt;/a&gt;
 &lt;/div&gt;
 </code></pre>
 <p>Example <code>footer.html</code>:</p>
@@ -596,17 +452,8 @@ layout: minimal
     &lt;p&gt;&amp;copy; 2026 My Name. Built with &lt;a href=&quot;https://www.asnotes.io&quot;&gt;AS Notes&lt;/a&gt;.&lt;/p&gt;
 &lt;/div&gt;
 </code></pre>
-<p>Both built-in and custom layouts include <code>{{header}}</code> and <code><footer>
-<div class="site-footer">
-    <p>&copy; 2026 Built with <a href="https://www.asnotes.io">AS Notes</a> by <a href="https://www.appsoftware.com">App Software Ltd</a></p>
-</div>
-
-</footer>
-</code> tokens, so partials work with any layout.</p>
-<p>When using the VS Code publish wizard, the includes directory step (step 8) offers three options: create default <code>header.html</code> and <code>footer.html</code> files, browse for an existing includes directory, or skip. Edit the generated files to add your own navigation, branding, and contact information.</p>
-<h3 id="custom-navigation">Custom Navigation</h3>
-<p>By default, the converter auto-generates a sidebar navigation listing all published pages in order. To take full control of navigation content and structure, create a <code>nav.md</code> file at the root of your input directory.</p>
-<p><code>nav.md</code> is rendered as markdown with full wikilink support, so you can use headings, horizontal rules, lists, and links to organise your navigation however you like:</p>
+<h2 id="custom-navigation">Custom Navigation</h2>
+<p>By default, the converter generates a sidebar nav listing all public pages. To take full control, create a <code>nav.md</code> file at the root of your input directory:</p>
 <pre><code class="language-markdown">## Guides
 
 - [[Getting Started]]
@@ -619,21 +466,32 @@ layout: minimal
 - [[Settings]]
 - [[Wikilinks]]
 </code></pre>
-<p>The rendered HTML replaces the auto-generated <code>&lt;nav class=&quot;site-nav&quot;&gt;</code> element on every page.</p>
-<p><strong>How it works:</strong></p>
-<ul>
-<li>If <code>nav.md</code> exists in the input directory root, it is used as the navigation for all pages</li>
-<li>If <code>nav.md</code> does not exist, the auto-generated navigation is used (with <code>nav-current</code> highlighting)</li>
-<li><code>nav.md</code> is not published as a standalone page and does not appear in the sitemap</li>
-<li>Wikilinks in <code>nav.md</code> are resolved to their HTML page slugs, with <code>--base-url</code> applied if set</li>
-<li>The <code>nav-current</code> CSS class is not applied when using custom navigation (since the content is user-controlled)</li>
-</ul>
-<p><strong>Multi-site support:</strong> Since <code>nav.md</code> lives in the input directory, each site configuration can have its own navigation when using multi-site publishing.</p>
+<p>The rendered HTML replaces the auto-generated navigation. Wikilinks in <code>nav.md</code> resolve normally. The file is not published as a standalone page.</p>
+<h2 id="template-sets">Template Sets</h2>
+<p>The setup wizard offers two template sets that define the visual foundation for your site:</p>
+<table>
+<thead>
+<tr>
+<th>Template Set</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tailwind</code></td>
+<td>Modern — Inter font, zinc palette, auto light/dark via system preference</td>
+</tr>
+<tr>
+<td><code>github</code></td>
+<td>Classic — GitHub-inspired system font stack and colours, separate light/dark themes</td>
+</tr>
+</tbody>
+</table>
+<p>The template set determines the default layouts, themes, header, footer, and icon that are scaffolded when you create directories. Both sets produce the same HTML structure (so switching later only means regenerating the scaffold files).</p>
+<p>The tailwind set includes a single <code>default</code> theme with automatic light/dark mode based on the user's OS preference — no toggle or JavaScript required.</p>
 <h2 id="themes">Themes</h2>
-<p>Built-in CSS themes provide ready-made styling without writing CSS:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --theme default
-</code></pre>
-<p>Available themes:</p>
+<p>Available themes depend on the template set:</p>
+<p><strong>Tailwind:</strong></p>
 <table>
 <thead>
 <tr>
@@ -644,218 +502,69 @@ layout: minimal
 <tbody>
 <tr>
 <td><code>default</code></td>
-<td>Light theme with GitHub-inspired typography</td>
+<td>Auto light/dark based on system preference</td>
+</tr>
+</tbody>
+</table>
+<p><strong>GitHub:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Theme</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default</code></td>
+<td>Light theme — clean typography and layout</td>
 </tr>
 <tr>
 <td><code>dark</code></td>
-<td>Dark theme with dark background</td>
+<td>Dark theme — inverted colours with comfortable contrast</td>
 </tr>
 </tbody>
 </table>
-<p>Themes are injected as the first stylesheet, so you can override them with additional <code>--stylesheet</code> flags.</p>
-<h2 id="retina-images">Retina Images</h2>
-<p>Display high-resolution images at half their natural dimensions for crisp rendering on retina displays.</p>
-<h3 id="three-levels-of-control">Three Levels of Control</h3>
-<p><strong>Per-image:</strong> Append <code>{.retina}</code> to the image alt text in markdown:</p>
-<pre><code class="language-markdown">![screenshot {.retina}](assets/images/screenshot@2x.png)
+<p>Set with <code>--theme default</code>. Themes are injected as the first stylesheet, so you can layer additional stylesheets on top with <code>--stylesheet</code>.</p>
+<h3 id="custom-stylesheets">Custom Stylesheets</h3>
+<pre><code class="language-bash">asnotes-publish --config ./asnotes-publish.json \
+  --stylesheet https://cdn.example.com/markdown.css \
+  --stylesheet ./my-overrides.css
 </code></pre>
-<p><strong>Per-page:</strong> Add <code>retina: true</code> to the page's front matter. All images on that page get the retina class:</p>
-<pre><code class="language-yaml">---
-public: true
-retina: true
----
-</code></pre>
-<p><strong>Global:</strong> Pass <code>--retina</code> to apply retina styling to all images across the site:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --retina
-</code></pre>
-<p>All three levels add a <code>retina</code> CSS class to the <code>&lt;img&gt;</code> tag. Style it in your CSS to control rendering size via <code>width</code> and <code>height</code> attributes.</p>
-<h2 id="seo-features">SEO Features</h2>
-<h3 id="page-descriptions">Page Descriptions</h3>
-<p>Add <code>description:</code> to front matter for SEO metadata:</p>
-<pre><code class="language-yaml">---
-public: true
-description: Learn how to publish AS Notes as a static website
----
-</code></pre>
-<p>This injects <code>&lt;meta name=&quot;description&quot; content=&quot;...&quot;&gt;</code> in the page <code>&lt;head&gt;</code>.</p>
-<h3 id="slug-urls">Slug URLs</h3>
-<p>Output filenames are automatically slugified to clean, URL-friendly kebab-case. This produces shorter, more readable URLs that are better for SEO and sharing:</p>
-<table>
-<thead>
-<tr>
-<th>Source file</th>
-<th>Output file</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>Getting Started.md</code></td>
-<td><code>getting-started.html</code></td>
-</tr>
-<tr>
-<td><code>My Cool Page.md</code></td>
-<td><code>my-cool-page.html</code></td>
-</tr>
-<tr>
-<td><code>Page &amp; Notes.md</code></td>
-<td><code>page-notes.html</code></td>
-</tr>
-<tr>
-<td><code>index.md</code></td>
-<td><code>index.html</code></td>
-</tr>
-</tbody>
-</table>
-<p>All wikilinks, navigation, sitemap, and RSS feed hrefs use the slugified filenames automatically.</p>
+<p>Local file paths are automatically copied to the output. Multiple <code>--stylesheet</code> flags are allowed.</p>
+<h2 id="seo">SEO</h2>
+<ul>
+<li><code>description:</code> front matter injects <code>&lt;meta name=&quot;description&quot;&gt;</code></li>
+<li>Filenames are slugified to clean URLs (<code>Getting Started.md</code> → <code>getting-started.html</code>)</li>
+<li>A <code>sitemap.xml</code> is auto-generated with all public pages</li>
+<li>An RSS feed (<code>feed.xml</code>) is generated for pages with a <code>date:</code> field</li>
+</ul>
 <h3 id="base-url">Base URL</h3>
-<p>When deploying to a subdirectory (e.g. <code>https://example.com/docs/</code>), set the base URL prefix:</p>
-<pre><code class="language-bash">npm run convert -- --input ./notes --output ./site --base-url /docs
+<p>When deploying to a subdirectory (e.g. <code>https://example.com/docs/</code>), set a path prefix:</p>
+<pre><code class="language-bash">asnotes-publish --config ./asnotes-publish.json --base-url /docs
 </code></pre>
-<p>This prefixes all navigation links and asset references with <code>/docs/</code>.</p>
-<h3 id="sitemap">Sitemap</h3>
-<p>A <code>sitemap.xml</code> is automatically generated in the output directory containing all public pages. If pages have a <code>date:</code> field, it is included as <code>&lt;lastmod&gt;</code>.</p>
-<h3 id="rss-atom-feed">RSS / Atom Feed</h3>
-<p>An RSS feed (<code>feed.xml</code>) is generated for pages with a <code>date:</code> field, sorted newest-first. This enables blog-style subscriptions.</p>
 <h2 id="table-of-contents">Table of Contents</h2>
-<p>Every page automatically gets a table of contents generated from its <code>h2</code>, <code>h3</code>, and <code>h4</code> headings. The TOC is rendered as a collapsible <code>&lt;details&gt;</code> element at the top of the content area.</p>
-<p>Headings automatically receive <code>id</code> attributes for deep linking.</p>
-<h2 id="html-structure-reference">HTML Structure Reference</h2>
-<p>Here is the HTML structure the <code>docs</code> layout produces:</p>
-<pre><code class="language-html">&lt;body&gt;
-  &lt;header&gt;
-    &lt;!-- contents of header.html, or an HTML comment if not set --&gt;
-  &lt;/header&gt;
-  &lt;nav class=&quot;site-nav&quot;&gt;
-    &lt;ul&gt;
-      &lt;li&gt;&lt;a href=&quot;index.html&quot;&gt;Home&lt;/a&gt;&lt;/li&gt;
-      &lt;li class=&quot;nav-current&quot;&gt;&lt;a href=&quot;my-page.html&quot;&gt;My Page&lt;/a&gt;&lt;/li&gt;
-    &lt;/ul&gt;
-  &lt;/nav&gt;
-  &lt;article class=&quot;markdown-body&quot;&gt;
-    &lt;nav class=&quot;toc&quot;&gt;
-      &lt;details open&gt;
-        &lt;summary&gt;Contents&lt;/summary&gt;
-        &lt;ul&gt;
-          &lt;li&gt;&lt;a href=&quot;#section&quot;&gt;Section&lt;/a&gt;&lt;/li&gt;
-        &lt;/ul&gt;
-      &lt;/details&gt;
-    &lt;/nav&gt;
-    &lt;!-- rendered markdown --&gt;
-  &lt;/article&gt;
-  &lt;footer&gt;
-    &lt;!-- contents of footer.html, or an HTML comment if not set --&gt;
-  &lt;/footer&gt;
-&lt;/body&gt;
-</code></pre>
-<p>Key classes:</p>
-<table>
-<thead>
-<tr>
-<th>Class</th>
-<th>Element</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>site-header</code></td>
-<td><code>&lt;div&gt;</code></td>
-<td>Default header partial wrapper (customise in <code>header.html</code>)</td>
-</tr>
-<tr>
-<td><code>site-footer</code></td>
-<td><code>&lt;div&gt;</code></td>
-<td>Default footer partial wrapper (customise in <code>footer.html</code>)</td>
-</tr>
-<tr>
-<td><code>site-nav</code></td>
-<td><code>&lt;nav&gt;</code></td>
-<td>Sidebar navigation (auto-generated or from <code>nav.md</code>)</td>
-</tr>
-<tr>
-<td><code>nav-current</code></td>
-<td><code>&lt;li&gt;</code></td>
-<td>Currently active page</td>
-</tr>
-<tr>
-<td><code>markdown-body</code></td>
-<td><code>&lt;article&gt;</code></td>
-<td>Content area (docs layout) -- compatible with github-markdown-css</td>
-</tr>
-<tr>
-<td><code>blog-post</code></td>
-<td><code>&lt;article&gt;</code></td>
-<td>Content area (blog layout)</td>
-</tr>
-<tr>
-<td><code>toc</code></td>
-<td><code>&lt;nav&gt;</code></td>
-<td>Table of contents</td>
-</tr>
-<tr>
-<td><code>page-date</code></td>
-<td><code>&lt;time&gt;</code></td>
-<td>Date display (blog layout)</td>
-</tr>
-<tr>
-<td><code>retina</code></td>
-<td><code>&lt;img&gt;</code></td>
-<td>Retina-sized image</td>
-</tr>
-<tr>
-<td><code>missing-page</code></td>
-<td><code>&lt;p&gt;</code></td>
-<td>Placeholder page for unresolved wikilinks</td>
-</tr>
-</tbody>
-</table>
-<h2 id="cli-reference">CLI Reference</h2>
-<pre><code>asnotes-publish --input &lt;dir&gt; --output &lt;dir&gt; [options]
-asnotes-publish --config &lt;file&gt; [options]
-
-Options:
-  --config &lt;file&gt;           Load settings from a JSON config file
-  --stylesheet &lt;url|file&gt;   Add a stylesheet (repeatable)
-  --asset &lt;file&gt;            Copy a file to output (repeatable)
-  --default-public          Treat all pages as public unless public: false
-  --default-assets          Copy referenced assets unless assets: false
-  --layout &lt;name&gt;           Layout template: docs, blog, minimal (default: docs)
-  --layouts &lt;path&gt;          Directory containing editable layout templates
-  --includes &lt;path&gt;         Directory for custom headers and footers
-  --theme &lt;name&gt;            Built-in CSS theme: default, dark
-  --retina                  Enable retina image sizing globally
-  --base-url &lt;prefix&gt;       URL path prefix for links and assets
-  --include-drafts          Include pages with draft: true
-  --exclude &lt;dirname&gt;       Exclude a directory from scanning (repeatable)
-
-When --config is used, --input defaults to the config file's directory.
-CLI flags override config file values.
-
-Default excluded directories: templates, node_modules
-</code></pre>
+<p>Every page gets a table of contents generated from <code>h2</code>--<code>h4</code> headings, rendered as a collapsible <code>&lt;details&gt;</code> element.</p>
 <h2 id="config-file">Config File</h2>
-<p>Publish settings are stored in a JSON config file at the root of your notes directory (next to <code>.asnotes/</code>). Both the VS Code extension and the CLI read from this file.</p>
-<p>The default filename is <code>asnotes-publish.json</code>. When publishing from a subdirectory, the filename includes the directory name: <code>asnotes-publish.&lt;dirname&gt;.json</code> (e.g. <code>asnotes-publish.docs-src.json</code>). See <a href="#multi-site-publishing">Multi-Site Publishing</a> below.</p>
+<p>Publish settings are stored in a JSON config file. The VS Code wizard creates this automatically.</p>
 <h3 id="schema">Schema</h3>
 <pre><code class="language-json">{
     &quot;inputDir&quot;: &quot;&quot;,
+    &quot;outputDir&quot;: &quot;./docs-publish&quot;,
     &quot;defaultPublic&quot;: true,
     &quot;defaultAssets&quot;: true,
     &quot;layout&quot;: &quot;docs&quot;,
     &quot;layouts&quot;: &quot;./layouts&quot;,
     &quot;includes&quot;: &quot;./includes&quot;,
     &quot;theme&quot;: &quot;default&quot;,
-    &quot;baseUrl&quot;: &quot;/my-repo&quot;,
-    &quot;retina&quot;: false,
+    &quot;baseUrl&quot;: &quot;&quot;,
+    &quot;retina&quot;: true,
     &quot;includeDrafts&quot;: false,
-    &quot;stylesheets&quot;: [
-        &quot;https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css&quot;
-    ],
-    &quot;exclude&quot;: [&quot;drafts&quot;, &quot;archive&quot;],
-    &quot;outputDir&quot;: &quot;./site&quot;
+    &quot;siteTitle&quot;: &quot;My Docs&quot;,
+    &quot;stylesheets&quot;: [],
+    &quot;exclude&quot;: []
 }
 </code></pre>
-<p>The wizard writes all fields with their defaults so you can discover every available option by reading the file.</p>
 <table>
 <thead>
 <tr>
@@ -870,7 +579,13 @@ Default excluded directories: templates, node_modules
 <td><code>inputDir</code></td>
 <td>string</td>
 <td><code>&quot;&quot;</code></td>
-<td>Input directory relative to config file. Empty string means notes root</td>
+<td>Input directory (relative to config file)</td>
+</tr>
+<tr>
+<td><code>outputDir</code></td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>Output directory</td>
 </tr>
 <tr>
 <td><code>defaultPublic</code></td>
@@ -888,83 +603,70 @@ Default excluded directories: templates, node_modules
 <td><code>layout</code></td>
 <td>string</td>
 <td><code>&quot;docs&quot;</code></td>
-<td>Layout template: <code>docs</code>, <code>blog</code>, <code>minimal</code></td>
+<td>Layout: <code>docs</code>, <code>blog</code>, <code>minimal</code></td>
 </tr>
 <tr>
 <td><code>layouts</code></td>
 <td>string</td>
 <td><code>&quot;&quot;</code></td>
-<td>Directory containing editable layout templates</td>
+<td>Custom layouts directory</td>
 </tr>
 <tr>
 <td><code>includes</code></td>
 <td>string</td>
 <td><code>&quot;&quot;</code></td>
-<td>Directory for custom headers and footers</td>
+<td>Custom includes directory (header, footer, icon)</td>
 </tr>
 <tr>
 <td><code>theme</code></td>
 <td>string</td>
 <td><code>&quot;&quot;</code></td>
-<td>Built-in CSS theme: <code>default</code>, <code>dark</code></td>
+<td>Built-in theme: <code>default</code>, <code>dark</code></td>
 </tr>
 <tr>
 <td><code>baseUrl</code></td>
 <td>string</td>
 <td><code>&quot;&quot;</code></td>
-<td>URL path prefix for links and assets</td>
+<td>URL path prefix</td>
 </tr>
 <tr>
 <td><code>retina</code></td>
 <td>boolean</td>
-<td><code>false</code></td>
-<td>Enable retina image sizing globally</td>
+<td><code>true</code></td>
+<td>Retina image sizing</td>
 </tr>
 <tr>
 <td><code>includeDrafts</code></td>
 <td>boolean</td>
 <td><code>false</code></td>
-<td>Include pages with <code>draft: true</code></td>
+<td>Include draft pages</td>
+</tr>
+<tr>
+<td><code>siteTitle</code></td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>Site title (shown in header navbar)</td>
 </tr>
 <tr>
 <td><code>stylesheets</code></td>
 <td>string[]</td>
 <td><code>[]</code></td>
-<td>Stylesheet URLs or local file paths</td>
+<td>Stylesheet URLs or local paths</td>
 </tr>
 <tr>
 <td><code>exclude</code></td>
 <td>string[]</td>
 <td><code>[]</code></td>
-<td>Additional directory names to exclude</td>
-</tr>
-<tr>
-<td><code>outputDir</code></td>
-<td>string</td>
-<td><code>&quot;&quot;</code></td>
-<td>Output directory (relative to config file or absolute)</td>
+<td>Additional directories to exclude</td>
 </tr>
 </tbody>
 </table>
-<h3 id="using-config">Using --config</h3>
-<p>Pass <code>--config</code> to the CLI to load settings from the file:</p>
+<h3 id="using-the-config-file">Using the Config File</h3>
 <pre><code class="language-bash">asnotes-publish --config ./asnotes-publish.json
 </code></pre>
-<p>When <code>--config</code> is used:</p>
-<ul>
-<li><code>--input</code> defaults to <code>inputDir</code> from the config (resolved relative to the config file), then falls back to the config file's parent directory</li>
-<li><code>--output</code> defaults to the <code>outputDir</code> value in the config (resolved relative to the config file)</li>
-<li>CLI flags override any config file values</li>
-</ul>
-<p>This means a minimal CI/CD invocation with a config file is:</p>
-<pre><code class="language-bash">npx asnotes-publish --config ./asnotes-publish.json
-</code></pre>
-<p>You can override individual settings:</p>
-<pre><code class="language-bash">npx asnotes-publish --config ./asnotes-publish.json --include-drafts --output ./preview
-</code></pre>
+<p>CLI flags override config values. A minimal CI invocation is just the line above.</p>
 <h3 id="multi-site-publishing">Multi-Site Publishing</h3>
-<p>You can publish multiple sites from the same workspace by creating separate config files. Each config file targets a different input directory.</p>
-<p>The config filename is derived from the input directory name:</p>
+<p>Publish multiple sites from one workspace by creating separate config files. The filename includes the input directory name:</p>
 <table>
 <thead>
 <tr>
@@ -978,39 +680,63 @@ Default excluded directories: templates, node_modules
 <td><code>asnotes-publish.json</code></td>
 </tr>
 <tr>
-<td><code>./docs-src</code></td>
-<td><code>asnotes-publish.docs-src.json</code></td>
+<td><code>./docs</code></td>
+<td><code>asnotes-publish.docs.json</code></td>
 </tr>
 <tr>
 <td><code>./blog</code></td>
 <td><code>asnotes-publish.blog.json</code></td>
 </tr>
-<tr>
-<td><code>./pages</code></td>
-<td><code>asnotes-publish.pages.json</code></td>
-</tr>
 </tbody>
 </table>
-<p>For example, a workspace with both documentation and a blog might have:</p>
-<pre><code>my-notes/
-  .asnotes/
-  asnotes-publish.docs-src.json    # publishes docs-src/ to site/
-  asnotes-publish.blog.json        # publishes blog/ to blog-site/
-  docs-src/
-    pages/
-      Getting Started.md
-      ...
-  blog/
-    2025-01-01 First Post.md
-    ...
+<p>Build each separately:</p>
+<pre><code class="language-bash">asnotes-publish --config ./asnotes-publish.docs.json
+asnotes-publish --config ./asnotes-publish.blog.json
 </code></pre>
-<p>Build each site separately:</p>
-<pre><code class="language-bash">npx asnotes-publish --config ./asnotes-publish.docs-src.json
-npx asnotes-publish --config ./asnotes-publish.blog.json
+<p>The VS Code extension discovers all config files and shows a picker when multiple exist.</p>
+<h2 id="vs-code-integration">VS Code Integration</h2>
+<h3 id="setup-wizard">Setup Wizard</h3>
+<p>Run <strong>AS Notes: Publish to HTML</strong> with no existing config to launch the wizard:</p>
+<ol>
+<li><strong>Template set</strong> -- tailwind (modern, auto light/dark) or github (classic)</li>
+<li><strong>Input directory</strong> -- notes root or a subdirectory</li>
+<li><strong>Output directory</strong> -- where to write HTML</li>
+<li><strong>Base URL</strong> -- path prefix for deployed site</li>
+<li><strong>Default public</strong> -- publish all pages by default?</li>
+<li><strong>Default assets</strong> -- copy images and files?</li>
+<li><strong>Layout</strong> -- docs, blog, or minimal</li>
+<li><strong>Theme</strong> -- available themes depend on chosen template set</li>
+<li><strong>Themes directory</strong> -- create editable theme CSS, browse, or skip</li>
+<li><strong>Layouts directory</strong> -- create editable layouts, browse, or skip</li>
+<li><strong>Includes directory</strong> -- create header/footer/icon files, browse, or skip</li>
+<li><strong>Site title</strong> -- text shown in the header navbar</li>
+</ol>
+<p>Settings are saved to the appropriate config file. Subsequent runs skip the wizard.</p>
+<h3 id="reconfigure">Reconfigure</h3>
+<p>Run <strong>AS Notes: Configure Publish Settings</strong> to change settings without building.</p>
+<h2 id="cli-reference">CLI Reference</h2>
+<pre><code>asnotes-publish --input &lt;dir&gt; --output &lt;dir&gt; [options]
+asnotes-publish --config &lt;file&gt; [options]
+
+Options:
+  --config &lt;file&gt;           Load settings from a JSON config file
+  --stylesheet &lt;url|file&gt;   Add a stylesheet (repeatable)
+  --asset &lt;file&gt;            Copy a file to output (repeatable)
+  --default-public          Treat all pages as public unless public: false
+  --default-assets          Copy referenced assets unless assets: false
+  --layout &lt;name&gt;           Layout: docs, blog, minimal (default: docs)
+  --layouts &lt;path&gt;          Custom layout templates directory
+  --includes &lt;path&gt;         Custom includes directory (header, footer, icon)
+  --theme &lt;name&gt;            Built-in theme: default, dark
+  --themes &lt;path&gt;           Custom theme CSS directory
+  --retina                  Enable retina image sizing (on by default)
+  --no-retina               Disable retina image sizing
+  --base-url &lt;prefix&gt;       URL path prefix for links and assets
+  --include-drafts          Include pages with draft: true
+  --exclude &lt;dirname&gt;       Exclude a directory (repeatable)
 </code></pre>
-<p>The VS Code extension discovers all config files automatically and shows a picker when multiple exist.</p>
-<h3 id="settings-to-cli-flag-mapping">Settings to CLI Flag Mapping</h3>
-<p>If you prefer CLI flags over a config file, here is the mapping:</p>
+<p>CLI flags override config file values. Default excluded directories: <code>templates</code>, <code>node_modules</code>.</p>
+<h3 id="config-to-cli-mapping">Config to CLI Mapping</h3>
 <table>
 <thead>
 <tr>
@@ -1021,7 +747,11 @@ npx asnotes-publish --config ./asnotes-publish.blog.json
 <tbody>
 <tr>
 <td><code>inputDir</code></td>
-<td><code>--input &lt;dir&gt;</code></td>
+<td><code>--input</code></td>
+</tr>
+<tr>
+<td><code>outputDir</code></td>
+<td><code>--output</code></td>
 </tr>
 <tr>
 <td><code>defaultPublic</code></td>
@@ -1033,27 +763,27 @@ npx asnotes-publish --config ./asnotes-publish.blog.json
 </tr>
 <tr>
 <td><code>layout</code></td>
-<td><code>--layout &lt;name&gt;</code></td>
+<td><code>--layout</code></td>
 </tr>
 <tr>
 <td><code>layouts</code></td>
-<td><code>--layouts &lt;path&gt;</code></td>
+<td><code>--layouts</code></td>
 </tr>
 <tr>
 <td><code>includes</code></td>
-<td><code>--includes &lt;path&gt;</code></td>
+<td><code>--includes</code></td>
 </tr>
 <tr>
 <td><code>theme</code></td>
-<td><code>--theme &lt;name&gt;</code></td>
-</tr>
-<tr>
-<td><code>baseUrl</code></td>
-<td><code>--base-url &lt;prefix&gt;</code></td>
+<td><code>--theme</code></td>
 </tr>
 <tr>
 <td><code>retina</code></td>
-<td><code>--retina</code></td>
+<td><code>--retina</code> / <code>--no-retina</code></td>
+</tr>
+<tr>
+<td><code>baseUrl</code></td>
+<td><code>--base-url</code></td>
 </tr>
 <tr>
 <td><code>includeDrafts</code></td>
@@ -1061,51 +791,32 @@ npx asnotes-publish --config ./asnotes-publish.blog.json
 </tr>
 <tr>
 <td><code>stylesheets</code></td>
-<td><code>--stylesheet &lt;url&gt;</code> (repeatable)</td>
+<td><code>--stylesheet</code> (repeatable)</td>
 </tr>
 <tr>
 <td><code>exclude</code></td>
-<td><code>--exclude &lt;dirname&gt;</code> (repeatable)</td>
-</tr>
-<tr>
-<td><code>outputDir</code></td>
-<td><code>--output &lt;dir&gt;</code></td>
+<td><code>--exclude</code> (repeatable)</td>
 </tr>
 </tbody>
 </table>
-<h2 id="vs-code-integration">VS Code Integration</h2>
-<h3 id="publish-command">Publish Command</h3>
-<p>Use the command palette (<code>Ctrl+Shift+P</code>) and run <strong>AS Notes: Publish to HTML</strong>.</p>
-<p>If no publish config exists, a setup wizard walks you through:</p>
+<h2 id="deploying">Deploying</h2>
+<p>All examples below assume a publish config file in your repository. The wizard creates one for you, or you can write it by hand:</p>
+<pre><code class="language-json">{
+    &quot;inputDir&quot;: &quot;./docs&quot;,
+    &quot;outputDir&quot;: &quot;./docs-publish&quot;,
+    &quot;defaultPublic&quot;: true,
+    &quot;defaultAssets&quot;: true,
+    &quot;layout&quot;: &quot;docs&quot;,
+    &quot;theme&quot;: &quot;default&quot;
+}
+</code></pre>
+<p>The <code>outputDir</code> must match the publish/artifact path in your deploy config.</p>
+<h3 id="github-pages">GitHub Pages</h3>
 <ol>
-<li><strong>Input directory</strong> -- notes root or a subdirectory</li>
-<li><strong>Default public</strong> -- publish all pages by default?</li>
-<li><strong>Default assets</strong> -- copy referenced images and files?</li>
-<li><strong>Layout</strong> -- docs, blog, or minimal</li>
-<li><strong>Theme</strong> -- default, dark, or none</li>
-<li><strong>Base URL</strong> -- path prefix for deployed site</li>
-<li><strong>Output directory</strong> -- where to write the HTML</li>
-<li><strong>Layouts directory</strong> -- create default editable layouts, browse for an existing directory, or skip</li>
-<li><strong>Includes directory</strong> -- create default includes, browse for an existing directory, or skip</li>
+<li>Go to <strong>Settings &gt; Pages</strong> and set the source to <strong>GitHub Actions</strong></li>
+<li>Add <code>.github/workflows/pages.yml</code>:</li>
 </ol>
-<p>The wizard saves your choices to the appropriate config file (e.g. <code>asnotes-publish.json</code> or <code>asnotes-publish.docs-src.json</code>). All fields are written with defaults so you can discover every option by reading the JSON file.</p>
-<p>On subsequent runs with a single config, the converter uses the saved settings immediately -- no wizard, no prompts. With multiple config files, a picker lets you choose which site to publish or create a new configuration.</p>
-<h3 id="configure-publish-settings">Configure Publish Settings</h3>
-<p>To change your publish settings without building, run <strong>AS Notes: Configure Publish Settings</strong> from the command palette. This shows a picker of existing configs to edit or creates a new one. If you change the input directory, the config file is renamed automatically to match.</p>
-<p>You can also edit config files directly -- they are standard JSON.</p>
-<pre><code>
-## Publishing to GitHub Pages
-
-### 1. Enable GitHub Pages
-
-In your repository, go to **Settings &gt; Pages** and set the source to **GitHub Actions**.
-
-### 2. Add a CI Workflow
-
-Create `.github/workflows/pages.yml`:
-
-```yaml
-name: Deploy to GitHub Pages
+<pre><code class="language-yaml">name: Deploy to GitHub Pages
 
 on:
   push:
@@ -1115,6 +826,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -1125,236 +837,206 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npx asnotes-publish --config ./asnotes-publish.json --base-url /${{ github.event.repository.name }}
+      - run: npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs-publish
       - id: deployment
         uses: actions/deploy-pages@v4
 </code></pre>
-<p>Adjust <code>--config</code> path and any flag overrides to match your repository layout. The <code>--base-url</code> override is needed for GitHub Pages subdirectory deployment. All other settings come from <code>asnotes-publish.json</code>.</p>
-<p>Alternatively, you can use explicit flags instead of a config file:</p>
-<pre><code class="language-yaml">      - run: &gt;
-          npx asnotes-publish
-          --input ./notes
-          --output ./site
-          --default-public
-          --default-assets
-          --theme default
-          --base-url /${{ github.event.repository.name }}
-</code></pre>
-<h3 id="custom-domain">Custom Domain</h3>
-<p>To serve from a custom domain (e.g. <code>docs.example.com</code>):</p>
-<ol>
-<li>
-<p>Add a DNS <code>CNAME</code> record pointing to <code>&lt;your-github-username&gt;.github.io</code></p>
-</li>
-<li>
-<p>Add a step after the convert step to write the <code>CNAME</code> file (the converter wipes output on each run):</p>
-<pre><code class="language-yaml">- run: echo &quot;docs.example.com&quot; &gt; ./site/CNAME
-</code></pre>
-</li>
-<li>
-<p>Enter the domain in <strong>Settings &gt; Pages &gt; Custom domain</strong> and enable <strong>Enforce HTTPS</strong></p>
-</li>
-<li>
-<p>Remove <code>--base-url</code> since you're serving from the domain root</p>
-</li>
-</ol>
-<h2 id="publishing-to-netlify">Publishing to Netlify</h2>
-<h3 id="1-create-a-netlifytoml">1. Create a <code>netlify.toml</code></h3>
-<p>Add this to your repository root:</p>
+<h3 id="netlify">Netlify</h3>
+<p>Add <code>netlify.toml</code> to your repo root:</p>
 <pre><code class="language-toml">[build]
   command = &quot;npx asnotes-publish --config ./asnotes-publish.json&quot;
-  publish = &quot;site&quot;
+  publish = &quot;docs-publish&quot;
 
 [build.environment]
   NODE_VERSION = &quot;20&quot;
 </code></pre>
-<h3 id="2-connect-your-repository">2. Connect Your Repository</h3>
-<ol>
-<li>Log in to <a href="https://www.netlify.com">Netlify</a> and click <strong>Add new site &gt; Import an existing project</strong></li>
-<li>Connect your Git provider and select your repository</li>
-<li>Netlify auto-detects the <code>netlify.toml</code> settings</li>
-<li>Click <strong>Deploy site</strong></li>
-</ol>
-<p>Netlify automatically builds and deploys on every push. No <code>--base-url</code> is needed since Netlify serves from the domain root.</p>
-<h3 id="custom-domain">Custom Domain</h3>
-<p>In <strong>Site settings &gt; Domain management</strong>, add your custom domain and follow Netlify's DNS instructions.</p>
-<h2 id="publishing-to-vercel">Publishing to Vercel</h2>
-<h3 id="1-configure-vercel">1. Configure Vercel</h3>
-<p>Create <code>vercel.json</code> in your repository root:</p>
+<p>Connect your repository in Netlify. No <code>--base-url</code> needed.</p>
+<h3 id="vercel">Vercel</h3>
+<p>Add <code>vercel.json</code> to your repo root:</p>
 <pre><code class="language-json">{
     &quot;buildCommand&quot;: &quot;npx asnotes-publish --config ./asnotes-publish.json&quot;,
-    &quot;outputDirectory&quot;: &quot;site&quot;,
+    &quot;outputDirectory&quot;: &quot;docs-publish&quot;,
     &quot;framework&quot;: null
 }
 </code></pre>
-<h3 id="2-connect-your-repository">2. Connect Your Repository</h3>
+<p>Import your repository in Vercel.</p>
+<h3 id="cloudflare-pages">Cloudflare Pages</h3>
 <ol>
-<li>Log in to <a href="https://vercel.com">Vercel</a> and click <strong>Add New &gt; Project</strong></li>
-<li>Import your Git repository</li>
-<li>Vercel reads <code>vercel.json</code> for build settings</li>
-<li>Click <strong>Deploy</strong></li>
+<li>Go to <strong>Compute &gt; Workers &amp; Pages &gt; Create application &gt; Pages &gt; Connect to Git</strong></li>
+<li>Set the build command to <code>npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json</code></li>
+<li>Set the root directory to match the relative path of your AS Notes managed directory (this may be the root of your repository or a subdirectory depending on your initial configuration).</li>
+<li>Add a <code>NODE_VERSION = 20</code> environment variable</li>
 </ol>
-<p>Vercel deploys on every push and provides a preview URL for each branch.</p>
-<h2 id="publishing-to-cloudflare-pages">Publishing to Cloudflare Pages</h2>
-<h3 id="1-connect-your-repository">1. Connect Your Repository</h3>
-<ol>
-<li>Log in to the <a href="https://dash.cloudflare.com">Cloudflare dashboard</a> and go to <strong>Compute &gt; Workers &amp; Pages</strong></li>
-<li>Click <strong>Create application &gt; Pages &gt; Connect to Git</strong></li>
-<li>Select your repository</li>
-</ol>
-<h3 id="2-configure-build-settings">2. Configure Build Settings</h3>
-<p>In <strong>Build configuration</strong>, set the following:</p>
+<p>If your config file is in a subdirectory, set the <strong>Root directory</strong> to that subdirectory. All relative paths in the config resolve from the root directory.</p>
+<p><img src="assets/cloudflare-pages-configuration.png" alt="Cloudflare AS Notes configuration" class="retina" width="708"></p>
+<h4 id="multiple-sites-on-cloudflare-pages">Multiple Sites on Cloudflare Pages</h4>
+<p>To deploy multiple publish configs (e.g. docs and a blog) from the same AS Notes managed directory, use Wrangler environments. Each environment gets its own Cloudflare Workers deployment with a separate asset directory.</p>
+<p>Add a <code>wrangler.jsonc</code> to your AS Notes managed directory:</p>
+<pre><code class="language-jsonc">{
+  &quot;$schema&quot;: &quot;node_modules/wrangler/config-schema.json&quot;,
+  &quot;name&quot;: &quot;my-project&quot;,
+  &quot;compatibility_date&quot;: &quot;2026-05-08&quot;,
+  &quot;compatibility_flags&quot;: [&quot;nodejs_compat&quot;],
+  &quot;env&quot;: {
+    &quot;docs&quot;: {
+      &quot;name&quot;: &quot;my-project-docs&quot;,
+      &quot;assets&quot;: {
+        &quot;directory&quot;: &quot;docs-publish&quot;
+      }
+    },
+    &quot;blog&quot;: {
+      &quot;name&quot;: &quot;my-project-blog&quot;,
+      &quot;assets&quot;: {
+        &quot;directory&quot;: &quot;blog-publish&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<p>Build both sites, then deploy each with its environment flag:</p>
+<pre><code class="language-bash">npx asnotes-publish --config ./asnotes-publish.docs.json
+npx asnotes-publish --config ./asnotes-publish.blog.json
+wrangler deploy --env docs   # → my-project-docs.workers.dev
+wrangler deploy --env blog   # → my-project-blog.workers.dev
+</code></pre>
+<p>Each environment creates an independent deployment. You can bind custom domains to each in the Cloudflare dashboard.</p>
+<h2 id="html-structure-reference">HTML Structure Reference</h2>
+<p>The <code>docs</code> layout produces this structure:</p>
+<pre><code class="language-html">&lt;body&gt;
+  &lt;header&gt;&lt;!-- header.html contents --&gt;&lt;/header&gt;
+  &lt;nav class=&quot;site-nav&quot;&gt;
+    &lt;ul&gt;
+      &lt;li&gt;&lt;a href=&quot;index.html&quot;&gt;Home&lt;/a&gt;&lt;/li&gt;
+      &lt;li class=&quot;nav-current&quot;&gt;&lt;a href=&quot;my-page.html&quot;&gt;My Page&lt;/a&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/nav&gt;
+  &lt;article class=&quot;markdown-body&quot;&gt;
+    &lt;nav class=&quot;toc&quot;&gt;
+      &lt;details open&gt;
+        &lt;summary&gt;Contents&lt;/summary&gt;
+        &lt;ul&gt;&lt;li&gt;&lt;a href=&quot;#section&quot;&gt;Section&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
+      &lt;/details&gt;
+    &lt;/nav&gt;
+    &lt;!-- rendered markdown --&gt;
+  &lt;/article&gt;
+  &lt;footer&gt;&lt;!-- footer.html contents --&gt;&lt;/footer&gt;
+&lt;/body&gt;
+</code></pre>
+<p>Key CSS classes:</p>
 <table>
 <thead>
 <tr>
-<th>Setting</th>
-<th>Value</th>
+<th>Class</th>
+<th>Element</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Build command</td>
-<td><code>npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json</code></td>
+<td><code>site-header</code></td>
+<td><code>&lt;div&gt;</code></td>
+<td>Header partial wrapper</td>
 </tr>
 <tr>
-<td>Build output directory</td>
-<td>The <code>outputDir</code> value from your config file (e.g. <code>site</code>)</td>
+<td><code>site-footer</code></td>
+<td><code>&lt;div&gt;</code></td>
+<td>Footer partial wrapper</td>
 </tr>
 <tr>
-<td>Root directory</td>
-<td>The directory containing your config file (leave empty if at repo root)</td>
+<td><code>site-nav</code></td>
+<td><code>&lt;nav&gt;</code></td>
+<td>Navigation sidebar</td>
+</tr>
+<tr>
+<td><code>nav-current</code></td>
+<td><code>&lt;li&gt;</code></td>
+<td>Active page in nav</td>
+</tr>
+<tr>
+<td><code>markdown-body</code></td>
+<td><code>&lt;article&gt;</code></td>
+<td>Content area (docs layout)</td>
+</tr>
+<tr>
+<td><code>blog-post</code></td>
+<td><code>&lt;article&gt;</code></td>
+<td>Content area (blog layout)</td>
+</tr>
+<tr>
+<td><code>blog-home-link</code></td>
+<td><code>&lt;nav&gt;</code></td>
+<td>Back-to-index link (blog posts)</td>
+</tr>
+<tr>
+<td><code>post-title</code></td>
+<td><code>&lt;h1&gt;</code></td>
+<td>Post title (blog layout)</td>
+</tr>
+<tr>
+<td><code>blog-recent</code></td>
+<td><code>&lt;section&gt;</code></td>
+<td>Recent posts section on blog index</td>
+</tr>
+<tr>
+<td><code>blog-cards</code></td>
+<td><code>&lt;div&gt;</code></td>
+<td>Card grid container for recent posts</td>
+</tr>
+<tr>
+<td><code>blog-card</code></td>
+<td><code>&lt;div&gt;</code></td>
+<td>Individual post card (title, date, excerpt)</td>
+</tr>
+<tr>
+<td><code>blog-card-meta</code></td>
+<td><code>&lt;div&gt;</code></td>
+<td>Date/metadata inside a card</td>
+</tr>
+<tr>
+<td><code>blog-card-excerpt</code></td>
+<td><code>&lt;p&gt;</code></td>
+<td>Excerpt text inside a card</td>
+</tr>
+<tr>
+<td><code>blog-year-posts</code></td>
+<td><code>&lt;section&gt;</code></td>
+<td>Year group section on blog index</td>
+</tr>
+<tr>
+<td><code>blog-post-list</code></td>
+<td><code>&lt;ul&gt;</code></td>
+<td>Compact date + title post list</td>
+</tr>
+<tr>
+<td><code>blog-archives</code></td>
+<td><code>&lt;section&gt;</code></td>
+<td>Archive section on blog index</td>
+</tr>
+<tr>
+<td><code>toc</code></td>
+<td><code>&lt;nav&gt;</code></td>
+<td>Table of contents</td>
+</tr>
+<tr>
+<td><code>page-date</code></td>
+<td><code>&lt;time&gt;</code></td>
+<td>Date display</td>
+</tr>
+<tr>
+<td><code>retina</code></td>
+<td><code>&lt;img&gt;</code></td>
+<td>Retina image</td>
+</tr>
+<tr>
+<td><code>site-icon</code></td>
+<td><code>&lt;img&gt;</code></td>
+<td>Raster site icon (SVG icons are inlined)</td>
 </tr>
 </tbody>
 </table>
-<p>Under <strong>Variables and secrets</strong>, add:</p>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>NODE_VERSION</code></td>
-<td><code>20</code></td>
-</tr>
-</tbody>
-</table>
-<h3 id="root-directory">Root Directory</h3>
-<p>The <strong>Root directory</strong> setting controls the working directory for the build. Cloudflare changes to this directory before running the build command. All relative paths in your config file (inputDir, outputDir, layouts, includes, themes) resolve from there.</p>
-<p>If your config file is at the repository root, leave Root directory empty. If your config file lives in a subdirectory, set Root directory to that subdirectory.</p>
-<p><strong>Example: config at repo root</strong></p>
-<pre><code>my-notes/
-  asnotes-publish.json       # inputDir: &quot;./notes&quot;, outputDir: &quot;./site&quot;
-  notes/
-    Getting Started.md
-</code></pre>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Root directory</td>
-<td><em>(empty)</em></td>
-</tr>
-<tr>
-<td>Build command</td>
-<td><code>npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json</code></td>
-</tr>
-<tr>
-<td>Build output directory</td>
-<td><code>site</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Example: config in a subdirectory</strong></p>
-<pre><code>my-repo/
-  docs-src/
-    asnotes-publish.blog.json   # inputDir: &quot;./blog&quot;, outputDir: &quot;./blog-publish&quot;
-    blog/
-      Welcome Post.md
-</code></pre>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Root directory</td>
-<td><code>/docs-src</code></td>
-</tr>
-<tr>
-<td>Build command</td>
-<td><code>npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.blog.json</code></td>
-</tr>
-<tr>
-<td>Build output directory</td>
-<td><code>blog-publish</code></td>
-</tr>
-</tbody>
-</table>
-<p>The <code>--config</code> path and Build output directory are both relative to the Root directory. If Root directory is wrong, the build will fail because Cloudflare cannot find the config file or its referenced directories.</p>
-<p>Click <strong>Save and Deploy</strong>. Cloudflare Pages deploys on every push with automatic preview deployments for branches. No <code>--base-url</code> is needed since Cloudflare Pages serves from the domain root.</p>
-<h2 id="writing-a-custom-layout-css">Writing a Custom Layout CSS</h2>
-<p>This documentation site uses a two-column grid layout. Save this as <code>layout.css</code>:</p>
-<pre><code class="language-css">*, *::before, *::after { box-sizing: border-box; }
-
-body {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-nav.site-nav {
-  background: #f6f8fa;
-  border-right: 1px solid #d0d7de;
-  padding: 1.5rem 1rem;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-}
-
-nav.site-nav ul { list-style: none; margin: 0; padding: 0; }
-
-nav.site-nav a {
-  display: block;
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
-  text-decoration: none;
-  color: #24292f;
-  font-size: 0.875rem;
-}
-
-nav.site-nav a:hover { background: #eaeef2; color: #0550ae; }
-nav.site-nav .nav-current a { background: #ddf4ff; color: #0550ae; font-weight: 600; }
-
-article.markdown-body { padding: 2rem 3rem; max-width: 900px; }
-
-@media (max-width: 700px) {
-  body { grid-template-columns: 1fr; }
-  nav.site-nav { position: relative; height: auto; border-right: none; border-bottom: 1px solid #d0d7de; }
-  article.markdown-body { padding: 1.5rem; }
-}
-</code></pre>
-<p>Then convert:</p>
-<pre><code class="language-bash">npm run convert -- \
-  --input ./notes --output ./site \
-  --default-public --default-assets \
-  --stylesheet /path/to/layout.css
-</code></pre>
 
     </article>
 <footer>

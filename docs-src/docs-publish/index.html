@@ -4,13 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home</title>
-    <link rel="stylesheet" href="theme-dark.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="theme-default.css">
+    <link rel="stylesheet" href="retina.css">
 </head>
 <body data-layout="docs">
 <header>
 <div class="site-header">
     <a class="site-title" href="/">
         <svg class="site-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191.82 166.13" width="24" height="21"><path fill="currentColor" fill-rule="evenodd" d="M67.09,132.92,47.93,166.13H9.59L0,149.52,86.33,0H105.5L19.17,149.52H38.34l19.17-33.2h76.8l9.59,16.6Zm48-83.12,9.65,16.71H143.9L115.08,16.6q-24,41.57-48,83.12H143.9q14.37,24.9,28.76,49.8h-96l-9.59,16.61H182.24l9.58-16.61-38.34-66.4H96C95.85,82.9,113.39,52.73,115.08,49.8Z"/></svg>
+
+        
     </a>
 </div>
 
@@ -20,18 +27,25 @@
     <nav class="site-nav">
       <ul>
         <li class="nav-current"><a href="index.html">Home</a></li>
-        <li><a href="backlinks.html">Backlinks</a></li>
-        <li><a href="daily-journal.html">Daily Journal</a></li>
-        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
         <li><a href="getting-started.html">Getting Started</a></li>
-        <li><a href="images-and-files.html">Images and Files</a></li>
-        <li><a href="licence.html">Licence</a></li>
-        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
-        <li><a href="settings.html">Settings</a></li>
-        <li><a href="slash-commands.html">Slash Commands</a></li>
-        <li><a href="task-management.html">Task Management</a></li>
-        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="why-as-notes.html">Why AS Notes</a></li>
         <li><a href="wikilinks.html">Wikilinks</a></li>
+        <li><a href="backlinks.html">Backlinks</a></li>
+        <li><a href="task-management.html">Task Management</a></li>
+        <li><a href="daily-journal.html">Daily Journal</a></li>
+        <li><a href="kanban-board.html">Kanban Board</a></li>
+        <li><a href="slash-commands.html">Slash Commands</a></li>
+        <li><a href="images-and-files.html">Images and Files</a></li>
+        <li><a href="inline-markdown-editing-mermaid-and-latex-rendering.html">Inline Markdown Editing Mermaid and LaTeX Rendering</a></li>
+        <li><a href="publishing-a-static-site.html">Publishing a Static Site</a></li>
+        <li><a href="encrypted-notes.html">Encrypted Notes</a></li>
+        <li><a href="settings.html">Settings</a></li>
+        <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        <li><a href="editing-github-wikis.html">Editing GitHub Wikis</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="markdown-editing.html">Markdown Editing</a></li>
+        <li><a href="development-roadmap.html">Development Roadmap</a></li>
+        <li><a href="licence.html">Licence</a></li>
       </ul>
     </nav>
     <article class="markdown-body">
@@ -39,37 +53,37 @@
       <details open>
         <summary>Contents</summary>
         <ul>
+          <li><a href="#getting-started">Getting Started</a></li>
           <li><a href="#why-vs-code">Why VS Code?</a></li>
           <li><a href="#features-at-a-glance">Features at a Glance</a></li>
                     <li><a href="#free">Free</a></li>
                     <li><a href="#pro">Pro</a></li>
-                    <li><a href="#task-features">Task Features</a></li>
-          <li><a href="#getting-started">Getting Started</a></li>
+          <li><a href="#development-roadmap">Development Roadmap</a></li>
           <li><a href="#privacy">Privacy</a></li>
           <li><a href="#licence">Licence</a></li>
         </ul>
       </details>
     </nav>
 <h1 id="as-notes">AS Notes</h1>
+<p>AS Notes brings markdown and <a href="wikilink.html" class="wikilink">wikilink</a> editing for notes, documentation, blogs and wikis directly into VS Code and compatible editors (e.g. Antigravity, Cursor, Windsurf).</p>
+<p><strong>Capture ideas, link concepts, write, and stay focused - without ever leaving your editor.</strong></p>
 <blockquote>
-<p><strong>This documentation was written and generated using AS Notes. See <a href="publishing-a-static-site.html" class="wikilink">Publishing a Static Site</a> for how you can use AS Notes for your docs, including deploying to GitHub Pages</strong>.</p>
-</blockquote>
-<p>AS Notes is a VS Code extension that turns your editor into a Personal Knowledge Management System (PKMS). It brings <a href="wikilinks.html" class="wikilink">Wikilinks</a>, backlinks, daily journaling, encrypted notes, and a task panel — all without ever sending your data anywhere.</p>
-<blockquote>
-<p><strong>Install:</strong> <a href="https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes">https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes</a></p>
+<p><strong>This documentation was written and generated using AS Notes. See <a href="publishing-a-static-site.html" class="wikilink">Publishing a Static Site</a> for how you can use AS Notes for your docs, including deploying to GitHub Pages, Cloudflare and More</strong>.</p>
 </blockquote>
 <blockquote>
-<p><strong>GitHub:</strong> <a href="https://github.com/appsoftwareltd/as-notes">https://github.com/appsoftwareltd/as-notes</a></p>
+<p><strong>Install:</strong> <a href="https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes">Visual Studio Marketplace</a> / <a href="https://open-vsx.org/extension/appsoftwareltd/as-notes">Open VSX</a>
+<strong>GitHub:</strong> <a href="https://github.com/appsoftwareltd/as-notes">github.com/appsoftwareltd/as-notes</a></p>
 </blockquote>
-<p><img src="assets/images/as-notes-editor-screenshot.png" alt="AS Notes editor screenshot"></p>
+<p><img src="assets/images/as-notes-editor-screenshot.png" alt="AS Notes editor screenshot" class="retina" width="855"></p>
+<h2 id="getting-started">Getting Started</h2>
+<p>If you've already installed AS Notes and want to get started, see <a href="getting-started.html" class="wikilink">Getting Started</a>.</p>
 <h2 id="why-vs-code">Why VS Code?</h2>
-<p>Using VS Code as your notes app gives you a huge amount for free before you even start using AS Notes features:</p>
+<p>Using VS Code as your notes app gives you a huge amount for free in addition the features that AS Notes provides:</p>
 <ul>
-<li>Cross-platform and web-based (via VS Code Workspaces)</li>
+<li>Cross-platform compatibility and web access (via VS Code Workspaces)</li>
 <li>Tabs, file explorer, themes, keyboard shortcuts</li>
-<li>A vast extension library — Mermaid diagrams, Vim mode, and more, all usable alongside AS Notes</li>
+<li>A vast extension library</li>
 <li>AI chat (GitHub Copilot, Claude, etc.) to query and work with your notes</li>
-<li>Outliner-style indentation via <code>Ctrl+[</code> / <code>Ctrl+]</code></li>
 <li>Syntax highlighting for code embedded in your notes</li>
 </ul>
 <h2 id="features-at-a-glance">Features at a Glance</h2>
@@ -103,6 +117,10 @@
 <td>Insert code blocks, dates, and task tags — type <code>/</code> to open the menu</td>
 </tr>
 <tr>
+<td><a href="markdown-editing.html" class="wikilink">Markdown Editing</a></td>
+<td>Code block completion and other markdown editing tools</td>
+</tr>
+<tr>
 <td><a href="images-and-files.html" class="wikilink">Images and Files</a></td>
 <td>Drag and drop images, paste from clipboard, hover to preview</td>
 </tr>
@@ -122,27 +140,30 @@
 </thead>
 <tbody>
 <tr>
-<td><a href="slash-commands.html" class="wikilink">Slash Commands</a> (Tables)</td>
+<td><a href="templates.html" class="wikilink">Templates</a></td>
+<td>Create reusable note templates with placeholders and insert them via the slash menu</td>
+</tr>
+<tr>
+<td><a href="markdown-editing.html" class="wikilink">Markdown Editing</a> (Tables)</td>
 <td>Insert and edit markdown tables directly from the slash menu</td>
 </tr>
 <tr>
 <td><a href="encrypted-notes.html" class="wikilink">Encrypted Notes</a></td>
 <td>Store sensitive notes in AES-256-GCM encrypted <code>.enc.md</code> files</td>
 </tr>
+<tr>
+<td><a href="inline-markdown-editing-mermaid-and-latex-rendering.html" class="wikilink">Inline Markdown Editing Mermaid and LaTeX Rendering</a></td>
+<td>Inline markdown editor styling and presentation including Lermaid diagrams and LaTex math</td>
+</tr>
 </tbody>
 </table>
 <p>Obtain a Pro licence key at <a href="https://www.asnotes.io/pricing">asnotes.io/pricing</a>.</p>
-<h3 id="task-features">Task Features</h3>
-<p>Task tags help you to organise and prioritise tags:</p>
-<ul class="task-list">
-<li class="task-list-item"><input type="checkbox" disabled> <span class="task-tag priority-1">Priority 1</span> <span class="task-tag waiting">Waiting</span> <span class="task-tag due-date">Due 2026-03-11</span> A very important thing I'm waiting on</li>
-</ul>
-<h2 id="getting-started">Getting Started</h2>
-<p>New here? Start with <a href="getting-started.html" class="wikilink">Getting Started</a> to install and initialise your first workspace.</p>
+<h2 id="development-roadmap">Development Roadmap</h2>
+<p>See our <a href="development-roadmap.html" class="wikilink">Development Roadmap</a> to see what's coming next.</p>
 <h2 id="privacy">Privacy</h2>
 <p>AS Notes is privacy-first. It never connects to external servers. All indexing, search, and backlink tracking runs entirely on your machine using an embedded SQLite database (<code>.asnotes/index.db</code>), and your notes never leave your device.</p>
 <h2 id="licence">Licence</h2>
-<p>See <a href="licence-rationale.html" class="wikilink">Licence Rationale</a> for an explanation of the source-available licence model.</p>
+<p>See <a href="licence.html" class="wikilink">Licence</a></p>
 
     </article>
 <footer>
