@@ -2,6 +2,9 @@
 .asnotes/
 .asnotesignore
 
+docs-publish/
+blog-publish/
+
 # wrangler files
 .wrangler
 .dev.vars*
