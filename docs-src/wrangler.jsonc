@@ -1,14 +1,25 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "as-notes",
-  "compatibility_date": "2025-09-27",
+  "compatibility_date": "2026-05-08",
   "observability": {
     "enabled": true
   },
-  "assets": {
-    "directory": "blog-publish"
-  },
   "compatibility_flags": [
     "nodejs_compat"
-  ]
+  ],
+  "env": {
+    "user": {
+      "name": "as-notes-docs",
+      "assets": {
+        "directory": "docs-publish"
+      }
+    },
+    "blog": {
+      "name": "as-notes-blog",
+      "assets": {
+        "directory": "blog-publish"
+      }
+    }
+  }
 }
