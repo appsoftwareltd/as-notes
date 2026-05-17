@@ -3,6 +3,7 @@ title: AS Notes - A Static Site Generator in your Markdown Knowledgebase.md
 description: AS Notes brings wikilink-style note-taking into VS Code. Capture ideas, link concepts, manage tasks, and now publish your notes as a static website.
 date: 2026-03-24
 author: Gareth Brown
+public: true
 order: 1
 ---
 
