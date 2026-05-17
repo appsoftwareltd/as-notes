@@ -9,6 +9,9 @@
     "nodejs_compat"
   ],
   "env": {
+    // Note that as-notes-docs is included here for completeness in the event
+    // that AS notes docs are published to Cloudflare pages, but at the time of writing
+    // they are published to Github pages
     "docs": {
       "name": "as-notes-docs",
       "assets": {
