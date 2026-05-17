@@ -3,6 +3,7 @@ title: AS Notes - Inline Markdown Editing in VS Code
 description: AS Notes now renders Markdown formatting directly in the text editor. Bold, headings, tables, Mermaid diagrams, and LaTeX equations render where you write - no preview pane, no mode switch.
 date: 2026-03-26
 author: Gareth Brown
+public: true
 order: 4
 ---
 

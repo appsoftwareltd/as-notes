@@ -3,6 +3,7 @@ title: AS Notes - A VS Code Markdown Notes Extension For Restricted Networks
 description: AS Notes runs entirely offline inside VS Code. No Electron app to approve, no cloud sync, no data leaving your machine. A markdown knowledge base that works where Obsidian and Logseq can't.
 date: 2026-03-25
 author: Gareth Brown
+public: true
 order: 2
 ---
 

@@ -3,6 +3,7 @@ title: Introducing AS Notes
 description: AS Notes is a Personal Knowledge Management extension for VS Code. Wikilinks, backlinks, tasks, journals, kanban, and a built-in static site generator - all running on plain markdown files in your editor.
 date: 2026-03-24
 author: Gareth Brown
+public: true
 order: 1
 ---
 

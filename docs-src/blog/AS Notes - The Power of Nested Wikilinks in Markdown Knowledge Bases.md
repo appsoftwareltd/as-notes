@@ -3,6 +3,7 @@ title: AS Notes - The Power of Nested Wikilinks in Markdown Knowledge Bases
 description: Nested wikilinks in AS Notes let you link concepts from within the wikilink itself - creating a hierarchy of navigable targets and natural backlinks from a single reference.
 date: 2026-03-25
 author: Gareth Brown
+public: true
 order: 3
 ---
 

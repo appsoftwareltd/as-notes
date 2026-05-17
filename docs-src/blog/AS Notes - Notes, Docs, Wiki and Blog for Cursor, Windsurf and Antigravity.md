@@ -3,6 +3,7 @@ title: AS Notes - Notes, Docs, Wiki and Blog for Cursor, Windsurf and Antigravit
 description: AS Notes brings wikilink-style knowledge management, task tracking, journaling, and a built-in static site publisher to VS Code-compatible editors including Google Antigravity, Cursor, and Windsurf.
 date: 2026-03-27
 author: Gareth Brown
+public: true
 order: 5
 ---
 
