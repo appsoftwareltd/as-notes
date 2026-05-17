@@ -6,26 +6,34 @@ order: 10
 
 AS Notes converts your markdown notes into a static website you can deploy anywhere. Wikilinks resolve automatically, a navigation sidebar is generated, and output is clean HTML with zero dependencies.
 
-This documentation site was built with the same tool.
+This documentation website was built with the same tool.
 
 ## Quick Start (VS Code)
 
 1. Open the command palette (`Ctrl+Shift+P`) and run **AS Notes: Publish to HTML**
 2. The setup wizard walks you through 12 steps (template set, input directory, output directory, layout, theme, etc.)
-3. Your settings are saved to a JSON config file -- subsequent runs use them automatically
+3. Your settings are saved to a JSON config file (e.g. `asnotes-publish.json`) -- subsequent runs use them automatically
 
-That's it. Open the output folder in a browser to preview your site.
+Open the output folder in a browser to preview your site.
 
 ### Quick Start (CLI)
 
+You can pass options directly:
+
 ```bash
-npx asnotes-publish --input ./notes --output ./site --default-public --default-assets --theme default
+npx @appsoftwareltd/asnotes-publish --input ./notes --output ./docs-publish --default-public --default-assets --theme default
+```
+
+Or use a config file (created by the wizard, or written by hand):
+
+```bash
+npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json
 ```
 
 Preview locally:
 
 ```bash
-npx serve ./site
+npx serve ./docs-publish
 ```
 
 ## Choosing What to Publish
@@ -316,7 +324,7 @@ Publish settings are stored in a JSON config file. The VS Code wizard creates th
 ```json
 {
     "inputDir": "",
-    "outputDir": "./site",
+    "outputDir": "./docs-publish",
     "defaultPublic": true,
     "defaultAssets": true,
     "layout": "docs",
@@ -326,7 +334,7 @@ Publish settings are stored in a JSON config file. The VS Code wizard creates th
     "baseUrl": "",
     "retina": true,
     "includeDrafts": false,
-    "siteTitle": "My Site",
+    "siteTitle": "My Docs",
     "stylesheets": [],
     "exclude": []
 }
@@ -447,6 +455,21 @@ CLI flags override config file values. Default excluded directories: `templates`
 
 ## Deploying
 
+All examples below assume a publish config file in your repository. The wizard creates one for you, or you can write it by hand:
+
+```json
+{
+    "inputDir": "./docs",
+    "outputDir": "./docs-publish",
+    "defaultPublic": true,
+    "defaultAssets": true,
+    "layout": "docs",
+    "theme": "default"
+}
+```
+
+The `outputDir` must match the publish/artifact path in your deploy config.
+
 ### GitHub Pages
 
 1. Go to **Settings > Pages** and set the source to **GitHub Actions**
@@ -463,6 +486,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -473,18 +497,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npx asnotes-publish --config ./asnotes-publish.json --base-url /${{ github.event.repository.name }}
+      - run: npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs-publish
       - id: deployment
         uses: actions/deploy-pages@v4
-```
-
-For a custom domain, add a CNAME step after the build and remove `--base-url`:
-
-```yaml
-      - run: echo "docs.example.com" > ./site/CNAME
 ```
 
 ### Netlify
@@ -494,7 +512,7 @@ Add `netlify.toml` to your repo root:
 ```toml
 [build]
   command = "npx asnotes-publish --config ./asnotes-publish.json"
-  publish = "site"
+  publish = "docs-publish"
 
 [build.environment]
   NODE_VERSION = "20"
@@ -509,7 +527,7 @@ Add `vercel.json` to your repo root:
 ```json
 {
     "buildCommand": "npx asnotes-publish --config ./asnotes-publish.json",
-    "outputDirectory": "site",
+    "outputDirectory": "docs-publish",
     "framework": null
 }
 ```
@@ -520,10 +538,52 @@ Import your repository in Vercel.
 
 1. Go to **Compute > Workers & Pages > Create application > Pages > Connect to Git**
 2. Set the build command to `npx @appsoftwareltd/asnotes-publish --config ./asnotes-publish.json`
-3. Set the output directory to match your `outputDir` (e.g. `site`)
+3. Set the root directory to match the relative path of your AS Notes managed directory (this may be the root of your repository or a subdirectory depending on your initial configuration).
 4. Add a `NODE_VERSION = 20` environment variable
 
 If your config file is in a subdirectory, set the **Root directory** to that subdirectory. All relative paths in the config resolve from the root directory.
+
+![Cloudflare AS Notes configuration](../assets/cloudflare-pages-configuration.png)
+
+#### Multiple Sites on Cloudflare Pages
+
+To deploy multiple publish configs (e.g. docs and a blog) from the same AS Notes managed directory, use Wrangler environments. Each environment gets its own Cloudflare Workers deployment with a separate asset directory.
+
+Add a `wrangler.jsonc` to your AS Notes managed directory:
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-project",
+  "compatibility_date": "2026-05-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "env": {
+    "docs": {
+      "name": "my-project-docs",
+      "assets": {
+        "directory": "docs-publish"
+      }
+    },
+    "blog": {
+      "name": "my-project-blog",
+      "assets": {
+        "directory": "blog-publish"
+      }
+    }
+  }
+}
+```
+
+Build both sites, then deploy each with its environment flag:
+
+```bash
+npx asnotes-publish --config ./asnotes-publish.docs.json
+npx asnotes-publish --config ./asnotes-publish.blog.json
+wrangler deploy --env docs   # → my-project-docs.workers.dev
+wrangler deploy --env blog   # → my-project-blog.workers.dev
+```
+
+Each environment creates an independent deployment. You can bind custom domains to each in the Cloudflare dashboard.
 
 ## HTML Structure Reference
 
