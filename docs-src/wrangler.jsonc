@@ -9,7 +9,7 @@
     "nodejs_compat"
   ],
   "env": {
-    "user": {
+    "docs": {
       "name": "as-notes-docs",
       "assets": {
         "directory": "docs-publish"
