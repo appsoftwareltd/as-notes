@@ -33,8 +33,6 @@ The syntax nests naturally - just wrap inner concepts in their own `[[` brackets
 
 AS Notes provides completion behaviour for each target page.
 
-![Nested Wikilink Completion](../assets/images/nested-wikilink-completion.png)
-
 This wikilink resolves this into two navigable targets:
 
 | You click on... | You navigate to... |

@@ -25,8 +25,6 @@ It also ships a built-in HTML converter. Point it at a folder in your AS Notes m
 
 This repo uses that converter to publish a blog. Based on the Cloudflare pages link to the Github repository, every push to `main` triggers a Cloudflare Pages build that converts the markdown in `blog/` to static HTML and deploys it. For full documentation on **AS Notes** static site publishing, see the [full docs](https://docs.asnotes.io/publishing-a-static-site.html).
 
-![AS Notes Editor Screenshot Meta](../assets/images/as-notes-editor-screenshot-meta.png)
-
 ## Publishing configuration and repository structure
 
 Setting up `asnotes-bublish.<sourcedir>.json` via the built in configuration wizard produces the following config file, which is set up once and controls publishing going forward.

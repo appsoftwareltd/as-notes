@@ -17,8 +17,6 @@ Cursor, Windsurf, and Google's Antigravity editor are VS Code-compatible. That m
 
 Open VSX is the extension registry used by Cursor, Windsurf, Antigravity, and other VS Code-compatible editors that don't pull from the Microsoft marketplace. AS Notes is listed on both.
 
-![AS Notes Editor Screenshot](../assets/images/as-notes-editor-screenshot-meta.png)
-
 ## One editor. Everything in it
 
 Most developers already maintain four separate tools for their writing: a note-taking app, a documentation platform, a wiki, and a blog. Different accounts, different formats, different logins. None of them talk to your editor.
@@ -57,11 +55,7 @@ AS Notes makes your knowledge base a first-class citizen in the same workspace y
 
 **Inline markdown rendering.** Bold looks bold. Headings look like headings. Mermaid diagrams render as diagrams — all in the same editor tab where you write. No preview pane, no mode switch.
 
-![AS Notes Inline Markdown Editor](../assets/images/as-notes-markdown-inline-editor.png)
-
 **Nested wikilinks.** `[[[[AS Notes]] Changelog]]` creates two independently navigable links — one to `AS Notes.md` and one to `[[AS Notes]] Changelog.md` — from a single expression. Both receive backlinks. Your hierarchy is expressed in the link, not in a folder structure.
-
-![Nested Wikilink Completion](../assets/images/nested-wikilink-completion.png)
 
 ## Publishing: from notes to deployed website
 

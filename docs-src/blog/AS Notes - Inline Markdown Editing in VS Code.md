@@ -17,8 +17,6 @@ The AS Notes inline editor brings a Typora like rendering model into VS Code (ba
 
 > Download from [AS Notes - VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 
-![AS Notes inline markdown editor](../assets/images/as-notes-markdown-inline-editor.png)
-
 ## How it works
 
 The inline editor uses a three-state visibility model for every construct it renders:
