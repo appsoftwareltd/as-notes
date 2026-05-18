@@ -1,38 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{title}}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
-    {{stylesheets}}{{meta}}
-</head>
-<body data-layout="docs">
-{{header}}<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
-<div class="nav-backdrop"></div>
-{{nav}}
-    <article class="markdown-body">
-{{toc}}
-{{content}}
-    </article>
-{{footer}}<script>
-(function() {
-    var btn = document.querySelector('.nav-toggle');
-    var bd = document.querySelector('.nav-backdrop');
-    function toggle() {
-        document.body.classList.toggle('nav-open');
-        btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
-    }
-    function close() {
-        document.body.classList.remove('nav-open');
-        btn.setAttribute('aria-expanded', 'false');
-    }
-    if (btn) btn.addEventListener('click', toggle);
-    if (bd) bd.addEventListener('click', close);
-    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close(); });
-})();
-</script>
-</body>
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{title}}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
+        {{stylesheets}}{{meta}}
+        <script defer src="https://analytics.appsoftware.com/telemetry.js" data-website-id="ba08880a-7a82-45b8-b989-fda6b88b6b3c"></script>
+    </head>
+
+    <body data-layout="docs">
+        {{header}}<button class="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+        <div class="nav-backdrop"></div>
+        {{nav}}
+        <article class="markdown-body">
+            {{toc}}
+            {{content}}
+        </article>
+        {{footer}}
+        <script>
+            (function () {
+                var btn = document.querySelector('.nav-toggle');
+                var bd = document.querySelector('.nav-backdrop');
+                function toggle() {
+                    document.body.classList.toggle('nav-open');
+                    btn.setAttribute('aria-expanded', document.body.classList.contains('nav-open'));
+                }
+                function close() {
+                    document.body.classList.remove('nav-open');
+                    btn.setAttribute('aria-expanded', 'false');
+                }
+                if (btn) btn.addEventListener('click', toggle);
+                if (bd) bd.addEventListener('click', close);
+                document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+            })();
+        </script>
+    </body>
+
 </html>
