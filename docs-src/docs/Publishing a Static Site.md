@@ -307,7 +307,9 @@ Regular published pages require `public: true` front matter (or `--default-publi
 
 - Contact, about, and legal pages
 - Custom landing pages
-- Files you want routable at a known URL (robots.txt, verification files, downloadable assets)
+- Files you want routable at a known URL (robots.txt, custom CSS, verification files, downloadable assets)
+
+In the case of custom CSS, you can `<link>` to the files from the generated HTML files under `asnotes-publish.layouts.<publish configuration>`.
 
 ### Linking to Static Pages
 

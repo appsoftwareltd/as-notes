@@ -1,4 +1,4 @@
-# AS Notes (Personal Knowledge Management VS Code Extension)
+# AS Notes (PKMS, Static Site Publishing and Blogging VS Code Extension)
 
 Website: [asnotes.io](https://www.asnotes.io) | Developer: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
 
@@ -201,6 +201,16 @@ These commands toggle or cycle publishing-related fields in the file's YAML fron
 | **Retina** | Toggles `retina: true` / `retina: false` in front matter |
 | **Assets** | Toggles `assets: true` / `assets: false` in front matter |
 
+#### Front Matter Presets *(files without existing front matter)*
+
+These commands appear only when the current file has no YAML front matter block. They insert a complete front matter template with tabstop placeholders for easy editing.
+
+| Command | Action |
+|---|---|
+| **Front Matter: Blog Post** | Inserts front matter for a blog post: `title`, `description`, `date` (today), `author`, `public: true`, `layout: blog` |
+| **Front Matter: Docs Page** | Inserts front matter for a docs page: `title`, `description`, `public: true`, `layout: docs`, `order` |
+| **Front Matter: Wiki Page** | Inserts front matter for a wiki page: `title`, `description`, `public: true` |
+
 #### Kanban Card Commands *(kanban card files only)*
 
 The following command only appears when editing a kanban card file (`kanban/card_*.md`).
@@ -340,7 +350,7 @@ Create reusable note templates as markdown files in a dedicated templates folder
 | `{{filename}}`     | Current file name without extension                            | `My Page`                             |
 | `{{title}}`        | Alias for `{{filename}}`                                       | `My Page`                             |
 | `{{cursor}}`       | Cursor position after insertion                                | *(cursor lands here)*                 |
-| Custom date format | Any combination of `YYYY`, `MM`, `DD`, `HH`, `mm`, `ss` tokens | `{{DD/MM/YYYY}}` becomes `18/03/2026` |
+| Custom date format | Any combination of `YYYY`, `YY`, `MM`, `DD`, `HH`, `mm`, `ss` tokens | `{{DD/MM/YYYY}}` → `18/03/2026`, `{{DD/MM/YY}}` → `18/03/26` |
 
 To output a literal `{{date}}` in the template, escape with a backslash: `\{{date}}`.
 
@@ -488,16 +498,32 @@ The repository is structured as a monorepo with three packages:
 
 Documentation source lives in `docs-src/` (an AS Notes workspace). The `publish` tool converts it to `docs/`.
 
+### Installing dependencies and building all packages
+
+A root `package.json` provides convenience scripts for working across all packages. From the repository root:
+
+```bash
+npm run install:all   # Install dependencies for common/, publish/, and vs-code-extension/ in order
+npm run build         # Build publish/ then vs-code-extension/
+npm test              # Run unit tests for all three packages
+npm run lint          # Type-check all three packages
+```
+
+> **Note:** The `vs-code-extension` build bundles `../publish/src/convert.ts` directly, so `publish/` (and its dependency on `common/`) must have their dependencies installed before the extension can be built. Use `npm run install:all` from the repository root to install everything in the correct order.
+
 ### VS Code Extension
 
 ```bash
 cd vs-code-extension
-npm install
+npm run build    # builds dist/convert.js
+npm publish --access public install
 npm run build    # Build the extension
 npm run watch    # Watch mode (rebuilds on changes)
 npm test         # Run unit tests
 npm run lint     # Type-check
 ```
+
+> **Prerequisite:** `common/` and `publish/` must have their dependencies installed first (`npm --prefix common install && npm --prefix publish install`), or use `npm run install:all` from the repository root.
 
 ### Publishing to HTML from AS Notes (HTML Conversion)
 
@@ -507,7 +533,40 @@ The converter is published as an npm package:
 npx asnotes-publish --config ./asnotes-publish.json
 ```
 
-See [Publishing a Static Site](https://docs.asnotes.io/publishing-a-static-site.html) for full documenation
+#### Blog index generation
+
+When the site-wide layout is `blog` (or `blogIndex: true` is set in the config), the auto-generated index page uses a blog-aware layout:
+
+1. **Recent posts** — the most recent posts (configurable via `recentCount`, default 3) shown as cards with title, date, author, description, and optional hero image
+2. **Current year** — remaining posts for the current year as a compact date + title list
+3. **Year archives** — links to auto-generated `archive-YYYY.html` pages for previous years
+4. **Undated** — posts without a `date` in front matter are listed at the bottom
+
+#### Front matter fields for publishing
+
+| Field | Type | Description |
+|---|---|---|
+| `public` | boolean | Include page in published output |
+| `title` | string | Page title (defaults to filename) |
+| `description` | string | Meta description for SEO |
+| `date` | string | Publication date (`YYYY-MM-DD`) — used for blog sorting, RSS, and sitemap |
+| `author` | string | Post author — displayed in blog layout and RSS feed |
+| `image` | string | Hero/thumbnail image path — displayed in blog layout and blog index cards |
+| `layout` | string | Per-page layout override (`docs`, `blog`, `minimal`) |
+| `order` | number | Navigation sort order |
+| `draft` | boolean | Exclude from output unless `--include-drafts` is set |
+| `assets` | boolean | Copy referenced images to output |
+| `retina` | boolean | Enable retina image sizing |
+
+#### Blog config options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `siteTitle` | string | `"AS Notes Site"` | Site title used in RSS feed and blog index |
+| `recentCount` | number | `3` | Number of recent posts shown as cards on the blog index |
+| `blogIndex` | boolean | `false` | Use blog-style index generation (auto-enabled when `layout: "blog"`) |
+
+See [Publishing a Static Site](https://docs.asnotes.io/publishing-a-static-site.html) for full documentation
 
 ### Debugging
 
@@ -532,7 +591,7 @@ Update `version` in `package.json` and add an entry to `CHANGELOG.md`.
 **Step 2 - publish to the VS Code Marketplace**
 
 ```bash
-cd .\vs-code-extension\
+cd vs-code-extension
 npm run build
 npx @vscode/vsce package
 npx @vscode/vsce login appsoftwareltd   # enter PAT token if auth expired
@@ -542,10 +601,9 @@ npx @vscode/vsce publish
 **Step 3 - tag and push**
 
 ```bash
-cd ..
 git add .
-git commit -m "Release v2.3.1"   # change version
-git tag v2.3.1                   # change version
+git commit -m "Release v2.3.3"   # change version
+git tag v2.3.3                   # change version
 git push origin main --tags
 ```
 

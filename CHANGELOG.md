@@ -4,6 +4,10 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
+## [2.4.3] - 2026-05-18
+
+- Feature: Updates for static site publishing, including static pages, streamlined template generation options and new Tailwind based themes.
+
 ## [2.4.0] - 2026-04-01
 
 - Feature: New publish options including Tailwind theme and front matter options

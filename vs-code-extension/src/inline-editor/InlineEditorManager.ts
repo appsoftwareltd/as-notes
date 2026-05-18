@@ -67,12 +67,17 @@ export class InlineEditorManager implements vscode.Disposable {
             this.registerProviders();
         }
 
-        // Toggle command
+        // Toggle command — persists via the `enabled` setting so the state
+        // survives file switches and window reloads.
         this.disposables.push(
-            vscode.commands.registerCommand('as-notes.toggleInlineEditor', () => {
-                const enabled = this.decorator.toggleDecorations();
+            vscode.commands.registerCommand('as-notes.toggleInlineEditor', async () => {
+                const cfg = vscode.workspace.getConfiguration('as-notes.inlineEditor');
+                const current = cfg.get<boolean>('enabled', true);
+                await cfg.update('enabled', !current, vscode.ConfigurationTarget.Global);
+                // The config change listener will call refreshLicenceGate() which
+                // synchronises the decorator and provider state.
                 vscode.window.showInformationMessage(
-                    `AS Notes: Inline editor ${enabled ? 'enabled' : 'disabled'}`,
+                    `AS Notes: Inline editor ${!current ? 'enabled' : 'disabled'}`,
                 );
             }),
         );
