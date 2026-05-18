@@ -11,7 +11,7 @@ This documentation website was built with the same tool.
 ## Quick Start (VS Code)
 
 1. Open the command palette (`Ctrl+Shift+P`) and run **AS Notes: Publish to HTML**
-2. The setup wizard walks you through 12 steps (template set, input directory, output directory, layout, theme, etc.)
+2. The setup wizard walks you through 9 steps (template set, input directory, output directory, layout, theme, etc.)
 3. Your settings are saved to a JSON config file (e.g. `asnotes-publish.json`) -- subsequent runs use them automatically
 
 Open the output folder in a browser to preview your site.
@@ -167,9 +167,38 @@ Three built-in layouts are available:
 
 Set the layout globally with `--layout blog` or per-page with `layout: blog` in front matter.
 
+In the published output, these will produce `blog.html`, `docs.html` and `minimal.html` files. The layout used will depend on the layout property in the `asnotes-publish.<configuration>.json` file or in the page front matter.
+
+You can modify the template files once produced according to your needs. For example you may want to add an analytics tracking script. This can be done my adding to the `header` section of each layout `.html` file (`blog.html`, `docs.html`, `minimal.html`) e.g:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{title}}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap" rel="stylesheet">
+        {{stylesheets}}{{meta}}
+        <script defer src="https://yourdomain.com/analytics.js" data-website-id="12345"></script>
+    </head>
+
+    <body data-layout="blog">
+        {{header}} <article class="blog-post">
+            {{home-link}}{{heading}}{{image}}{{date}}{{author}}{{toc}}
+            {{content}}
+        </article>
+        {{footer}}</body>
+
+</html>
+```
+
 ### Custom Layouts
 
-The setup wizard offers to create a **layouts directory** with editable copies of all three built-in layouts. You can modify these or create new ones. Reference custom layouts by name (without `.html`).
+The setup wizard creates a **layouts directory** with editable copies of all three built-in layouts. You can modify these or create new ones. Reference custom layouts by name (without `.html`).
 
 #### Template Tokens
 
@@ -192,9 +221,9 @@ The setup wizard offers to create a **layouts directory** with editable copies o
 | `{{site-title}}` | Site title text |
 | `{{site-icon}}` | Site icon markup |
 
-## Header, Footer, and Site Icon
+## Includes - Header, Footer, and Site Icon
 
-The setup wizard creates an **includes directory** with three files:
+The setup wizard creates an **includes directory** with three files. You can modify the content in this includes according to what you want to display on the published site:
 
 - `header.html` -- site header (navbar, branding, links)
 - `footer.html` -- site footer
@@ -253,6 +282,88 @@ By default, the converter generates a sidebar nav listing all public pages. To t
 ```
 
 The rendered HTML replaces the auto-generated navigation. Wikilinks in `nav.md` resolve normally. The file is not published as a standalone page.
+
+## Static Pages
+
+Not every page on a site belongs in the blog feed or the documentation sidebar. A contact page, an about page, a legal notice -- these are standalone pages that should be routable at a fixed URL but shouldn't appear in the auto-generated navigation or blog index.
+
+The converter automatically processes a `static` directory inside your input directory. Everything inside it is included in the published output:
+
+- **Markdown files** are converted to HTML with full wikilink resolution, layout wrapping, and plugin support (math, mermaid, task tags)
+- **All other files** (images, PDFs, text files) are copied verbatim
+
+No front matter is required. Files are output at paths relative to the site root:
+
+| Source path | Output path |
+|---|---|
+| `static/Contact.md` | `/contact.html` |
+| `static/legal/Privacy.md` | `/legal/privacy.html` |
+| `static/assets/logo.png` | `/assets/logo.png` |
+| `static/robots.txt` | `/robots.txt` |
+
+### Why Use Static Pages?
+
+Regular published pages require `public: true` front matter (or `--default-public`) and appear in auto-generated navigation and blog indexes. Static pages bypass all of that -- they're always published, never listed in nav, and never included in the blog feed or RSS. Use them for:
+
+- Contact, about, and legal pages
+- Custom landing pages
+- Files you want routable at a known URL (robots.txt, verification files, downloadable assets)
+
+### Linking to Static Pages
+
+Static pages participate in wikilink resolution. From any regular page or from `nav.md`, link with a standard wikilink:
+
+```markdown
+[[Contact]]
+```
+
+From layout partials (`header.html`, `footer.html`), use a regular HTML link:
+
+```html
+<a href="{{base-url}}/contact.html">Contact</a>
+```
+
+Static markdown pages can also link back to regular pages using wikilinks:
+
+```markdown
+Back to [[Home]]
+```
+
+### Front Matter (Optional)
+
+Static markdown pages don't need front matter, but if present it's honoured:
+
+```yaml
+---
+title: Get in Touch
+layout: minimal
+description: Contact us for support
+---
+```
+
+This lets you override the page title, choose a different layout, or add an SEO description -- without the page appearing in navigation.
+
+### Configuration
+
+The static directory name defaults to `static`. To change it, set `staticDir` in your publish config:
+
+```json
+{
+    "staticDir": "pages"
+}
+```
+
+Or pass `--static-dir pages` on the CLI. Set to an empty string to disable static page processing entirely.
+
+### Special Files Summary
+
+Three filenames have special behaviour in the converter:
+
+| File | Behaviour |
+|---|---|
+| `index.md` | Becomes the home page (`/index.html`). If absent, an index is auto-generated. |
+| `nav.md` | Rendered as the site navigation sidebar. Not published as a standalone page. |
+| `static/` | Directory of standalone pages and files. Always included in output, never in nav or blog feed. |
 
 ## Template Sets
 
@@ -335,6 +446,7 @@ Publish settings are stored in a JSON config file. The VS Code wizard creates th
     "retina": true,
     "includeDrafts": false,
     "siteTitle": "My Docs",
+    "staticDir": "static",
     "stylesheets": [],
     "exclude": []
 }
@@ -354,6 +466,7 @@ Publish settings are stored in a JSON config file. The VS Code wizard creates th
 | `retina` | boolean | `true` | Retina image sizing |
 | `includeDrafts` | boolean | `false` | Include draft pages |
 | `siteTitle` | string | `""` | Site title (shown in header navbar) |
+| `staticDir` | string | `"static"` | Directory for static pages and files |
 | `stylesheets` | string[] | `[]` | Stylesheet URLs or local paths |
 | `exclude` | string[] | `[]` | Additional directories to exclude |
 
@@ -398,10 +511,9 @@ Run **AS Notes: Publish to HTML** with no existing config to launch the wizard:
 6. **Default assets** -- copy images and files?
 7. **Layout** -- docs, blog, or minimal
 8. **Theme** -- available themes depend on chosen template set
-9. **Themes directory** -- create editable theme CSS, browse, or skip
-10. **Layouts directory** -- create editable layouts, browse, or skip
-11. **Includes directory** -- create header/footer/icon files, browse, or skip
-12. **Site title** -- text shown in the header navbar
+9. **Site title** -- text shown in the header navbar (leave empty for icon only)
+
+Default themes, layouts, and includes directories are created automatically.
 
 Settings are saved to the appropriate config file. Subsequent runs skip the wizard.
 
@@ -431,6 +543,7 @@ Options:
   --base-url <prefix>       URL path prefix for links and assets
   --include-drafts          Include pages with draft: true
   --exclude <dirname>       Exclude a directory (repeatable)
+  --static-dir <dirname>    Static pages directory (default: static)
 ```
 
 CLI flags override config file values. Default excluded directories: `templates`, `node_modules`.
@@ -452,6 +565,7 @@ CLI flags override config file values. Default excluded directories: `templates`
 | `includeDrafts` | `--include-drafts` |
 | `stylesheets` | `--stylesheet` (repeatable) |
 | `exclude` | `--exclude` (repeatable) |
+| `staticDir` | `--static-dir` |
 
 ## Deploying
 
@@ -574,7 +688,7 @@ Add a `wrangler.jsonc` to your AS Notes managed directory:
 }
 ```
 
-Build both sites, then deploy each with its environment flag:
+Build both sites, then deploy each with its environment flag, or use these commands in automatic build and deploy settings in your Cloudflare Workers and Pages configuration:
 
 ```bash
 npx asnotes-publish --config ./asnotes-publish.docs.json

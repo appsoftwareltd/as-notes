@@ -24,6 +24,7 @@ interface PublishConfig {
     exclude?: string[];
     outputDir?: string;
     siteTitle?: string;
+    staticDir?: string;
 }
 
 /**
@@ -168,6 +169,7 @@ function withDefaults(config: PublishConfig): Required<PublishConfig> {
         exclude: config.exclude ?? [],
         outputDir: config.outputDir ?? '',
         siteTitle: config.siteTitle ?? '',
+        staticDir: config.staticDir ?? 'static',
     };
 }
 
@@ -306,7 +308,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'tailwind', description: 'Modern — Inter font, zinc palette, auto light/dark' },
             { label: 'github', description: 'Classic — GitHub-inspired typography and colours' },
         ],
-        { placeHolder: 'Choose a template set', title: 'Publish Settings (1/12)' },
+        { placeHolder: 'Choose a template set', title: 'Publish Settings (1/9)' },
     );
     if (!templateSetPick) return undefined;
     const templateSet = TEMPLATE_SETS[templateSetPick.label] ?? TEMPLATE_SETS.tailwind;
@@ -317,7 +319,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: '$(root-folder) Notes root', description: `Use ${notesRoot} as the input directory`, value: 'root' },
             { label: '$(folder-opened) Choose a subdirectory...', description: 'Pick a specific folder to publish', value: 'pick' },
         ],
-        { placeHolder: 'Input directory', title: 'Publish Settings (2/12)' },
+        { placeHolder: 'Input directory', title: 'Publish Settings (2/9)' },
     );
     if (!inputDirPick) return undefined;
 
@@ -328,7 +330,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             canSelectMany: false,
             defaultUri: vscode.Uri.file(notesRoot),
             openLabel: 'Select Input Directory',
-            title: 'Publish Settings (2/12): Input Directory',
+            title: 'Publish Settings (2/9): Input Directory',
         });
         if (!chosen || chosen.length === 0) return undefined;
         config.inputDir = toRelativePath(notesRoot, chosen[0].fsPath);
@@ -344,7 +346,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
     // Step 4: Base URL
     const baseUrlInput = await vscode.window.showInputBox({
         prompt: 'URL path prefix for deployed site (leave empty for root)',
-        title: 'Publish Settings (4/12)',
+        title: 'Publish Settings (4/9)',
         value: config.baseUrl ?? '',
         placeHolder: '/my-repo',
     });
@@ -357,7 +359,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'Yes', description: 'All pages are published unless public: false', value: true },
             { label: 'No', description: 'Only pages with public: true are published', value: false },
         ],
-        { placeHolder: 'Publish all pages by default?', title: 'Publish Settings (5/12)' },
+        { placeHolder: 'Publish all pages by default?', title: 'Publish Settings (5/9)' },
     );
     if (!publicPick) return undefined;
     config.defaultPublic = publicPick.value;
@@ -368,7 +370,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'Yes', description: 'Copy referenced images and files', value: true },
             { label: 'No', description: 'Only copy assets for pages with assets: true', value: false },
         ],
-        { placeHolder: 'Copy referenced assets by default?', title: 'Publish Settings (6/12)' },
+        { placeHolder: 'Copy referenced assets by default?', title: 'Publish Settings (6/9)' },
     );
     if (!assetsPick) return undefined;
     config.defaultAssets = assetsPick.value;
@@ -380,7 +382,7 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
             { label: 'blog', description: 'Navigation + blog-style article with date' },
             { label: 'minimal', description: 'Content only, no navigation' },
         ],
-        { placeHolder: 'Choose a layout', title: 'Publish Settings (7/12)' },
+        { placeHolder: 'Choose a layout', title: 'Publish Settings (7/9)' },
     );
     if (!layoutPick) return undefined;
     config.layout = layoutPick.label;
@@ -396,115 +398,37 @@ async function runPublishWizard(notesRoot: string, existing?: PublishConfig): Pr
     });
     const themePick = await vscode.window.showQuickPick(
         themeOptions,
-        { placeHolder: 'Choose a theme', title: 'Publish Settings (8/12)' },
+        { placeHolder: 'Choose a theme', title: 'Publish Settings (8/9)' },
     );
     if (!themePick) return undefined;
     config.theme = themePick.label;
 
-    // Step 9: Themes Directory
-    const themesDirPick = await vscode.window.showQuickPick(
-        [
-            { label: '$(new-folder) Create default themes', description: 'Create a themes directory with editable theme CSS files (default, dark)', value: 'create' },
-            { label: '$(folder-opened) Browse...', description: 'Choose an existing themes directory', value: 'pick' },
-            { label: 'Skip', description: 'Use built-in themes only', value: 'skip' },
-        ],
-        { placeHolder: 'Themes directory?', title: 'Publish Settings (9/12)' },
-    );
-    if (!themesDirPick) return undefined;
-
-    if (themesDirPick.value === 'create') {
-        const inputDirName = config.inputDir ? path.basename(path.resolve(notesRoot, config.inputDir)) : '';
-        const themesFolderName = inputDirName ? `asnotes-publish.themes.${inputDirName}` : 'asnotes-publish.themes';
-        const defaultThemesPath = path.join(notesRoot, themesFolderName);
-        await createDefaultThemes(defaultThemesPath, templateSet);
-        config.themes = './' + themesFolderName;
-    } else if (themesDirPick.value === 'pick') {
-        const chosen = await vscode.window.showOpenDialog({
-            canSelectFiles: false,
-            canSelectFolders: true,
-            canSelectMany: false,
-            defaultUri: vscode.Uri.file(notesRoot),
-            openLabel: 'Select Themes Directory',
-            title: 'Publish Settings (9/12): Themes Directory',
-        });
-        if (chosen && chosen.length > 0) {
-            config.themes = toRelativePath(notesRoot, chosen[0].fsPath);
-        }
-    }
-
-    // Step 10: Layouts Directory
-    const layoutsDirPick = await vscode.window.showQuickPick(
-        [
-            { label: '$(new-folder) Create default layouts', description: 'Create a layouts directory with editable layout templates (docs, blog, minimal)', value: 'create' },
-            { label: '$(folder-opened) Browse...', description: 'Choose an existing layouts directory', value: 'pick' },
-            { label: 'Skip', description: 'Use built-in layouts only', value: 'skip' },
-        ],
-        { placeHolder: 'Layouts directory?', title: 'Publish Settings (10/12)' },
-    );
-    if (!layoutsDirPick) return undefined;
-
-    if (layoutsDirPick.value === 'create') {
-        const inputDirName = config.inputDir ? path.basename(path.resolve(notesRoot, config.inputDir)) : '';
-        const layoutsFolderName = inputDirName ? `asnotes-publish.layouts.${inputDirName}` : 'asnotes-publish.layouts';
-        const defaultLayoutsPath = path.join(notesRoot, layoutsFolderName);
-        await createDefaultLayouts(defaultLayoutsPath, templateSet);
-        config.layouts = './' + layoutsFolderName;
-    } else if (layoutsDirPick.value === 'pick') {
-        const chosen = await vscode.window.showOpenDialog({
-            canSelectFiles: false,
-            canSelectFolders: true,
-            canSelectMany: false,
-            defaultUri: vscode.Uri.file(notesRoot),
-            openLabel: 'Select Layouts Directory',
-            title: 'Publish Settings (10/12): Layouts Directory',
-        });
-        if (chosen && chosen.length > 0) {
-            config.layouts = toRelativePath(notesRoot, chosen[0].fsPath);
-        }
-    }
-
-    // Step 11: Includes Directory
-    const includesDirPick = await vscode.window.showQuickPick(
-        [
-            { label: '$(new-folder) Create default includes', description: 'Create an includes directory with default header and footer templates', value: 'create' },
-            { label: '$(folder-opened) Browse...', description: 'Choose an existing includes directory', value: 'pick' },
-            { label: 'Skip', description: 'Use built-in header and footer only', value: 'skip' },
-        ],
-        { placeHolder: 'Includes directory?', title: 'Publish Settings (11/12)' },
-    );
-    if (!includesDirPick) return undefined;
-
-    if (includesDirPick.value === 'create') {
-        const inputDirName = config.inputDir ? path.basename(path.resolve(notesRoot, config.inputDir)) : '';
-        const includesFolderName = inputDirName ? `asnotes-publish.includes.${inputDirName}` : 'asnotes-publish.includes';
-        const defaultIncludesPath = path.join(notesRoot, includesFolderName);
-        await createDefaultPartials(defaultIncludesPath, templateSet);
-        config.includes = './' + includesFolderName;
-    } else if (includesDirPick.value === 'pick') {
-        const chosen = await vscode.window.showOpenDialog({
-            canSelectFiles: false,
-            canSelectFolders: true,
-            canSelectMany: false,
-            defaultUri: vscode.Uri.file(notesRoot),
-            openLabel: 'Select Includes Directory',
-            title: 'Publish Settings (11/12): Includes Directory',
-        });
-        if (chosen && chosen.length > 0) {
-            config.includes = toRelativePath(notesRoot, chosen[0].fsPath);
-        }
-    }
-
-    // Step 12: Site Title (optional, shown in header navbar)
+    // Step 9: Site Title (optional, shown in header navbar)
     const siteTitleValue = await vscode.window.showInputBox({
-        prompt: 'Site title shown in the header navbar (leave empty to skip)',
-        title: 'Publish Settings (12/12)',
+        prompt: 'Site title shown in the header navbar (leave empty for icon only)',
+        title: 'Publish Settings (9/9)',
         value: config.siteTitle ?? '',
-        placeHolder: 'My Blog',
+        placeHolder: 'Site Title',
     });
     if (siteTitleValue === undefined) return undefined;
     if (siteTitleValue) {
         config.siteTitle = siteTitleValue;
     }
+
+    // Always create default themes, layouts, and includes
+    const inputDirName = config.inputDir ? path.basename(path.resolve(notesRoot, config.inputDir)) : '';
+
+    const themesFolderName = inputDirName ? `asnotes-publish.themes.${inputDirName}` : 'asnotes-publish.themes';
+    await createDefaultThemes(path.join(notesRoot, themesFolderName), templateSet);
+    config.themes = './' + themesFolderName;
+
+    const layoutsFolderName = inputDirName ? `asnotes-publish.layouts.${inputDirName}` : 'asnotes-publish.layouts';
+    await createDefaultLayouts(path.join(notesRoot, layoutsFolderName), templateSet);
+    config.layouts = './' + layoutsFolderName;
+
+    const includesFolderName = inputDirName ? `asnotes-publish.includes.${inputDirName}` : 'asnotes-publish.includes';
+    await createDefaultPartials(path.join(notesRoot, includesFolderName), templateSet);
+    config.includes = './' + includesFolderName;
 
     return config;
 }

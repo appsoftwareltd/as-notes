@@ -25,6 +25,7 @@ interface PublishConfig {
     siteTitle?: string;
     recentCount?: number;
     blogIndex?: boolean;
+    staticDir?: string;
 }
 
 interface CliArgs {
@@ -47,6 +48,7 @@ interface CliArgs {
     siteTitle: string;
     recentCount: number;
     blogIndex: boolean;
+    staticDir: string;
 }
 
 const DEFAULT_EXCLUDES = ['templates', 'node_modules'];
@@ -91,6 +93,7 @@ function parseArgs(argv: string[]): CliArgs {
     let siteTitle = '';
     let recentCount = 3;
     let blogIndex = false;
+    let staticDir = 'static';
 
     // Track which flags were explicitly set on the CLI
     const cliSet = new Set<string>();
@@ -130,6 +133,8 @@ function parseArgs(argv: string[]): CliArgs {
             includeDrafts = true; cliSet.add('includeDrafts');
         } else if (argv[i] === '--exclude' && i + 1 < argv.length) {
             exclude.push(argv[++i]); cliSet.add('exclude');
+        } else if (argv[i] === '--static-dir' && i + 1 < argv.length) {
+            staticDir = argv[++i]; cliSet.add('staticDir');
         }
     }
 
@@ -157,6 +162,7 @@ function parseArgs(argv: string[]): CliArgs {
         if (!cliSet.has('layouts') && cfg.layouts) layouts = path.resolve(configDir, cfg.layouts);
         if (!cliSet.has('themes') && cfg.themes) themes = path.resolve(configDir, cfg.themes);
         if (!cliSet.has('includes') && cfg.includes) includes = path.resolve(configDir, cfg.includes);
+        if (!cliSet.has('staticDir') && cfg.staticDir) staticDir = cfg.staticDir;
 
         // Default --input to config's inputDir (resolved relative to config dir), then config file's parent directory
         if (!input && cfg.inputDir) input = path.resolve(configDir, cfg.inputDir);
@@ -187,6 +193,7 @@ function parseArgs(argv: string[]): CliArgs {
         console.error('  --base-url <prefix>       URL path prefix for links/assets');
         console.error('  --include-drafts          Include pages with draft: true');
         console.error('  --exclude <dirname>       Exclude a directory from scanning (repeatable)');
+        console.error('  --static-dir <dirname>    Directory for static pages/files (relative to input)');
         console.error('');
         console.error('When --config is used, --input defaults to the config file\'s directory.');
         console.error('CLI flags override config file values.');
@@ -195,7 +202,7 @@ function parseArgs(argv: string[]): CliArgs {
         process.exit(1);
     }
 
-    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts, siteTitle, recentCount, blogIndex };
+    return { input: path.resolve(input), output: path.resolve(output), config, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts, siteTitle, recentCount, blogIndex, staticDir };
 }
 
 interface ScannedFile {
@@ -966,7 +973,7 @@ function escapeXml(text: string): string {
 
 function main(): void {
     const args = parseArgs(process.argv);
-    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts, siteTitle, recentCount, blogIndex } = args;
+    const { input, output, stylesheets, assets, exclude, defaultPublic, defaultAssets, layout, layouts, includes, theme, themes, retina, baseUrl, includeDrafts, siteTitle, recentCount, blogIndex, staticDir } = args;
     const frontMatterService = new FrontMatterService();
     const resolvedLayoutsDir = layouts ? path.resolve(layouts) : undefined;
     const resolvedThemesDir = themes ? path.resolve(themes) : undefined;
@@ -1039,7 +1046,9 @@ function main(): void {
     }
 
     // Scan input for markdown files (recursive, with directory exclusion)
-    const scannedFiles = scanMarkdownFiles(input, exclude)
+    // Exclude the static dir from normal page scanning (processed separately)
+    const effectiveExclude = staticDir ? [...exclude, staticDir] : exclude;
+    const scannedFiles = scanMarkdownFiles(input, effectiveExclude)
         .filter(f => f.filename.toLowerCase() !== 'nav.md'); // nav.md is consumed for navigation, not published
     if (scannedFiles.length === 0) {
         console.error(`No .md files found in ${input}`);
@@ -1098,6 +1107,32 @@ function main(): void {
     if (publicPages.size === 0) {
         console.error('No public pages found. Use front matter `public: true` or pass --default-public.');
         process.exit(1);
+    }
+
+    // Scan static dir and register its markdown filenames for wikilink resolution
+    const staticDirAbsolute = staticDir ? path.join(input, staticDir) : '';
+    const staticFiles: ScannedFile[] = [];
+    if (staticDir && fs.existsSync(staticDirAbsolute)) {
+        const walkStatic = (dir: string, relPrefix: string): void => {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    walkStatic(path.join(dir, entry.name), relPrefix ? relPrefix + '/' + entry.name : entry.name);
+                } else if (entry.isFile()) {
+                    staticFiles.push({
+                        relativePath: relPrefix ? relPrefix + '/' + entry.name : entry.name,
+                        filename: entry.name,
+                    });
+                    // Register markdown files with the resolver so wikilinks can target them
+                    if (entry.name.endsWith('.md') && !entry.name.endsWith('.enc.md')) {
+                        if (!flatFilenames.includes(entry.name)) {
+                            flatFilenames.push(entry.name);
+                        }
+                    }
+                }
+            }
+        };
+        walkStatic(staticDirAbsolute, '');
     }
 
     // Build resolver from ALL flat filenames (so wikilinks resolve even to non-public pages)
@@ -1304,6 +1339,128 @@ mermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });
         }
     }
 
+    // Process static directory: convert markdown to HTML, copy other files verbatim
+    const staticPageEntries: PageEntry[] = [];
+    if (staticDir && staticFiles.length > 0) {
+        for (const sf of staticFiles) {
+            const srcPath = path.join(staticDirAbsolute, sf.relativePath);
+            const isMarkdown = sf.filename.endsWith('.md') && !sf.filename.endsWith('.enc.md');
+
+            if (isMarkdown) {
+                // Convert markdown to HTML with full plugin pipeline
+                const content = fs.readFileSync(srcPath, 'utf-8');
+                const fields = frontMatterService.parseFrontMatterFields(content);
+                const strippedMarkdown = frontMatterService.stripFrontMatter(content);
+
+                const pageName = sf.filename.replace(/\.md$/i, '');
+                const pageLayout = fields.layout || layout;
+
+                // Determine output path preserving directory structure
+                const relDir = path.dirname(sf.relativePath);
+                const outputSlug = slugify(pageName) + '.html';
+                const outputRelPath = relDir === '.' ? outputSlug : relDir + '/' + outputSlug;
+                const outputPath = path.join(output, outputRelPath);
+
+                // Ensure output directory exists
+                const outputDirPath = path.dirname(outputPath);
+                if (!fs.existsSync(outputDirPath)) {
+                    fs.mkdirSync(outputDirPath, { recursive: true });
+                }
+
+                // Set up markdown-it for this static page
+                const staticMd = new MarkdownIt({ html: true });
+                wikilinkPlugin(staticMd, {
+                    wikilinkService,
+                    resolver: resolver.createResolverFn(),
+                });
+                staticMd.use(taskTagPlugin);
+                staticMd.use(mermaidPlugin);
+                staticMd.use(mathPlugin);
+                addHeadingIds(staticMd);
+                const pageDir = path.dirname(srcPath);
+                retinaPlugin(staticMd, { globalRetina: retina, pageRetina: fields.retina === true, pageDir, inputDir: staticDirAbsolute });
+
+                let htmlBody = staticMd.render(strippedMarkdown);
+
+                // Asset discovery for static markdown pages
+                if (defaultAssets || fields.assets) {
+                    const refs = discoverAssetRefs(htmlBody, sf.relativePath, staticDirAbsolute);
+                    htmlBody = rewriteAssetPaths(htmlBody, refs, baseUrl);
+                    // Copy static page assets
+                    if (refs.length > 0) {
+                        const result = copyAssets(refs, output);
+                        assetsCopied += result.copied;
+                        for (const w of result.warnings) {
+                            console.log(`  [warning] ${w}`);
+                            warningCount++;
+                        }
+                    }
+                }
+
+                // Prepend baseUrl to wikilink hrefs
+                if (baseUrl) {
+                    htmlBody = htmlBody.replace(/href="([^"]*\.html(?:#[^"]*)?)"/g, (match, href) => {
+                        if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('/')) {
+                            return match;
+                        }
+                        return `href="${baseUrl}/${href}"`;
+                    });
+                }
+
+                const title = fields.title ? stripBrackets(fields.title) : stripBrackets(pageName);
+                const toc = generateToc(htmlBody);
+
+                const hasMermaid = htmlBody.includes('<pre class="mermaid">');
+                const hasMath = htmlBody.includes('class="katex"');
+                const pageStylesheets = hasMath
+                    ? [...resolvedStylesheets, 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css']
+                    : resolvedStylesheets;
+
+                const nav = customNav ?? buildNav(navPages, pageName, baseUrl, navMd);
+                let html = wrapHtml(title, nav, htmlBody, {
+                    stylesheets: pageStylesheets,
+                    description: fields.description,
+                    date: fields.date,
+                    author: fields.author,
+                    image: fields.image,
+                    toc,
+                    layout: pageLayout,
+                    layoutsDir: resolvedLayoutsDir,
+                    includesDir: resolvedIncludesDir,
+                    baseUrl,
+                    siteTitle,
+                });
+
+                if (hasMermaid) {
+                    const mermaidTheme = theme === 'dark' ? 'dark' : 'default';
+                    const mermaidScript = `<script type="module">\nimport mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10.9.5/dist/mermaid.esm.min.mjs';\nmermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });\n</script>`;
+                    html = html.replace('</body>', mermaidScript + '\n</body>');
+                }
+
+                fs.writeFileSync(outputPath, html, 'utf-8');
+                console.log(`  [static] ${sf.relativePath} -> ${outputRelPath}`);
+
+                // Track for sitemap
+                staticPageEntries.push({
+                    name: pageName,
+                    href: outputRelPath,
+                    title: fields.title || pageName,
+                    date: fields.date,
+                    description: fields.description,
+                });
+            } else {
+                // Non-markdown file: copy verbatim preserving directory structure
+                const outputPath = path.join(output, sf.relativePath);
+                const outputDirPath = path.dirname(outputPath);
+                if (!fs.existsSync(outputDirPath)) {
+                    fs.mkdirSync(outputDirPath, { recursive: true });
+                }
+                fs.copyFileSync(srcPath, outputPath);
+                console.log(`  [static] ${sf.relativePath}`);
+            }
+        }
+    }
+
     // Generate placeholder pages for missing wikilink targets (excluding non-public pages)
     const missingTargets = resolver.getMissingTargets();
 
@@ -1364,8 +1521,9 @@ mermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });
         console.log(`  [missing] ${slugify(pageName)}.html (placeholder)`);
     }
 
-    // Generate sitemap.xml (Iteration 6B)
-    const sitemapXml = generateSitemap(navPages, baseUrl);
+    // Generate sitemap.xml (Iteration 6B) — includes static pages
+    const sitemapPages = [...navPages, ...staticPageEntries];
+    const sitemapXml = generateSitemap(sitemapPages, baseUrl);
     fs.writeFileSync(path.join(output, 'sitemap.xml'), sitemapXml, 'utf-8');
     console.log('  [sitemap] sitemap.xml');
 

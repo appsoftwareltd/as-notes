@@ -13,5 +13,6 @@
     "stylesheets": [],
     "exclude": [],
     "outputDir": "./docs-publish",
-    "siteTitle": ""
+    "siteTitle": "",
+    "staticDir": "static"
 }

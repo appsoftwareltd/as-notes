@@ -13,5 +13,6 @@
     "stylesheets": [],
     "exclude": [],
     "outputDir": "./blog-publish",
-    "siteTitle": ""
+    "siteTitle": "",
+    "staticDir": "static"
 }
