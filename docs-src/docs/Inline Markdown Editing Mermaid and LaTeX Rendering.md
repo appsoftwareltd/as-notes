@@ -54,7 +54,25 @@ Heading colours can be customised per level in [[Settings]].
 ### Links and Images
 
 - **Links** (`[text](url)`) - syntax hidden, link text shown with link colour. Hover to preview the URL. Ctrl+Click to navigate.
-- **Images** (`![alt](path)`) - hover to see an image preview.
+- **Images** (`![alt](path)`) - hover to see an image preview. Local images render inline in the document when standalone (see below).
+
+#### Inline Image Rendering
+
+A local image whose tag is alone on its line **and followed by at least one blank line** renders directly in the document - no hover needed. The rendered alt text stays visible as a link on the image's own line (hover it for the preview popup, as usual); the picture draws into the blank lines below it (the *granted space*), shrinking to fit, with the last blank line kept clear as a margin so the picture never touches the following text. Because VS Code cannot grow a single line's height, the blank lines are what give the picture room - want a bigger image? Add more blank lines below it.
+
+Control the display size with an Obsidian-style suffix in the alt text:
+
+- `![alt|300](path)` - maximum width 300px, height follows the aspect ratio
+- `![alt|300x200](path)` - explicit width and height
+
+The size hint is a *maximum* in the editor: the image never grows beyond the granted space and never overlaps text. In published HTML the hint is applied exactly, as `width`/`height` attributes with a clean `alt`.
+
+Notes:
+
+- Move the cursor onto the image line (or into the blank lines under the picture) to hide the picture and edit the raw syntax - the same behaviour as Mermaid blocks.
+- Only local files render inline (relative or absolute paths). Remote `http(s)` images keep the hover preview.
+- Mid-sentence images and images with no trailing blank line keep the hover preview.
+- Supported formats: PNG, JPEG, GIF, WebP, BMP, SVG. Animated GIFs render their first frame (the hover preview still animates).
 
 ### Blockquotes and Horizontal Rules
 
@@ -125,7 +143,7 @@ flowchart LR
 
 ### Math / LaTeX
 
-Inline math (`$...$`) and display math (`$$...$$`) are rendered using KaTeX/MathJax. Enable or disable via the `as-notes.inlineEditor.defaultBehaviors.math` setting.
+Inline math (`$...$`) and display math (`$$...$$`) are rendered using KaTeX/MathJax. Enable or disable via the `as-notes.inlineEditor.math.enabled` setting.
 
 The following code renders the math blocks below:
 
@@ -149,7 +167,7 @@ $$
 
 ### GitHub Mentions and Issues
 
-`@username` mentions and `#123` issue references are rendered with styled decorations. Enable or disable via the `as-notes.inlineEditor.defaultBehaviors.mentionLinks` setting.
+`@username` mentions and `#123` issue references are rendered with styled decorations. Enable or disable via the `as-notes.inlineEditor.mentions.enabled` setting.
 
 ## Toggle
 
@@ -183,8 +201,10 @@ Key settings:
 | `as-notes.inlineEditor.enabled` | `true` | Master toggle |
 | `as-notes.inlineEditor.decorations.ghostFaintOpacity` | `0.3` | Opacity for ghost-state syntax |
 | `as-notes.inlineEditor.links.singleClickOpen` | `false` | Open links with single click |
-| `as-notes.inlineEditor.defaultBehaviors.emoji` | `true` | Render emoji shortcodes |
-| `as-notes.inlineEditor.defaultBehaviors.math` | `true` | Render math expressions |
+| `as-notes.inlineEditor.emojis.enabled` | `true` | Render emoji shortcodes |
+| `as-notes.inlineEditor.math.enabled` | `true` | Render math expressions |
+| `as-notes.inlineEditor.images.enabled` | `true` | Render standalone local images inline |
+| `as-notes.inlineEditor.images.maxHeightLines` | `20` | Maximum inline image height, in editor lines |
 | `as-notes.inlineEditor.colors.*` | *(theme)* | Override heading, link, code colours |
 
 ## Troubleshooting

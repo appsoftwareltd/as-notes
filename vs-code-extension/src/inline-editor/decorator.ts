@@ -1,6 +1,6 @@
 import { Range, Position, TextEditor, TextDocument, TextDocumentChangeEvent, window, TextEditorSelectionChangeKind, ColorThemeKind, workspace, DecorationOptions } from 'vscode';
 import { createHash } from 'crypto';
-import { DecorationRange, DecorationType, MermaidBlock, MathRegion, ScopeRange } from './parser';
+import { DecorationRange, DecorationType, MermaidBlock, MathRegion, ScopeRange, StandaloneImage } from './parser';
 import { mapNormalizedToOriginal } from './position-mapping';
 import { config } from './config';
 import { isDiffLikeUri, isDiffViewVisible } from './diff-context';
@@ -9,6 +9,7 @@ import { DecorationTypeRegistry } from './decorator/decoration-type-registry';
 import { filterDecorationsForEditor, ScopeEntry } from './decorator/visibility-model';
 import { handleCheckboxClick } from './decorator/checkbox-toggle';
 import { MermaidDiagramDecorations } from './decorator/mermaid-diagram-decorations';
+import { ImageInlineDecorations } from './decorator/image-inline-decorations';
 import { MathDecorations } from './math/math-decorations';
 import { renderMermaidSvg, svgToDataUri, createErrorSvg } from './mermaid/mermaid-renderer';
 import { MermaidHoverIndicatorDecorationType } from './decorations';
@@ -123,6 +124,7 @@ export class Decorator {
 
   private decorationTypes: DecorationTypeRegistry;
   private mermaidDecorations = new MermaidDiagramDecorations();
+  private imageDecorations = new ImageInlineDecorations();
   private mathDecorations = new MathDecorations();
   private mermaidUpdateToken = 0;
   private mermaidHoverIndicatorDecorationType = MermaidHoverIndicatorDecorationType();
@@ -343,6 +345,7 @@ export class Decorator {
     // Also clear ghost faint decoration (not in decorationTypeMap)
     this.activeEditor.setDecorations(this.decorationTypes.getGhostFaintDecorationType(), []);
     this.mermaidDecorations.clear(this.activeEditor);
+    this.imageDecorations.clear(this.activeEditor);
     this.mathDecorations.clear(this.activeEditor);
     this.activeEditor.setDecorations(this.mermaidHoverIndicatorDecorationType, []);
   }
@@ -376,7 +379,7 @@ export class Decorator {
 
     // Parse document (uses cache if version unchanged)
     const version = document.version;
-    const { decorations, scopes, text, mermaidBlocks, mathRegions } = this.parseDocument(document);
+    const { decorations, scopes, text, mermaidBlocks, mathRegions, standaloneImages } = this.parseDocument(document);
 
     // Re-validate version before applying (race condition protection)
     if (document.version !== version) {
@@ -395,7 +398,48 @@ export class Decorator {
         this.mathDecorations.clear(this.activeEditor);
       }
     }
+    if (config.images.enabled() && standaloneImages.length > 0) {
+      this.applyImageDecorations(standaloneImages, text);
+    } else {
+      if (this.activeEditor) {
+        this.imageDecorations.clear(this.activeEditor);
+      }
+    }
     void this.updateMermaidDiagrams(mermaidBlocks, text, document.version);
+  }
+
+  /**
+   * Applies inline image decorations for standalone images. When the cursor
+   * or a selection is anywhere inside the image tag or its granted space
+   * (the trailing blank lines the picture is drawn over), the image is
+   * hidden and the raw syntax shown — matching the Mermaid behaviour.
+   *
+   * The picture is anchored to the start of the first blank line BELOW the
+   * tag, so the rendered alt link stays visible above the image and the
+   * picture grows down through the granted space only.
+   */
+  private applyImageDecorations(standaloneImages: StandaloneImage[], normalizedText: string): void {
+    if (!this.activeEditor) return;
+    const editor = this.activeEditor;
+    const items = standaloneImages.map((image) => {
+      const inside = this.isSelectionOrCursorInsideOffsets(
+        image.startPos,
+        image.spaceEndPos,
+        normalizedText,
+        editor.selections,
+        editor.document
+      );
+      let range: Range | null = null;
+      if (!inside) {
+        const tagLineNewline = normalizedText.indexOf('\n', image.endPos);
+        if (tagLineNewline !== -1) {
+          const blankLineStart = tagLineNewline + 1;
+          range = this.createRange(blankLineStart, blankLineStart, normalizedText);
+        }
+      }
+      return { image, range };
+    });
+    this.imageDecorations.apply(editor, items);
   }
 
   /**
@@ -505,6 +549,7 @@ export class Decorator {
     text: string;
     mermaidBlocks: MermaidBlock[];
     mathRegions: MathRegion[];
+    standaloneImages: StandaloneImage[];
   } {
     const entry = this.parseCache.get(document);
     const scopeEntries = this.buildScopeEntries(entry.scopes, entry.text);
@@ -514,6 +559,7 @@ export class Decorator {
       text: entry.text,
       mermaidBlocks: entry.mermaidBlocks,
       mathRegions: entry.mathRegions,
+      standaloneImages: entry.standaloneImages,
     };
   }
 
@@ -768,12 +814,14 @@ export class Decorator {
   }
 
   /**
-   * Clears the math decoration cache and forces recalculation on next render.
-   * Call when editor font size or line height changes so math is re-rendered at the new size.
+   * Clears the math and image decoration caches and forces recalculation on
+   * next render. Call when editor font size or line height changes so both
+   * are re-rendered at the new size.
    */
   clearMathDecorationCache(): void {
     if (this.activeEditor) {
       this.mathDecorations.clear(this.activeEditor);
+      this.imageDecorations.clear(this.activeEditor);
     }
     this.updateDecorationsForSelection();
   }

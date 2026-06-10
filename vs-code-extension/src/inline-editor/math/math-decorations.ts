@@ -9,7 +9,7 @@ const DEFAULT_FOREGROUND = {
 } as const;
 
 /** Compute line height from editor settings, aligned with mermaid sizing fallback. */
-function getEditorHeights(): { blockHeight: number; inlineHeight: number; lineHeight: number } {
+export function getEditorHeights(): { blockHeight: number; inlineHeight: number; lineHeight: number } {
   const editorConfig = workspace.getConfiguration('editor');
   const fontSize = editorConfig.get<number>('fontSize', 14);
   const lineHeightSetting = editorConfig.get<number>('lineHeight', 0);

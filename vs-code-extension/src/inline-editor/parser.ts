@@ -20,6 +20,7 @@ import { getRemarkProcessorSync, getRemarkProcessor } from "./parser-remark";
 import { getEmojiMap } from "./emoji-map-loader";
 import { formatLogError, getActiveLogger } from '../LogService.js';
 import { scanMathRegions } from "./math/math-scanner";
+import { parseImageSizeHint, analyzeStandaloneImage } from "./image-utils";
 import { config } from "./config";
 
 /**
@@ -71,6 +72,32 @@ export interface MermaidBlock {
 }
 
 /**
+ * A standalone image with granted space: an image tag alone on its line,
+ * followed by at least one blank line. The decorator renders the image
+ * inline over the granted space (shrink-to-fit). See CONTEXT.md.
+ * Positions are in normalized text offsets (LF line endings).
+ */
+export interface StandaloneImage {
+  /** Start of the image tag (the `!`). */
+  startPos: number;
+  /** End of the image tag (after the closing `)`). */
+  endPos: number;
+  /** End of the granted space: end of the last trailing blank line's content. */
+  spaceEndPos: number;
+  url: string;
+  /**
+   * Lines available for rendering: the trailing blank lines below the image
+   * line. The image line itself keeps its rendered link (alt text) visible;
+   * the picture is drawn into the blank lines beneath it.
+   */
+  grantedLines: number;
+  /** Size hint width in px (from `![alt|300](p)`), if present. */
+  hintWidth?: number;
+  /** Size hint height in px (from `![alt|300x200](p)`), if present. */
+  hintHeight?: number;
+}
+
+/**
  * One detected math span (inline $...$ or block $$...$$).
  * Positions are in normalized document text (LF line endings).
  * For fence-derived regions: startPos/endPos span the whole fenced block; source is body only; numLines is body line count for height.
@@ -92,6 +119,7 @@ export interface ParseResult {
   scopes: ScopeRange[];
   mermaidBlocks: MermaidBlock[];
   mathRegions: MathRegion[];
+  standaloneImages: StandaloneImage[];
 }
 
 /**
@@ -222,6 +250,7 @@ export class MarkdownParser {
         scopes: [],
         mermaidBlocks: [],
         mathRegions: [],
+        standaloneImages: [],
       };
     }
 
@@ -233,6 +262,7 @@ export class MarkdownParser {
     const decorations: DecorationRange[] = [];
     const scopes: ScopeRange[] = [];
     const mermaidBlocks: MermaidBlock[] = [];
+    const standaloneImages: StandaloneImage[] = [];
 
     // Process frontmatter before remark parsing to avoid conflicts with thematic break detection
     this.processFrontmatter(normalizedText, decorations, scopes);
@@ -242,7 +272,7 @@ export class MarkdownParser {
       const ast = this.processor.parse(normalizedText) as Root;
 
       // Process AST nodes and extract decorations + scopes
-      this.processAST(ast, normalizedText, decorations, scopes, mermaidBlocks);
+      this.processAST(ast, normalizedText, decorations, scopes, mermaidBlocks, standaloneImages);
 
       // Handle edge cases: empty image alt text that remark doesn't parse as Image node
       this.handleEmptyImageAlt(normalizedText, decorations);
@@ -268,6 +298,7 @@ export class MarkdownParser {
       scopes: this.dedupeScopes(scopes),
       mermaidBlocks,
       mathRegions: scanMathRegions(normalizedText),
+      standaloneImages,
     };
   }
 
@@ -287,6 +318,7 @@ export class MarkdownParser {
     decorations: DecorationRange[],
     scopes: ScopeRange[],
     mermaidBlocks: MermaidBlock[],
+    standaloneImages: StandaloneImage[],
   ): void {
     // Track processed blockquote positions to avoid duplicates from nested blockquotes
     const processedBlockquotePositions = new Set<number>();
@@ -393,6 +425,7 @@ export class MarkdownParser {
                 decorations,
                 scopes,
                 currentAncestors,
+                standaloneImages,
               );
               break;
 
@@ -1525,6 +1558,7 @@ export class MarkdownParser {
     decorations: DecorationRange[],
     scopes: ScopeRange[],
     ancestors: Node[],
+    standaloneImages?: StandaloneImage[],
   ): void {
     if (!this.hasValidPosition(node)) return;
 
@@ -1554,6 +1588,18 @@ export class MarkdownParser {
       // Even if no closing bracket found, try to hide what we can
       // This handles edge cases like ![] without proper syntax
       return;
+    }
+
+    // Size hint (Obsidian pipe syntax in the alt text): hide the suffix so the
+    // rendered alt reads clean; record dimensions for inline image rendering.
+    const altRaw = text.substring(altStart, bracketEnd);
+    const sizeHint = parseImageSizeHint(altRaw);
+    if (sizeHint) {
+      decorations.push({
+        startPos: altStart + sizeHint.pipeIndex,
+        endPos: bracketEnd,
+        type: "hide",
+      });
     }
 
     // Add image decoration for alt text (even if empty)
@@ -1634,6 +1680,24 @@ export class MarkdownParser {
             type: "hide",
           });
         }
+      }
+    }
+
+    // Detect standalone images with granted space for inline rendering.
+    // Mid-sentence images and images with no trailing blank line keep
+    // link-style decoration with hover preview only.
+    if (standaloneImages && node.url) {
+      const granted = analyzeStandaloneImage(text, start, end);
+      if (granted) {
+        standaloneImages.push({
+          startPos: start,
+          endPos: end,
+          spaceEndPos: granted.spaceEndPos,
+          url: node.url,
+          grantedLines: granted.blankLines,
+          hintWidth: sizeHint?.width,
+          hintHeight: sizeHint?.height,
+        });
       }
     }
 

@@ -65,6 +65,20 @@ export const config = {
         .get<boolean>('math.enabled', true);
     },
   },
+  images: {
+    enabled(): boolean {
+      return vscode.workspace
+        .getConfiguration(SECTION)
+        .get<boolean>('images.enabled', true);
+    },
+    /** Cap on the granted space an inline image may fill, in editor lines. */
+    maxHeightLines(): number {
+      const value = vscode.workspace
+        .getConfiguration(SECTION)
+        .get<number>('images.maxHeightLines', 20);
+      return Number.isFinite(value) && value >= 2 ? Math.round(value) : 20;
+    },
+  },
   mentions: {
     /** If set, overrides GitHub context: true = force links on, false = force off. Unset = use git remote auto-detect. */
     linksEnabled(): boolean | undefined {

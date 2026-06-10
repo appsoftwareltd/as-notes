@@ -20,3 +20,8 @@ test-results.txt
 # AgentKanban
 
 .vscode/mcp.json
+
+# Architecture docs
+
+CONTEXT.md
+docs/

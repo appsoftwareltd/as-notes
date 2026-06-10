@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.4.3",
+    "version": "2.5.0",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -413,6 +413,18 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Render LaTeX/math expressions ($...$, $$...$$) inline using KaTeX."
+                },
+                "as-notes.inlineEditor.images.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Render local images inline when the image tag is alone on its line and followed by at least one blank line. Add blank lines below the image to grant it more vertical space. Control the maximum size with Obsidian-style alt text suffixes: ![alt|300](path) or ![alt|300x200](path)."
+                },
+                "as-notes.inlineEditor.images.maxHeightLines": {
+                    "type": "number",
+                    "default": 20,
+                    "minimum": 2,
+                    "maximum": 100,
+                    "description": "Maximum height of an inline-rendered image, in editor lines, regardless of how many blank lines follow it."
                 },
                 "as-notes.inlineEditor.mentions.enabled": {
                     "type": "boolean",

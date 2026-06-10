@@ -6,6 +6,7 @@ import { FileResolver, slugify, type PageEntry } from './FileResolver.js';
 import { taskTagPlugin } from './TaskTagPlugin.js';
 import { mermaidPlugin } from './MermaidPlugin.js';
 import { mathPlugin } from './MathPlugin.js';
+import { imageSizePlugin } from './ImageSizePlugin.js';
 
 interface PublishConfig {
     inputDir?: string;
@@ -1242,6 +1243,7 @@ function main(): void {
         pageMd.use(taskTagPlugin);
         pageMd.use(mermaidPlugin);
         pageMd.use(mathPlugin);
+        pageMd.use(imageSizePlugin);
         addHeadingIds(pageMd);
         const pageRelPath = pageSourcePath.get(pageName) || pageName + '.md';
         const pageDir = path.dirname(path.join(input, pageRelPath));
@@ -1376,6 +1378,7 @@ mermaid.initialize({ startOnLoad: true, theme: '${mermaidTheme}' });
                 staticMd.use(taskTagPlugin);
                 staticMd.use(mermaidPlugin);
                 staticMd.use(mathPlugin);
+                staticMd.use(imageSizePlugin);
                 addHeadingIds(staticMd);
                 const pageDir = path.dirname(srcPath);
                 retinaPlugin(staticMd, { globalRetina: retina, pageRetina: fields.retina === true, pageDir, inputDir: staticDirAbsolute });

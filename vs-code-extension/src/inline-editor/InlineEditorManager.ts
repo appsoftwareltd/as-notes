@@ -158,6 +158,9 @@ export class InlineEditorManager implements vscode.Disposable {
                 if (e.affectsConfiguration('as-notes.inlineEditor.colors')) {
                     this.decorator.recreateColorDependentTypes();
                 }
+                if (e.affectsConfiguration('as-notes.inlineEditor.images')) {
+                    this.decorator.updateDecorationsForSelection();
+                }
                 if (e.affectsConfiguration('editor.fontSize') || e.affectsConfiguration('editor.lineHeight')) {
                     this.decorator.clearMathDecorationCache();
                 }

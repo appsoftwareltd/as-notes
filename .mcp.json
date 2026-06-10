@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "agent-kanban": {
+            "type": "http",
+            "url": "https://www.agentkanban.io/api/mcp/v1",
+            "headers": {
+                "Authorization": "Bearer ak_iDBGKy18SERKdyivZbpLs6kevcinkOGqpvgf"
+            }
+        }
+    }
+}
