@@ -4,7 +4,7 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
-[2.5.0] - 2026-05-18
+## [2.5.0] - 2026-05-18
 
 - Feature: Inline image rendering in the inline Markdown editor. A local image alone on its line and followed by at least one blank line now renders in the document (no hover needed): the alt text stays visible as a hoverable link, with the picture drawn into the blank lines below it, sized shrink-to-fit and keeping the last blank line clear as a margin — add blank lines to grant the image more space. Control the maximum size with Obsidian-style alt text suffixes: `![alt|300](path)` or `![alt|300x200](path)`. Settings: `as-notes.inlineEditor.images.enabled`, `as-notes.inlineEditor.images.maxHeightLines`.
 - Feature: The image size hint is honoured in published HTML — `![alt|300](path)` emits `width`/`height` attributes and a clean `alt`.
