@@ -67,6 +67,8 @@ Control the display size with an Obsidian-style suffix in the alt text:
 
 The size hint is a *maximum* in the editor: the image never grows beyond the granted space and never overlaps text. In published HTML the hint is applied exactly, as `width`/`height` attributes with a clean `alt`.
 
+![Inline Image Rendering in Markdown in VS Code](../assets/images/inline-image-rendering-markdown-vs-code.png)
+
 Notes:
 
 - Move the cursor onto the image line (or into the blank lines under the picture) to hide the picture and edit the raw syntax - the same behaviour as Mermaid blocks.
