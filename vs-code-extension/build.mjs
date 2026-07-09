@@ -27,6 +27,16 @@ copyFileSync(
     resolve(__dirname, 'dist/LICENCE-THIRD-PARTY.md'),
 );
 
+// Copy codicon font + css to dist/webview/ for the password-safe webview.
+copyFileSync(
+    resolve(__dirname, 'node_modules/@vscode/codicons/dist/codicon.css'),
+    resolve(__dirname, 'dist/webview/codicon.css'),
+);
+copyFileSync(
+    resolve(__dirname, 'node_modules/@vscode/codicons/dist/codicon.ttf'),
+    resolve(__dirname, 'dist/webview/codicon.ttf'),
+);
+
 // ── sql.js WASM cache-reset plugin ────────────────────────────────────────
 // sql.js caches the very first initSqlJs() promise in a closure variable
 // `initSqlJsPromise` and returns it for every subsequent call.  This means
@@ -125,6 +135,17 @@ const kanbanSidebarWebviewBuildOptions = {
 };
 
 /** @type {import('esbuild').BuildOptions} */
+const safeWebviewBuildOptions = {
+    entryPoints: ['./src/webview/safe.ts'],
+    bundle: true,
+    outfile: 'dist/webview/safe.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
+/** @type {import('esbuild').BuildOptions} */
 const convertBuildOptions = {
     entryPoints: ['../publish/src/convert.ts'],
     bundle: true,
@@ -188,6 +209,16 @@ async function buildCss() {
     if (calendarResult.map) {
         writeFileSync('./dist/webview/calendar.css.map', calendarResult.map.toString());
     }
+
+    const safeCss = readFileSync('./src/webview/safe.css', 'utf8');
+    const safeResult = await postcss([tailwindcss]).process(safeCss, {
+        from: './src/webview/safe.css',
+        to: './dist/webview/safe.css',
+    });
+    writeFileSync('./dist/webview/safe.css', safeResult.css);
+    if (safeResult.map) {
+        writeFileSync('./dist/webview/safe.css.map', safeResult.map.toString());
+    }
 }
 
 if (isWatch) {
@@ -212,6 +243,7 @@ if (isWatch) {
     const kanbanCtx = await esbuild.context(kanbanWebviewBuildOptions);
     const kanbanSidebarCtx = await esbuild.context(kanbanSidebarWebviewBuildOptions);
     const calendarCtx = await esbuild.context(calendarWebviewBuildOptions);
+    const safeCtx = await esbuild.context(safeWebviewBuildOptions);
     const convertCtx = await esbuild.context(convertBuildOptions);
     await extCtx.watch();
     await webCtx.watch();
@@ -219,6 +251,7 @@ if (isWatch) {
     await kanbanCtx.watch();
     await kanbanSidebarCtx.watch();
     await calendarCtx.watch();
+    await safeCtx.watch();
     await convertCtx.watch();
     console.log('Watching for changes...');
 } else {
@@ -229,6 +262,7 @@ if (isWatch) {
     await esbuild.build(kanbanWebviewBuildOptions);
     await esbuild.build(kanbanSidebarWebviewBuildOptions);
     await esbuild.build(calendarWebviewBuildOptions);
+    await esbuild.build(safeWebviewBuildOptions);
     await esbuild.build(convertBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }

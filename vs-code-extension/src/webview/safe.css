@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+@layer base {
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        font-family: var(--vscode-font-family, system-ui, sans-serif);
+        font-size: var(--vscode-font-size, 13px);
+        color: var(--vscode-foreground);
+        background-color: var(--vscode-editor-background);
+    }
+}
+
+@layer components {
+    #app {
+        @apply px-5 pt-4 pb-16 max-w-2xl;
+    }
+
+    .editor {
+        @apply flex flex-col gap-3;
+    }
+
+    .field {
+        @apply flex flex-col gap-1;
+    }
+
+    .field label {
+        @apply text-xs uppercase tracking-wide opacity-70;
+    }
+
+    .field input,
+    .field textarea,
+    #tags-input,
+    #totp-uri {
+        @apply w-full px-2 py-1 rounded;
+        color: var(--vscode-input-foreground);
+        background-color: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, transparent);
+    }
+
+    .field textarea {
+        @apply resize-y font-mono;
+    }
+
+    .row {
+        @apply flex items-center gap-2;
+    }
+
+    .row input {
+        @apply flex-1;
+    }
+
+    .row.two {
+        @apply items-start gap-4;
+    }
+
+    .row.two > .field {
+        @apply flex-1;
+    }
+
+    label.inline {
+        @apply flex items-center gap-1 text-xs normal-case tracking-normal opacity-100 whitespace-nowrap;
+    }
+
+    label.inline input {
+        @apply w-auto;
+    }
+
+    .field select {
+        @apply w-full px-2 py-1 rounded;
+        color: var(--vscode-input-foreground);
+        background-color: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, transparent);
+    }
+
+    input[type="date"] {
+        color-scheme: light dark;
+    }
+
+    .custom-name {
+        @apply max-w-[9rem] font-mono text-xs opacity-80;
+    }
+
+    .history-row {
+        @apply flex items-center gap-2 py-0.5;
+    }
+
+    .history-row .name {
+        @apply flex-1 text-xs truncate;
+    }
+
+    .btn .codicon {
+        @apply align-text-bottom mr-0.5;
+    }
+
+    .btn .codicon:only-child {
+        @apply mr-0;
+    }
+
+    .icon-grid {
+        @apply grid gap-1;
+        grid-template-columns: repeat(auto-fill, 1.9rem);
+    }
+
+    .icon-opt {
+        @apply flex items-center justify-center rounded cursor-pointer;
+        width: 1.9rem;
+        height: 1.9rem;
+        color: var(--vscode-foreground);
+        background-color: var(--vscode-input-background);
+        border: 1px solid transparent;
+    }
+
+    .icon-opt:hover {
+        border-color: var(--vscode-focusBorder);
+    }
+
+    .icon-opt.selected {
+        border-color: var(--vscode-focusBorder);
+        background-color: var(--vscode-list-activeSelectionBackground, var(--vscode-button-background));
+        color: var(--vscode-list-activeSelectionForeground, var(--vscode-button-foreground));
+    }
+
+    .btn {
+        @apply px-2 py-1 rounded text-xs cursor-pointer whitespace-nowrap;
+        color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+        background-color: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+        border: none;
+    }
+
+    .btn:hover {
+        background-color: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+    }
+
+    .btn.primary {
+        color: var(--vscode-button-foreground);
+        background-color: var(--vscode-button-background);
+    }
+
+    .btn.primary:hover {
+        background-color: var(--vscode-button-hoverBackground);
+    }
+
+    .btn.danger {
+        color: var(--vscode-errorForeground, #f88);
+        background-color: transparent;
+    }
+
+    .section {
+        @apply flex flex-col gap-2 mt-2 pt-2;
+        border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.3));
+    }
+
+    .section-head {
+        @apply flex items-center justify-between;
+    }
+
+    .section h3 {
+        @apply text-sm font-semibold opacity-80;
+    }
+
+    .attachment {
+        @apply flex items-center gap-2;
+    }
+
+    .attachment .name {
+        @apply flex-1 font-mono text-xs truncate;
+    }
+
+    .totp-code {
+        @apply font-mono text-lg tracking-widest;
+    }
+
+    .totp-remaining {
+        @apply text-xs opacity-60;
+    }
+
+    .muted {
+        @apply text-xs opacity-60;
+    }
+
+    .history {
+        @apply mt-1;
+    }
+
+    .actions {
+        @apply flex items-center gap-3 mt-4 pt-3 pb-4 sticky bottom-0;
+        justify-content: flex-end;
+        border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.3));
+        background-color: var(--vscode-editor-background);
+    }
+
+    #save-status {
+        @apply mr-auto; /* keep the status text on the left, Save on the right */
+    }
+
+    .btn#save {
+        @apply px-5 py-2 text-sm font-semibold;
+    }
+
+    .btn.primary:disabled {
+        @apply opacity-50 cursor-not-allowed;
+    }
+
+    .btn.primary.has-changes {
+        box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+    }
+}

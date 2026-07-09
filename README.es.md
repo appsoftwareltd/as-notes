@@ -1,13 +1,9 @@
 > **Nota:** Esta es una traduccion de README.md. La version original en ingles puede contener informacion mas actualizada que esta version.
 
-# AS Notes (Extension de VS Code para gestion de conocimiento personal)
+# AS Notes (Extension de VS Code para PKMS, publicacion de sitios estaticos y blogs)
 
 Sitio web: [asnotes.io](https://www.asnotes.io) | Desarrollador: [App Software Ltd](https://www.appsoftware.com) | [Discord](https://discord.gg/QmwY57ts) | [Reddit](https://www.reddit.com/r/AS_Notes/) | [X](https://x.com/AppSoftwareLtd)
 
-[![VS Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/appsoftwareltd.as-notes?label=VS%20Marketplace&color=blue)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
-[![Downloads](https://img.shields.io/visual-studio-marketplace/d/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
-[![Rating](https://img.shields.io/visual-studio-marketplace/r/appsoftwareltd.as-notes)](https://marketplace.visualstudio.com/items?itemName=appsoftwareltd.as-notes)
 [![License](https://img.shields.io/badge/license-Elastic--2.0-lightgrey)](https://github.com/appsoftwareltd/as-notes/blob/main/LICENSE)
 [![CI](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/appsoftwareltd/as-notes/actions/workflows/ci.yml)
 
@@ -21,19 +17,19 @@ Sitio web: [asnotes.io](https://www.asnotes.io) | Desarrollador: [App Software L
 
 ## Que es AS Notes?
 
-**AS Notes lleva la edicion de markdown y `[[wikilinks]]` para notas, documentacion, blogs y wikis directamente a [VS Code](https://code.visualstudio.com/) y editores compatibles (por ejemplo, [Antigravity](https://antigravity.google/), [Cursor](https://cursor.com/), [Windsurf](https://windsurf.com/)).**
+**AS Notes lleva la edicion de markdown y `[[wikilink]]` para notas, documentacion, blogs y wikis directamente a [VS Code](https://code.visualstudio.com/) y editores compatibles (por ejemplo, [Antigravity](https://antigravity.google/), [Cursor](https://cursor.com/), [Windsurf](https://windsurf.com/)). AS Notes es una alternativa dentro del editor a aplicaciones PKMS como Obsidian o Logseq**
 
-**Captura ideas, enlaza conceptos, escribe y mantente enfocado, sin salir de tu editor.**
+**Captura ideas, enlaza conceptos, escribe y mantente enfocado, sin salir nunca de tu editor.**
 
 AS Notes proporciona herramientas de productividad que convierten tu IDE favorito en un sistema de gestion de conocimiento personal (PKMS), incluyendo vista de backlinks, gestion de tareas, diarios, tablero kanban, herramientas de edicion markdown, diagramas Mermaid, soporte para matematicas LaTeX y publicacion similar a Jekyll / Hugo.
 
 (Video de introduccion de 1 minuto)
 
-[![Demo de AS Notes](https://img.youtube.com/vi/bwYopQ1Sc5o/maxresdefault.jpg)](https://www.youtube.com/watch?v=bwYopQ1Sc5o)
+[![AS Notes demo](https://img.youtube.com/vi/bwYopQ1Sc5o/maxresdefault.jpg)](https://www.youtube.com/watch?v=bwYopQ1Sc5o)
 
 (Video de demostracion de 1 minuto)
 
-[![Demo de AS Notes](https://img.youtube.com/vi/liRULtb8Rm8/maxresdefault.jpg)](https://youtu.be/liRULtb8Rm8)
+[![AS Notes demo](https://img.youtube.com/vi/liRULtb8Rm8/maxresdefault.jpg)](https://youtu.be/liRULtb8Rm8)
 
 ## Por que VS Code?
 
@@ -75,9 +71,9 @@ Consulta la [documentacion de Wikilinks](https://docs.asnotes.io/wikilinks.html)
 Alterna los TODOs de markdown con `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS):
 
 ```
-- [ ] Marcador de tarea anadido
-- [x] Tarea marcada como hecha
-Marcador de tarea eliminado
+- [ ] Marker for todo added
+- [x] Marker for todo marked done
+Marker for todo removed
 ```
 
 <img src="https://raw.githubusercontent.com/appsoftwareltd/as-notes/main/images/readme/task-management-panel.png" alt="AS Notes todo panel" style="max-height:260px; margin-top: 10px; margin-bottom: 10px;">
@@ -98,9 +94,9 @@ Anade metadatos estructurados con hashtags en cualquier lugar de una linea de ta
 Ejemplo de uso:
 
 ```markdown
-- [ ] #P1 Corregir el error critico de produccion
-- [ ] #P2 #W Esperando aprobacion de diseno para el nuevo panel
-- [x] #D-2026-03-10 Enviar el informe trimestral
+- [ ] #P1 Fix the critical production bug
+- [ ] #P2 #W Waiting on design sign-off for the new dashboard
+- [x] #D-2026-03-10 Submit the quarterly report
 ```
 
 Se pueden combinar multiples etiquetas. Solo se usa una etiqueta de prioridad; si hay mas de una, gana la primera.
@@ -194,7 +190,7 @@ Escribe `/` en cualquier archivo markdown para abrir un menu de comandos rapidos
 
 #### Comandos de publicacion *(front matter)*
 
-Estos comandos alternan o ciclan campos relacionados con la publicacion en el front matter YAML del archivo. Consulta [Publicar un sitio estatico](#publicar-un-sitio-estatico) para mas detalles.
+Estos comandos alternan o ciclan campos relacionados con la publicacion en el front matter YAML del archivo. Consulta [Publicar un sitio estatico](#publicar-a-html-desde-as-notes-conversion-html) para mas detalles.
 
 | Comando | Accion |
 |---|---|
@@ -202,6 +198,16 @@ Estos comandos alternan o ciclan campos relacionados con la publicacion en el fr
 | **Layout** | Cicla `layout` entre `docs`, `blog` y `minimal` en el front matter |
 | **Retina** | Alterna `retina: true` / `retina: false` en el front matter |
 | **Assets** | Alterna `assets: true` / `assets: false` en el front matter |
+
+#### Presets de front matter *(archivos sin front matter existente)*
+
+Estos comandos aparecen solo cuando el archivo actual no tiene un bloque de front matter YAML. Insertan una plantilla completa de front matter con marcadores de posicion (tabstops) para facilitar la edicion.
+
+| Comando | Accion |
+|---|---|
+| **Front Matter: Blog Post** | Inserta front matter para una entrada de blog: `title`, `description`, `date` (hoy), `author`, `public: true`, `layout: blog` |
+| **Front Matter: Docs Page** | Inserta front matter para una pagina de documentacion: `title`, `description`, `public: true`, `layout: docs`, `order` |
+| **Front Matter: Wiki Page** | Inserta front matter para una pagina wiki: `title`, `description`, `public: true` |
 
 #### Comandos de tarjeta Kanban *(solo archivos de tarjeta kanban)*
 
@@ -236,8 +242,8 @@ Los comandos Pro estan disponibles con una licencia Pro. Los usuarios gratuitos 
 | **Template** | Abre una lista de seleccion rapida de plantillas de la carpeta de plantillas e inserta la plantilla seleccionada en el cursor. Soporta marcadores de posicion (consulta [Plantillas](#plantillas-pro)) |
 | **Table** | Solicita el numero de columnas y filas, luego inserta una tabla markdown formateada |
 | **Table: Format** | Normaliza todos los anchos de columna en la tabla circundante al contenido de celda mas largo |
-| **Table: Add Column(s)** | Solicita el numero, luego anade columnas despues de la columna actual del cursor |
-| **Table: Add Row(s)** | Solicita el numero, luego anade filas despues de la fila actual del cursor |
+| **Table: Add Column(s)** | Solicita el numero, luego anade columnas despues de la columna actual del cursor en la tabla circundante |
+| **Table: Add Row(s)** | Solicita el numero, luego anade filas despues de la fila actual del cursor en la tabla circundante |
 | **Table: Remove Row (Current)** | Elimina la fila en el cursor (rechaza cabecera/separador) |
 | **Table: Remove Column (Current)** | Elimina la columna en el cursor (rechaza tablas de una sola columna) |
 | **Table: Remove Row(s) Above** | Solicita el numero, luego elimina filas de datos encima del cursor (limitado al disponible) |
@@ -320,7 +326,7 @@ Negrita, cursiva, tachado, encabezados (H1-H6), codigo en linea, enlaces, imagen
 | `as-notes.inlineEditor.decorations.ghostFaintOpacity` | `0.3` | Opacidad para los caracteres de sintaxis en estado fantasma |
 | `as-notes.inlineEditor.links.singleClickOpen` | `false` | Abrir enlaces con un solo clic (en lugar de Ctrl+Clic) |
 
-Consulta [Ajustes](#ajustes) para la lista completa de ajustes del editor en linea.
+Consulta [Ajustes](#estilo-markdown-en-editor-en-linea-mermaid-y-renderizado-latex-pro) para la lista completa de ajustes del editor en linea.
 
 ### Plantillas (Pro)
 
@@ -328,7 +334,7 @@ Crea plantillas de notas reutilizables como archivos markdown en una carpeta de 
 
 **Configuracion:** Las plantillas se crean automaticamente al inicializar un workspace. Se incluye una plantilla predeterminada `Journal.md` para entradas de diario diarias.
 
-**Crear plantillas:** Anade cualquier archivo `.md` a la carpeta de plantillas. Se soportan subdirectorios; las plantillas en subcarpetas aparecen como `carpeta/nombre` en el selector.
+**Crear plantillas:** Anade cualquier archivo `.md` a la carpeta de plantillas. Se soportan subdirectorios; las plantillas en subcarpetas aparecen como `folder/name` en el selector.
 
 **Insertar una plantilla:** Escribe `/` en cualquier archivo markdown, selecciona **Template**, luego elige de la lista. El contenido de la plantilla se inserta en la posicion del cursor con todos los marcadores de posicion reemplazados.
 
@@ -342,7 +348,7 @@ Crea plantillas de notas reutilizables como archivos markdown en una carpeta de 
 | `{{filename}}`     | Nombre del archivo actual sin extension                        | `My Page`                             |
 | `{{title}}`        | Alias de `{{filename}}`                                        | `My Page`                             |
 | `{{cursor}}`       | Posicion del cursor despues de la insercion                    | *(el cursor aterriza aqui)*           |
-| Formato de fecha personalizado | Cualquier combinacion de tokens `YYYY`, `MM`, `DD`, `HH`, `mm`, `ss` | `{{DD/MM/YYYY}}` se convierte en `18/03/2026` |
+| Formato de fecha personalizado | Cualquier combinacion de tokens `YYYY`, `YY`, `MM`, `DD`, `HH`, `mm`, `ss` | `{{DD/MM/YYYY}}` → `18/03/2026`, `{{DD/MM/YY}}` → `18/03/26` |
 
 Para mostrar un literal `{{date}}` en la plantilla, escapalo con barra invertida: `\{{date}}`.
 
@@ -381,6 +387,10 @@ Los usuarios Pro pueden almacenar notas sensibles en archivos cifrados. Cualquie
 - `AS Notes: Decrypt All Notes` - descifrar todos los archivos `.enc.md` cifrados
 - `AS Notes: Encrypt Current Note` - cifrar el archivo `.enc.md` activo (lee el contenido no guardado del editor)
 - `AS Notes: Decrypt Current Note` - descifrar el archivo `.enc.md` activo (lee desde disco)
+
+### Caja fuerte de contrasenas KeePass (Pro)
+
+Los usuarios Pro pueden abrir, editar y crear cajas fuertes de contrasenas estandar **KeePass KDBX 4** (`.kdbx`) desde la barra lateral **KeePass Password Safe**; los mismos archivos se abren en KeePassXC y otras aplicaciones KeePass. Desbloquea con una contrasena maestra (mas un archivo de clave opcional), explora grupos y entradas, copia credenciales y codigos de un solo uso con portapapeles de borrado automatico, y edita entradas (campos, campos personalizados, etiquetas, claves de autenticador, adjuntos, icono, caducidad e historial) en un editor de guardado bajo demanda. Las cajas fuertes nuevas usan Argon2id con una sal aleatoria por archivo. Consulta [KeePass Password Safe](https://docs.asnotes.io/keepass-password-safe.html) para detalles y consideraciones de seguridad.
 
 ### Modo Outliner
 
@@ -468,7 +478,7 @@ Se ha observado que el editor VS Code puede sentirse mas lento cuando el directo
 
 Los directorios de AS Notes se pueden gestionar via sincronizacion, aunque se recomienda Git ya que no vigila archivos como lo hacen las herramientas de sincronizacion y tiene funciones completas de resolucion de conflictos.
 
-### "Este archivo aun no esta indexado"
+### "This file is not yet indexed"
 
 El panel de backlinks muestra este mensaje cuando el archivo actual no esta en el indice de AS Notes. Causas comunes:
 
@@ -490,16 +500,32 @@ El repositorio esta estructurado como un monorepo con tres paquetes:
 
 El codigo fuente de la documentacion reside en `docs-src/` (un workspace de AS Notes). La herramienta `publish` lo convierte a `docs/`.
 
+### Instalar dependencias y construir todos los paquetes
+
+Un `package.json` raiz proporciona scripts de conveniencia para trabajar en todos los paquetes. Desde la raiz del repositorio:
+
+```bash
+npm run install:all   # Install dependencies for common/, publish/, and vs-code-extension/ in order
+npm run build         # Build publish/ then vs-code-extension/
+npm test              # Run unit tests for all three packages
+npm run lint          # Type-check all three packages
+```
+
+> **Nota:** La construccion de `vs-code-extension` empaqueta directamente `../publish/src/convert.ts`, por lo que `publish/` (y su dependencia de `common/`) deben tener sus dependencias instaladas antes de que se pueda construir la extension. Usa `npm run install:all` desde la raiz del repositorio para instalar todo en el orden correcto.
+
 ### Extension de VS Code
 
 ```bash
 cd vs-code-extension
-npm install
-npm run build    # Construir la extension
-npm run watch    # Modo observacion (reconstruye con cambios)
-npm test         # Ejecutar tests unitarios
-npm run lint     # Verificacion de tipos
+npm run build    # builds dist/convert.js
+npm publish --access public install
+npm run build    # Build the extension
+npm run watch    # Watch mode (rebuilds on changes)
+npm test         # Run unit tests
+npm run lint     # Type-check
 ```
+
+> **Requisito previo:** `common/` y `publish/` deben tener sus dependencias instaladas primero (`npm --prefix common install && npm --prefix publish install`), o usa `npm run install:all` desde la raiz del repositorio.
 
 ### Publicar a HTML desde AS Notes (Conversion HTML)
 
@@ -509,7 +535,40 @@ El convertidor se publica como un paquete npm:
 npx asnotes-publish --config ./asnotes-publish.json
 ```
 
-Consulta [Publicar un sitio estatico](https://docs.asnotes.io/publishing-a-static-site.html) para la documentacion completa.
+#### Generacion del indice del blog
+
+Cuando el layout de todo el sitio es `blog` (o se establece `blogIndex: true` en la configuracion), la pagina de indice generada automaticamente usa un layout orientado a blog:
+
+1. **Entradas recientes** - las entradas mas recientes (configurable via `recentCount`, por defecto 3) mostradas como tarjetas con titulo, fecha, autor, descripcion e imagen hero opcional
+2. **Ano actual** - las entradas restantes del ano actual como una lista compacta de fecha + titulo
+3. **Archivos por ano** - enlaces a paginas `archive-YYYY.html` generadas automaticamente para anos anteriores
+4. **Sin fecha** - las entradas sin `date` en el front matter se listan al final
+
+#### Campos de front matter para publicacion
+
+| Campo | Tipo | Descripcion |
+|---|---|---|
+| `public` | boolean | Incluir la pagina en la salida publicada |
+| `title` | string | Titulo de la pagina (por defecto el nombre del archivo) |
+| `description` | string | Meta descripcion para SEO |
+| `date` | string | Fecha de publicacion (`YYYY-MM-DD`) - usada para ordenar el blog, RSS y sitemap |
+| `author` | string | Autor de la entrada - mostrado en el layout de blog y el feed RSS |
+| `image` | string | Ruta de imagen hero/miniatura - mostrada en el layout de blog y las tarjetas del indice del blog |
+| `layout` | string | Anulacion del layout por pagina (`docs`, `blog`, `minimal`) |
+| `order` | number | Orden de clasificacion de navegacion |
+| `draft` | boolean | Excluir de la salida a menos que se establezca `--include-drafts` |
+| `assets` | boolean | Copiar las imagenes referenciadas a la salida |
+| `retina` | boolean | Habilitar el dimensionado de imagenes retina |
+
+#### Opciones de configuracion del blog
+
+| Opcion | Tipo | Predeterminado | Descripcion |
+|---|---|---|---|
+| `siteTitle` | string | `"AS Notes Site"` | Titulo del sitio usado en el feed RSS y el indice del blog |
+| `recentCount` | number | `3` | Numero de entradas recientes mostradas como tarjetas en el indice del blog |
+| `blogIndex` | boolean | `false` | Usar la generacion de indice estilo blog (auto-habilitado cuando `layout: "blog"`) |
+
+Consulta [Publicar un sitio estatico](https://docs.asnotes.io/publishing-a-static-site.html) para la documentacion completa
 
 ### Depuracion
 
@@ -534,20 +593,19 @@ Actualiza `version` en `package.json` y anade una entrada a `CHANGELOG.md`.
 **Paso 2 - publicar en el VS Code Marketplace**
 
 ```bash
-cd .\vs-code-extension\
+cd vs-code-extension
 npm run build
 npx @vscode/vsce package
-npx @vscode/vsce login appsoftwareltd   # introduce el token PAT si la autenticacion ha expirado
+npx @vscode/vsce login appsoftwareltd   # enter PAT token if auth expired
 npx @vscode/vsce publish
 ```
 
 **Paso 3 - etiquetar y empujar**
 
 ```bash
-cd ..
 git add .
-git commit -m "Release v2.3.2"   # cambiar version
-git tag v2.3.2                   # cambiar version
+git commit -m "Release v2.5.0"   # change version
+git tag v2.5.0                   # change version
 git push origin main --tags
 ```
 

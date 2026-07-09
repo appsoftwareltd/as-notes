@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -129,6 +129,95 @@
             {
                 "command": "as-notes.decryptCurrentNote",
                 "title": "AS Notes: Decrypt Current Note"
+            },
+            {
+                "command": "as-notes.safe.selectFile",
+                "title": "AS Notes: KeePass Safe: Select Safe File"
+            },
+            {
+                "command": "as-notes.safe.create",
+                "title": "AS Notes: KeePass Safe: Create New Safe"
+            },
+            {
+                "command": "as-notes.safe.unlock",
+                "title": "AS Notes: KeePass Safe: Unlock",
+                "icon": "$(unlock)"
+            },
+            {
+                "command": "as-notes.safe.lock",
+                "title": "AS Notes: KeePass Safe: Lock",
+                "icon": "$(lock)"
+            },
+            {
+                "command": "as-notes.safe.selectKeyFile",
+                "title": "AS Notes: KeePass Safe: Select Key File"
+            },
+            {
+                "command": "as-notes.safe.clearKeyFile",
+                "title": "AS Notes: KeePass Safe: Clear Key File"
+            },
+            {
+                "command": "as-notes.safe.refresh",
+                "title": "AS Notes: KeePass Safe: Refresh",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "as-notes.safe.search",
+                "title": "AS Notes: KeePass Safe: Filter Entries",
+                "icon": "$(filter)"
+            },
+            {
+                "command": "as-notes.safe.searchActive",
+                "title": "AS Notes: KeePass Safe: Filter Entries (active)",
+                "icon": "$(filter-filled)"
+            },
+            {
+                "command": "as-notes.safe.clearFilter",
+                "title": "AS Notes: KeePass Safe: Clear Filter",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "as-notes.safe.addEntry",
+                "title": "AS Notes: KeePass Safe: Add Entry",
+                "icon": "$(add)"
+            },
+            {
+                "command": "as-notes.safe.addGroup",
+                "title": "AS Notes: KeePass Safe: Add Group",
+                "icon": "$(new-folder)"
+            },
+            {
+                "command": "as-notes.safe.openEntry",
+                "title": "AS Notes: KeePass Safe: Open Entry"
+            },
+            {
+                "command": "as-notes.safe.copyUsername",
+                "title": "AS Notes: KeePass Safe: Copy Username",
+                "icon": "$(account)"
+            },
+            {
+                "command": "as-notes.safe.copyPassword",
+                "title": "AS Notes: KeePass Safe: Copy Password",
+                "icon": "$(key)"
+            },
+            {
+                "command": "as-notes.safe.copyTotp",
+                "title": "AS Notes: KeePass Safe: Copy Authenticator Code",
+                "icon": "$(watch)"
+            },
+            {
+                "command": "as-notes.safe.deleteEntry",
+                "title": "AS Notes: KeePass Safe: Delete Entry",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "as-notes.safe.renameGroup",
+                "title": "AS Notes: KeePass Safe: Rename Group"
+            },
+            {
+                "command": "as-notes.safe.deleteGroup",
+                "title": "AS Notes: KeePass Safe: Delete Group",
+                "icon": "$(trash)"
             },
             {
                 "command": "as-notes.cleanWorkspace",
@@ -284,6 +373,33 @@
         "configuration": {
             "title": "AS Notes",
             "properties": {
+                "as-notes.safe.autoLock": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically lock the password safe after a period of inactivity, wiping the decrypted database from memory."
+                },
+                "as-notes.safe.autoSaveOnLock": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "When the safe locks, save any pending changes first. When off, an idle lock discards unsaved edits (a manual lock still prompts). Saves are skipped entirely when nothing has changed."
+                },
+                "as-notes.safe.autoLockTimeoutSeconds": {
+                    "type": "integer",
+                    "default": 300,
+                    "minimum": 10,
+                    "description": "Idle time in seconds before the safe auto-locks (when auto-lock is enabled)."
+                },
+                "as-notes.safe.allowOpenAttachments": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Allow opening entry attachments in their default application. This writes a temporary DECRYPTED copy to disk (removed when the safe locks; a crash can leave it behind). Turn off to force Save As only."
+                },
+                "as-notes.safe.clipboardClearSeconds": {
+                    "type": "integer",
+                    "default": 30,
+                    "minimum": 0,
+                    "description": "Seconds after which a copied username, password, or one-time code is cleared from the clipboard. Set to 0 to never auto-clear."
+                },
                 "as-notes.rootDirectory": {
                     "type": "string",
                     "default": "",
@@ -543,6 +659,12 @@
                     "when": "as-notes.fullMode"
                 },
                 {
+                    "id": "as-notes-safe",
+                    "name": "KeePass Password Safe",
+                    "when": "as-notes.fullMode",
+                    "visibility": "collapsed"
+                },
+                {
                     "type": "webview",
                     "id": "as-notes.mermaidRenderer",
                     "name": "Mermaid Renderer",
@@ -555,6 +677,31 @@
             {
                 "view": "as-notes-welcome",
                 "contents": "AS Notes is not initialised in this workspace.\n[Initialise Workspace](command:as-notes.initWorkspace)\nThis will create a .asnotes folder to enable wikilinks, task management, and more."
+            },
+            {
+                "view": "as-notes-safe",
+                "contents": "The password safe is a Pro feature.\nStore and edit standard KeePass (.kdbx) files directly in VS Code - interoperable with KeePassXC and other KeePass apps.\n[Enter Licence Key](command:as-notes.enterLicenceKey)",
+                "when": "as-notes.fullMode && !as-notes.safe.pro"
+            },
+            {
+                "view": "as-notes-safe",
+                "contents": "No password safe is set up for this workspace yet.\nA safe is a standard KeePass (.kdbx) file you can also open in KeePassXC and other KeePass apps.\n[Create New Safe](command:as-notes.safe.create)\nCreating one guides you through choosing a location, setting a master password, and optionally generating a key file as a second factor.\n[Open Existing Safe](command:as-notes.safe.selectFile)\nAlready have a .kdbx? Point AS Notes at it.",
+                "when": "as-notes.fullMode && as-notes.safe.pro && !as-notes.safe.configured"
+            },
+            {
+                "view": "as-notes-safe",
+                "contents": "This password safe is locked.\n[Unlock Safe](command:as-notes.safe.unlock)\nEnter your master password (and key file, if this safe uses one) to browse and edit entries.\n[Open a Different Safe](command:as-notes.safe.selectFile)\n[Create New Safe](command:as-notes.safe.create)",
+                "when": "as-notes.fullMode && as-notes.safe.pro && as-notes.safe.configured && !as-notes.safe.unlocked"
+            },
+            {
+                "view": "as-notes-safe",
+                "contents": "This safe is empty - no entries yet.\n[Add Entry](command:as-notes.safe.addEntry)\n[Add Group](command:as-notes.safe.addGroup)",
+                "when": "as-notes.fullMode && as-notes.safe.pro && as-notes.safe.unlocked && !as-notes.safe.filtered"
+            },
+            {
+                "view": "as-notes-safe",
+                "contents": "No entries match the current filter.\n[Clear Filter](command:as-notes.safe.clearFilter)\n[Add Entry](command:as-notes.safe.addEntry)\n[Add Group](command:as-notes.safe.addGroup)",
+                "when": "as-notes.fullMode && as-notes.safe.pro && as-notes.safe.unlocked && as-notes.safe.filtered"
             }
         ],
         "menus": {
@@ -589,8 +736,110 @@
                     "group": "navigation"
                 }
             ],
-            "view/title": [],
-            "view/item/context": [],
+            "view/title": [
+                {
+                    "command": "as-notes.safe.unlock",
+                    "when": "view == as-notes-safe && !as-notes.safe.unlocked",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "as-notes.safe.search",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked && !as-notes.safe.filtered",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "as-notes.safe.searchActive",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked && as-notes.safe.filtered",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "as-notes.safe.clearFilter",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked && as-notes.safe.filtered",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "as-notes.safe.addEntry",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "as-notes.safe.addGroup",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "as-notes.safe.lock",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked",
+                    "group": "navigation@5"
+                },
+                {
+                    "command": "as-notes.safe.refresh",
+                    "when": "view == as-notes-safe && as-notes.safe.unlocked",
+                    "group": "navigation@6"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "as-notes.safe.copyTotp",
+                    "when": "view == as-notes-safe && viewItem == safeEntryTotp",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "as-notes.safe.copyPassword",
+                    "when": "view == as-notes-safe && viewItem =~ /safeEntry/",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "as-notes.safe.copyUsername",
+                    "when": "view == as-notes-safe && viewItem =~ /safeEntry/",
+                    "group": "inline@3"
+                },
+                {
+                    "command": "as-notes.safe.copyUsername",
+                    "when": "view == as-notes-safe && viewItem =~ /safeEntry/",
+                    "group": "1_copy@1"
+                },
+                {
+                    "command": "as-notes.safe.copyPassword",
+                    "when": "view == as-notes-safe && viewItem =~ /safeEntry/",
+                    "group": "1_copy@2"
+                },
+                {
+                    "command": "as-notes.safe.copyTotp",
+                    "when": "view == as-notes-safe && viewItem == safeEntryTotp",
+                    "group": "1_copy@3"
+                },
+                {
+                    "command": "as-notes.safe.openEntry",
+                    "when": "view == as-notes-safe && viewItem =~ /safeEntry/",
+                    "group": "2_edit@1"
+                },
+                {
+                    "command": "as-notes.safe.deleteEntry",
+                    "when": "view == as-notes-safe && viewItem =~ /safeEntry/",
+                    "group": "2_edit@2"
+                },
+                {
+                    "command": "as-notes.safe.addEntry",
+                    "when": "view == as-notes-safe && viewItem == safeGroup",
+                    "group": "2_edit@1"
+                },
+                {
+                    "command": "as-notes.safe.addGroup",
+                    "when": "view == as-notes-safe && viewItem == safeGroup",
+                    "group": "2_edit@2"
+                },
+                {
+                    "command": "as-notes.safe.renameGroup",
+                    "when": "view == as-notes-safe && viewItem == safeGroup",
+                    "group": "2_edit@3"
+                },
+                {
+                    "command": "as-notes.safe.deleteGroup",
+                    "when": "view == as-notes-safe && viewItem == safeGroup",
+                    "group": "2_edit@4"
+                }
+            ],
             "commandPalette": [
                 {
                     "command": "as-notes.showBacklinks",
@@ -634,9 +883,12 @@
         "vitest": "^3.0.0"
     },
     "dependencies": {
+        "@vscode/codicons": "^0.0.45",
         "cheerio": "1.2.0",
+        "hash-wasm": "^4.12.0",
         "ignore": "^7.0.5",
         "katex": "^0.16.11",
+        "kdbxweb": "^2.1.1",
         "mathjax-full": "^3.2.2",
         "mermaid": "10.9.5",
         "remark-gfm": "4.0.1",

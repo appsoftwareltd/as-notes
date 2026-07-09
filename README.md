@@ -386,6 +386,10 @@ Pro users can store sensitive notes in encrypted files. Any file with the `.enc.
 - `AS Notes: Encrypt Current Note` - encrypt the active `.enc.md` file (reads unsaved editor content)
 - `AS Notes: Decrypt Current Note` - decrypt the active `.enc.md` file (reads from disk)
 
+### KeePass password safe (Pro)
+
+Pro users can open, edit and create standard **KeePass KDBX 4** (`.kdbx`) password safes from the **KeePass Password Safe** sidebar - the same files open in KeePassXC and other KeePass apps. Unlock with a master password (plus an optional key file), browse groups and entries, copy credentials and one-time codes with auto-clearing clipboard, and edit entries (fields, custom fields, tags, authenticator keys, attachments, icon, expiry and history) in a save-on-demand editor. New safes use Argon2id with a random per-file salt. See [KeePass Password Safe](https://docs.asnotes.io/keepass-password-safe.html) for details and security considerations.
+
 ### Outliner Mode
 
 Enable **Outliner Mode** (`as-notes.outlinerMode` setting or the **AS Notes: Toggle Outliner Mode** command) to turn the editor into a bullet-first outliner. Every line begins with `-` and custom keybindings keep you in flow:
@@ -645,3 +649,14 @@ This software is provided "as is", without warranty of any kind, express or impl
 This extension is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](LICENSE).
 
 You are free to use, share, and adapt this extension for **non-commercial purposes** with attribution. Commercial use requires a separate commercial license. See [LICENSE](LICENSE) for full terms or contact us <https://www.appsoftware.com/contact>.
+
+## Translations
+
+This README is available in other languages. Translations are provided for convenience and may lag behind the English original.
+
+- [Español (Spanish)](README.es.md)
+- [Français (French)](README.fr.md)
+- [हिन्दी (Hindi)](README.hi.md)
+- [日本語 (Japanese)](README.ja.md)
+- [한국어 (Korean)](README.ko.md)
+- [简体中文 (Simplified Chinese)](README.zh-CN.md)

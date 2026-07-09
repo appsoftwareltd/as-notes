@@ -24,4 +24,4 @@ test-results.txt
 # Architecture docs
 
 CONTEXT.md
-docs/
+/docs/adr/

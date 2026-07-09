@@ -36,6 +36,7 @@ import {
 } from './LicenceService.js';
 import { activateLicenceKey, checkServerForRevocation, verifyLicenceFromSettings, migrateOldSecrets } from './LicenceActivationService.js';
 import * as EncryptionService from './EncryptionService.js';
+import { registerSafeFeature, flushSafeSessionForShutdown } from './SafeFeature.js';
 import { ensurePreCommitHook } from './GitHookService.js';
 import { applyAssetPathSettings } from './ImageDropProvider.js';
 import { LogService, NO_OP_LOGGER, formatLogError, setActiveLogger } from './LogService.js';
@@ -909,7 +910,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<{ exte
     return apiReturn;
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
+    // Best-effort save of an unlocked password safe before it is wiped by
+    // disposeFullMode() (VS Code briefly awaits this promise on shutdown).
+    await flushSafeSessionForShutdown();
     // Persist DB before shutdown (only if .asnotes/ still exists)
     if (indexService?.isOpen) {
         safeSaveToFile();
@@ -1125,6 +1129,11 @@ async function enterFullMode(
     if (boards.length > 0) {
         await kanbanStore.selectBoard(boards[0]);
         await kanbanBoardConfigStore.selectBoard(boards[0]);
+    }
+
+    // ── Password safe (KDBX) ──────────────────────────────────────────────
+    for (const d of registerSafeFeature(context, logService, hasProEditor)) {
+        fullModeDisposables.push(d);
     }
 
     fullModeDisposables.push(
