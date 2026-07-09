@@ -659,7 +659,7 @@ Import your repository in Vercel.
 
 If your config file is in a subdirectory, set the **Root directory** to that subdirectory. All relative paths in the config resolve from the root directory.
 
-![Cloudflare AS Notes configuration](../assets/cloudflare-pages-configuration.png)
+![Cloudflare AS Notes configuration](../assets/images/cloudflare-pages-configuration.png)
 
 #### Multiple Sites on Cloudflare Pages
 

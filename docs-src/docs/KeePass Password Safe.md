@@ -8,6 +8,8 @@ AS Notes Pro can open, edit and create standard **KeePass KDBX 4** (`.kdbx`) pas
 
 Note: This is separate from [[Encrypted Notes]]. Encrypted notes are prose in `.enc.md` files; a safe is structured credentials (usernames, passwords, one-time codes, attachments) in a `.kdbx` file.
 
+![AS Notes VS Code KeePass Client Integration](../assets/images/keepass-client-integration.png)
+
 ## AS Notes Pro
 
 The password safe is a **Pro feature**, like encrypted notes. To unlock it:
