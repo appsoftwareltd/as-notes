@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import type * as kdbxweb from 'kdbxweb';
 import { LogService } from './LogService';
-import { openSafe, saveSafe } from './SafeService';
+import { openSafe, saveSafe, SafeInvalidKeyError } from './SafeService';
 
 export type LockReason = 'manual' | 'idle' | 'window' | 'error';
 
@@ -23,6 +23,14 @@ export class SafeSessionService {
     private readonly _onDidChangeState = new vscode.EventEmitter<void>();
     /** Fires whenever the safe locks or unlocks, so views can refresh. */
     readonly onDidChangeState = this._onDidChangeState.event;
+
+    private readonly _onDidChangePaths = new vscode.EventEmitter<void>();
+    /**
+     * Fires when the safe or key-file path changes, so the locked view redraws.
+     * Separate from `onDidChangeState`, whose listeners tear down editors and
+     * wipe attachments - re-pointing a path is not a lock/unlock transition.
+     */
+    readonly onDidChangePaths = this._onDidChangePaths.event;
 
     /**
      * Optional hook run just before a save-on-lock, while the db is still open -
@@ -61,6 +69,7 @@ export class SafeSessionService {
 
     async setSafePath(path: string): Promise<void> {
         await this.context.workspaceState.update('as-notes.safe.path', path);
+        this._onDidChangePaths.fire();
     }
 
     getKeyFilePath(): string | undefined {
@@ -69,6 +78,7 @@ export class SafeSessionService {
 
     async setKeyFilePath(path: string | undefined): Promise<void> {
         await this.context.workspaceState.update('as-notes.safe.keyFilePath', path);
+        this._onDidChangePaths.fire();
     }
 
     // ── Config ────────────────────────────────────────────────────────────────
@@ -127,11 +137,16 @@ export class SafeSessionService {
 
         try {
             // Argon2 derivation takes a moment - show a spinner in the safe view.
+            // The tree view is hidden while locked; the locked webview is the
+            // one on screen, so that is where the progress has to render.
             this._db = await vscode.window.withProgress(
-                { location: { viewId: 'as-notes-safe' }, title: 'Unlocking safe…' },
+                { location: { viewId: 'as-notes-safe-locked' }, title: 'Unlocking safe…' },
                 () => openSafe(bytes, password, keyFile ?? undefined),
             );
         } catch (err) {
+            if (err instanceof SafeInvalidKeyError) {
+                return await this.offerKeyFileRetry(err.message);
+            }
             vscode.window.showErrorMessage(`AS Notes: ${(err as Error).message}`);
             return false;
         }
@@ -186,6 +201,29 @@ export class SafeSessionService {
         if (!acknowledged.includes(safePath)) {
             await this.context.globalState.update('as-notes.safe.backupAck', [...acknowledged, safePath]);
         }
+    }
+
+    /**
+     * A failed composite key may just mean this safe needs a key file that isn't
+     * attached yet - the two are indistinguishable. Offer the picker inline
+     * rather than leaving the user to discover the Select Key File command.
+     */
+    private async offerKeyFileRetry(message: string): Promise<boolean> {
+        const attach = this.getKeyFilePath() ? 'Use a Different Key File' : 'Select a Key File';
+        const choice = await vscode.window.showErrorMessage(`AS Notes: ${message}`, attach);
+        if (choice !== attach) {
+            return false;
+        }
+        const picked = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            title: 'Key file for this safe',
+            openLabel: 'Select Key File',
+        });
+        if (!picked?.[0]) {
+            return false;
+        }
+        await this.setKeyFilePath(picked[0].fsPath);
+        return await this.unlock();
     }
 
     /** Read the key file bytes from the stored path, or null if none configured. */
@@ -295,5 +333,6 @@ export class SafeSessionService {
         this.clearIdleTimer();
         this._db = null;
         this._onDidChangeState.dispose();
+        this._onDidChangePaths.dispose();
     }
 }

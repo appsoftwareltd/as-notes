@@ -11,6 +11,7 @@ import { join } from 'path';
 import { LogService } from './LogService';
 import { SafeSessionService } from './SafeSessionService';
 import { SafeTreeProvider, SafeNode, SafeDragAndDropController } from './SafeTreeProvider';
+import { SafeLockedViewProvider } from './SafeLockedViewProvider';
 import { SafeAttachmentService } from './SafeAttachmentService';
 import { SafeEditorPanel } from './SafeEditorPanel';
 import { copyEphemeral } from './safeClipboard';
@@ -72,28 +73,24 @@ export function registerSafeFeature(
 
     const disposables: vscode.Disposable[] = [session, attachments];
 
-    // `configured` drives the welcome view (no safe vs locked safe).
-    const refreshConfigured = () =>
+    // Drives which view is on screen: the locked webview or the entry tree.
+    const refreshUnlocked = () =>
         void vscode.commands.executeCommand(
             'setContext',
-            'as-notes.safe.configured',
-            !!session.getSafePath(),
+            'as-notes.safe.unlocked',
+            session.isUnlocked,
         );
-    refreshConfigured();
+    refreshUnlocked();
 
     // Context keys + editor teardown follow lock/unlock state.
     disposables.push(
         session.onDidChangeState(() => {
-            void vscode.commands.executeCommand(
-                'setContext',
-                'as-notes.safe.unlocked',
-                session.isUnlocked,
-            );
-            refreshConfigured();
+            refreshUnlocked();
             if (!session.isUnlocked) {
                 setFilter('');
                 SafeEditorPanel.closeAll();
                 attachments.wipe();
+                lockedView.refresh();
             }
         }),
     );
@@ -113,16 +110,20 @@ export function registerSafeFeature(
     });
     disposables.push(treeView);
 
-    // View header (description): shows the safe path while locked, and the active
-    // filter text while unlocked and filtering. Uses description rather than
-    // message so it never suppresses the welcome buttons.
+    // The pre-unlock surface: Pro upsell, "no safe yet", and the locked state
+    // with both paths above the Unlock button. Swaps with the tree on the
+    // `as-notes.safe.unlocked` context key - only one is ever visible.
+    const lockedView = new SafeLockedViewProvider(context.extensionUri, session, isPro);
+    disposables.push(
+        vscode.window.registerWebviewViewProvider(SafeLockedViewProvider.VIEW_ID, lockedView),
+        session.onDidChangePaths(() => lockedView.refresh()),
+    );
+
+    // View header (description): the active filter while unlocked and filtering.
+    // The safe and key-file paths live in the locked webview, not the header.
     function updateHeader() {
-        if (!session.isUnlocked) {
-            const path = session.getSafePath();
-            treeView.description = path ?? undefined;
-        } else {
-            treeView.description = tree.filterText ? `Filter: ${tree.filterText}` : undefined;
-        }
+        treeView.description =
+            session.isUnlocked && tree.filterText ? `Filter: ${tree.filterText}` : undefined;
     }
     updateHeader();
     disposables.push(session.onDidChangeState(updateHeader));
@@ -187,8 +188,6 @@ export function registerSafeFeature(
             return;
         }
         await session.setSafePath(picked[0].fsPath);
-        refreshConfigured();
-        updateHeader();
         vscode.window.showInformationMessage(`AS Notes: Safe set to ${picked[0].fsPath}.`);
         void vscode.commands.executeCommand('as-notes.safe.unlock');
     });
@@ -212,7 +211,7 @@ export function registerSafeFeature(
 
     // ── Create ────────────────────────────────────────────────────────────────
 
-    reg('as-notes.safe.create', () => createSafeWizard(session, log, refreshConfigured));
+    reg('as-notes.safe.create', () => createSafeWizard(session, log));
 
     // ── Unlock / lock ─────────────────────────────────────────────────────────
 
@@ -443,7 +442,6 @@ function configOf() {
 async function createSafeWizard(
     session: SafeSessionService,
     log: LogService,
-    onConfigured: () => void,
 ): Promise<void> {
     // Step 1 - where the safe file lives.
     const target = await vscode.window.showSaveDialog({
@@ -479,7 +477,7 @@ async function createSafeWizard(
         return;
     }
 
-    // Step 4 - optional key file (a second factor, generated to a user-chosen path).
+    // Step 4 - optional key file (a second factor, at a user-chosen path).
     let keyFile: Uint8Array | undefined;
     const wantKey = await vscode.window.showQuickPick(
         [
@@ -490,6 +488,10 @@ async function createSafeWizard(
             {
                 label: 'Generate a key file',
                 detail: 'Adds a second factor: unlocking needs both the password AND this file. Keep it off the synced .kdbx (e.g. a USB stick). You can also use it in KeePassXC.',
+            },
+            {
+                label: 'Use an existing key file',
+                detail: 'Protect this safe with a key file you already have, such as one created by KeePassXC.',
             },
         ],
         {
@@ -520,6 +522,31 @@ async function createSafeWizard(
             return;
         }
         await session.setKeyFilePath(keyTarget.fsPath);
+    } else if (wantKey.label === 'Use an existing key file') {
+        const picked = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            title: 'Choose the existing key file',
+            openLabel: 'Use This Key File',
+        });
+        if (!picked?.[0]) {
+            return;
+        }
+        try {
+            keyFile = await vscode.workspace.fs.readFile(picked[0]);
+        } catch (err) {
+            vscode.window.showErrorMessage(
+                `AS Notes: Could not read the key file at ${picked[0].fsPath} - ${(err as Error).message}. Safe not created.`,
+            );
+            return;
+        }
+        // kdbxweb happily hashes an empty file, which would add no second factor.
+        if (keyFile.length === 0) {
+            vscode.window.showErrorMessage(
+                `AS Notes: The key file at ${picked[0].fsPath} is empty. Safe not created.`,
+            );
+            return;
+        }
+        await session.setKeyFilePath(picked[0].fsPath);
     } else {
         await session.setKeyFilePath(undefined);
     }
@@ -537,7 +564,6 @@ async function createSafeWizard(
 
         await session.setSafePath(target.fsPath);
         await session.acknowledgeSafe(target.fsPath); // created here - no backup prompt on reopen
-        onConfigured();
         session.adopt(db);
         vscode.window.showInformationMessage(
             `AS Notes: Safe created at ${target.fsPath} (${size} bytes). It is unlocked and ready - add your first entry.`,

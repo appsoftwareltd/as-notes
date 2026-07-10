@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@layer base {
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        font-family: var(--vscode-font-family, system-ui, sans-serif);
+        font-size: var(--vscode-font-size, 13px);
+        color: var(--vscode-foreground);
+        background-color: var(--vscode-sideBar-background);
+    }
+}
+
+@layer components {
+    #app {
+        @apply flex flex-col gap-2 px-3 py-3;
+    }
+
+    .intro {
+        @apply flex flex-col gap-1 mb-1;
+    }
+
+    .rows {
+        @apply flex flex-col gap-1 mb-2;
+    }
+
+    /* One path: icon, label + filename + directory, hover actions. */
+    .row {
+        @apply flex items-start gap-2 rounded px-2 py-2;
+        background-color: var(--vscode-sideBarSectionHeader-background);
+    }
+
+    .row-icon {
+        @apply pt-0.5 opacity-80;
+    }
+
+    .row-text {
+        @apply flex-1 min-w-0 flex flex-col;
+    }
+
+    .row-label {
+        @apply text-[10px] uppercase tracking-wide opacity-60 leading-tight;
+    }
+
+    .row-name {
+        @apply truncate font-semibold leading-snug;
+    }
+
+    /* Directories are long: wrap rather than overflow the narrow sidebar. */
+    .row-path {
+        @apply text-xs opacity-70 break-all leading-snug;
+    }
+
+    .row-actions {
+        @apply flex gap-0.5 opacity-0 transition-opacity;
+    }
+
+    .row:hover .row-actions,
+    .row:focus-within .row-actions {
+        @apply opacity-100;
+    }
+
+    .muted {
+        @apply opacity-70;
+    }
+
+    .hint {
+        @apply text-xs opacity-70 mb-1;
+    }
+
+    .warn {
+        @apply text-xs mt-1 flex items-center gap-1;
+        color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    .icon-button {
+        @apply flex items-center justify-center rounded p-1 cursor-pointer border-0 bg-transparent;
+        color: var(--vscode-icon-foreground);
+    }
+
+    .icon-button:hover {
+        background-color: var(--vscode-toolbar-hoverBackground);
+    }
+
+    .primary,
+    .secondary {
+        @apply w-full flex items-center justify-center gap-1.5 rounded px-3 py-1.5 cursor-pointer border-0;
+    }
+
+    .primary {
+        background-color: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+    }
+
+    .primary:hover {
+        background-color: var(--vscode-button-hoverBackground);
+    }
+
+    .secondary {
+        background-color: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+    }
+
+    .secondary:hover {
+        background-color: var(--vscode-button-secondaryHoverBackground);
+    }
+
+    .links {
+        @apply flex justify-center;
+    }
+
+    .link {
+        @apply text-xs cursor-pointer border-0 bg-transparent underline p-0;
+        color: var(--vscode-textLink-foreground);
+    }
+
+    .link:hover {
+        color: var(--vscode-textLink-activeForeground);
+    }
+
+    :focus-visible {
+        outline: 1px solid var(--vscode-focusBorder);
+        outline-offset: 1px;
+    }
+}

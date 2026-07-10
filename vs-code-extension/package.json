@@ -2,7 +2,7 @@
     "name": "as-notes",
     "displayName": "AS Notes - Personal Knowledge Management System (PKMS)",
     "description": "VS Code Personal Knowledge Management System (PKMS) - Markdown Editing, Wikilinks (inc. Nested), Tasks, Kanban, Files, Publish to HTML, Daily Journal, Encrypted Notes",
-    "version": "2.6.0",
+    "version": "2.6.1",
     "publisher": "appsoftwareltd",
     "license": "Elastic-2.0",
     "icon": "images/icon.png",
@@ -659,9 +659,16 @@
                     "when": "as-notes.fullMode"
                 },
                 {
+                    "type": "webview",
+                    "id": "as-notes-safe-locked",
+                    "name": "KeePass Password Safe",
+                    "when": "as-notes.fullMode && !as-notes.safe.unlocked",
+                    "visibility": "collapsed"
+                },
+                {
                     "id": "as-notes-safe",
                     "name": "KeePass Password Safe",
-                    "when": "as-notes.fullMode",
+                    "when": "as-notes.fullMode && as-notes.safe.unlocked",
                     "visibility": "collapsed"
                 },
                 {
@@ -677,21 +684,6 @@
             {
                 "view": "as-notes-welcome",
                 "contents": "AS Notes is not initialised in this workspace.\n[Initialise Workspace](command:as-notes.initWorkspace)\nThis will create a .asnotes folder to enable wikilinks, task management, and more."
-            },
-            {
-                "view": "as-notes-safe",
-                "contents": "The password safe is a Pro feature.\nStore and edit standard KeePass (.kdbx) files directly in VS Code - interoperable with KeePassXC and other KeePass apps.\n[Enter Licence Key](command:as-notes.enterLicenceKey)",
-                "when": "as-notes.fullMode && !as-notes.safe.pro"
-            },
-            {
-                "view": "as-notes-safe",
-                "contents": "No password safe is set up for this workspace yet.\nA safe is a standard KeePass (.kdbx) file you can also open in KeePassXC and other KeePass apps.\n[Create New Safe](command:as-notes.safe.create)\nCreating one guides you through choosing a location, setting a master password, and optionally generating a key file as a second factor.\n[Open Existing Safe](command:as-notes.safe.selectFile)\nAlready have a .kdbx? Point AS Notes at it.",
-                "when": "as-notes.fullMode && as-notes.safe.pro && !as-notes.safe.configured"
-            },
-            {
-                "view": "as-notes-safe",
-                "contents": "This password safe is locked.\n[Unlock Safe](command:as-notes.safe.unlock)\nEnter your master password (and key file, if this safe uses one) to browse and edit entries.\n[Open a Different Safe](command:as-notes.safe.selectFile)\n[Create New Safe](command:as-notes.safe.create)",
-                "when": "as-notes.fullMode && as-notes.safe.pro && as-notes.safe.configured && !as-notes.safe.unlocked"
             },
             {
                 "view": "as-notes-safe",

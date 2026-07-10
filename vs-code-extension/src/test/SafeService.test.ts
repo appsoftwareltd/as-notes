@@ -23,6 +23,7 @@ import {
     createDraft,
     applyDraft,
     draftToView,
+    SafeInvalidKeyError,
 } from '../SafeService';
 
 /** Create a safe with a single populated entry, round-trip it through bytes. */
@@ -59,6 +60,16 @@ describe('SafeService - create/open roundtrip', () => {
         const db = createSafe('Test', 'correct-pw');
         const bytes = await saveSafe(db);
         await expect(openSafe(bytes, 'wrong-pw')).rejects.toThrow(/incorrect/i);
+    });
+
+    it('rejects a bad composite key as SafeInvalidKeyError, not a corrupt-file error', async () => {
+        const db = createSafe('Test', 'correct-pw');
+        const bytes = await saveSafe(db);
+        // SafeSessionService keys its "attach a key file and retry" prompt off this type.
+        await expect(openSafe(bytes, 'wrong-pw')).rejects.toBeInstanceOf(SafeInvalidKeyError);
+        await expect(openSafe(new Uint8Array([1, 2, 3]), 'pw')).rejects.not.toBeInstanceOf(
+            SafeInvalidKeyError,
+        );
     });
 
     it('creates new safes with Argon2id and strong KDF parameters', async () => {

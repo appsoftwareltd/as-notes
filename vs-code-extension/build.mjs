@@ -146,6 +146,17 @@ const safeWebviewBuildOptions = {
 };
 
 /** @type {import('esbuild').BuildOptions} */
+const safeLockedWebviewBuildOptions = {
+    entryPoints: ['./src/webview/safe-locked.ts'],
+    bundle: true,
+    outfile: 'dist/webview/safe-locked.js',
+    format: 'iife',
+    platform: 'browser',
+    sourcemap: true,
+    target: ['es2022'],
+};
+
+/** @type {import('esbuild').BuildOptions} */
 const convertBuildOptions = {
     entryPoints: ['../publish/src/convert.ts'],
     bundle: true,
@@ -219,6 +230,16 @@ async function buildCss() {
     if (safeResult.map) {
         writeFileSync('./dist/webview/safe.css.map', safeResult.map.toString());
     }
+
+    const safeLockedCss = readFileSync('./src/webview/safe-locked.css', 'utf8');
+    const safeLockedResult = await postcss([tailwindcss]).process(safeLockedCss, {
+        from: './src/webview/safe-locked.css',
+        to: './dist/webview/safe-locked.css',
+    });
+    writeFileSync('./dist/webview/safe-locked.css', safeLockedResult.css);
+    if (safeLockedResult.map) {
+        writeFileSync('./dist/webview/safe-locked.css.map', safeLockedResult.map.toString());
+    }
 }
 
 if (isWatch) {
@@ -244,6 +265,7 @@ if (isWatch) {
     const kanbanSidebarCtx = await esbuild.context(kanbanSidebarWebviewBuildOptions);
     const calendarCtx = await esbuild.context(calendarWebviewBuildOptions);
     const safeCtx = await esbuild.context(safeWebviewBuildOptions);
+    const safeLockedCtx = await esbuild.context(safeLockedWebviewBuildOptions);
     const convertCtx = await esbuild.context(convertBuildOptions);
     await extCtx.watch();
     await webCtx.watch();
@@ -252,6 +274,7 @@ if (isWatch) {
     await kanbanSidebarCtx.watch();
     await calendarCtx.watch();
     await safeCtx.watch();
+    await safeLockedCtx.watch();
     await convertCtx.watch();
     console.log('Watching for changes...');
 } else {
@@ -263,6 +286,7 @@ if (isWatch) {
     await esbuild.build(kanbanSidebarWebviewBuildOptions);
     await esbuild.build(calendarWebviewBuildOptions);
     await esbuild.build(safeWebviewBuildOptions);
+    await esbuild.build(safeLockedWebviewBuildOptions);
     await esbuild.build(convertBuildOptions);
     console.log('Build complete. WASM binary copied to dist/.');
 }

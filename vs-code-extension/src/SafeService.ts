@@ -149,6 +149,18 @@ export function makeCredentials(password: string, keyFile?: Uint8Array | null): 
 }
 
 /**
+ * The composite key did not open the safe. Distinct from a corrupt-file error so
+ * callers can offer to attach a key file - a safe that needs one and a wrong
+ * password are indistinguishable from here.
+ */
+export class SafeInvalidKeyError extends Error {
+    constructor() {
+        super('Could not unlock the safe. The master password or key file is incorrect.');
+        this.name = 'SafeInvalidKeyError';
+    }
+}
+
+/**
  * Open an existing safe. Throws a friendly error on a wrong password/key file or
  * a corrupt file (the two are indistinguishable - both fail the HMAC).
  */
@@ -164,9 +176,7 @@ export async function openSafe(
     } catch (err) {
         const code = (err as kdbxweb.KdbxError)?.code;
         if (code === kdbxweb.Consts.ErrorCodes.InvalidKey) {
-            throw new Error(
-                'Could not unlock the safe. The master password or key file is incorrect.',
-            );
+            throw new SafeInvalidKeyError();
         }
         throw new Error(
             `Could not open the safe: ${(err as Error)?.message ?? 'unknown error'}.`,
