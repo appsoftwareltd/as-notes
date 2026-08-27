@@ -64,6 +64,12 @@ Some key benefits of managing notes in VS Code in addition to those that AS Note
 
 See [Wikilinks documentation](https://docs.asnotes.io/wikilinks.html) for further information on wikilinks.
 
+### Search
+
+- **Search** view at the top of the AS Notes sidebar - type to filter every indexed page, alias and not-yet-created wikilink target, then Enter to open it
+- Matches page names and aliases, not page content (use VS Code's own Search for full text)
+- Not-yet-created targets are marked **New**; selecting one creates the file
+
 ### Task Management
 
 Toggle markdown TODOs with `Ctrl+Shift+Enter` (Windows/Linux) / `Cmd+Shift+Enter` (macOS):
@@ -547,7 +553,7 @@ When the site-wide layout is `blog` (or `blogIndex: true` is set in the config),
 | Field | Type | Description |
 |---|---|---|
 | `public` | boolean | Include page in published output |
-| `title` | string | Page title (defaults to filename) |
+| `title` | string | Page title for `<title>` and nav (defaults to filename). Publish only - the extension's index, Search view and wikilink resolution never read it, and the URL always comes from the filename |
 | `description` | string | Meta description for SEO |
 | `date` | string | Publication date (`YYYY-MM-DD`) — used for blog sorting, RSS, and sitemap |
 | `author` | string | Post author — displayed in blog layout and RSS feed |
@@ -602,8 +608,8 @@ npx @vscode/vsce publish
 
 ```bash
 git add .
-git commit -m "Release v2.6.0"   # change version
-git tag v2.6.0                   # change version
+git commit -m "Release v2.6.1"   # change version
+git tag v2.6.1                   # change version
 git push origin main --tags
 ```
 

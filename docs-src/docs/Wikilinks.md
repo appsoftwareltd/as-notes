@@ -57,6 +57,36 @@ Type `[[` in any markdown file to trigger the autocomplete list:
 - Typing `[[` inside an already-open `[[...` starts autocomplete for an inner (nested) link
 - Autocomplete is suppressed inside YAML front matter
 
+## Finding Pages
+
+The **Search** view sits at the top of the AS Notes sidebar. Type to filter, then press Enter (or click **Go To**) to open the page. It lists three kinds of entry:
+
+| Entry | Shown as |
+|---|---|
+| Page | the filename without `.md`, with its folder alongside |
+| Alias | the alias name, with `→ CanonicalPage` alongside |
+| Forward reference | the name of a page you have linked to but not yet created, marked **New** — selecting it creates the file |
+
+Filtering is a case-insensitive substring match against that name. It searches **page names and aliases, not page content** — for full-text search across your notes, use VS Code's own Search (`Ctrl+Shift+F` / `Cmd+Shift+F`), which works on markdown files like any other text.
+
+Note that `title:` front matter plays no part here. It is read only by the publish tool, where it sets the HTML page title and the navigation label. If you want a page to be findable under a second name, give it an alias.
+
+## Naming Notes
+
+The filename is a page's identity: wikilinks, the Search view, autocomplete and published URLs all resolve against it.
+
+A page name reads best as ordinary words with spaces — `Project Ideas.md` rather than `project-ideas.md` — so that `[[Project Ideas]]` sits naturally in a sentence. Keep to letters, digits, spaces and hyphens, and reword rather than substitute when a name wants punctuation:
+
+| Instead of | Use | Why |
+|---|---|---|
+| `Sync: Overview` | `Sync Overview` | `:` is not legal in a filename and becomes `_` |
+| `Import & Export` | `Import and Export` | `&` is dropped from the published URL slug |
+| `Notes [Draft]` | `Notes Draft` | square brackets are the wikilink syntax |
+
+When publishing, the URL slug is built by lowercasing the filename, turning spaces and underscores into hyphens, and **discarding every other character**. Two names that differ only in punctuation therefore land on the same URL, and the later page overwrites the earlier one without warning: `Import & Export.md` and `Import Export.md` both publish as `import-export.html`.
+
+Put the punctuation you wanted back in the page's `# heading`, and in `title:` for a published page.
+
 ## Rename Synchronisation
 
 AS Notes keeps files and links consistent when you rename either a wikilink or its backing file.
@@ -111,6 +141,8 @@ aliases: [Short Name, Another Name]
 ```
 
 `[[Short Name]]` and `[[Another Name]]` now both navigate to that page — no extra file is created. Hover tooltips show the alias resolution (`Short Name → ActualPage.md`). Alias values are plain strings; any accidental `[[` or `]]` characters are stripped automatically.
+
+> **Aliases are an editor feature.** The publish tool resolves wikilinks by filename, then by slug, and knows nothing about the alias table. An `[[Alias]]` link on a page you publish becomes a placeholder page, not a link to the canonical page. Use aliases freely in private notes; in a folder you publish, link by filename.
 
 ## Nested Wikilinks
 

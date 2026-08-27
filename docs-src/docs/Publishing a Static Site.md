@@ -357,13 +357,17 @@ The static directory name defaults to `static`. To change it, set `staticDir` in
 
 Or pass `--static-dir pages` on the CLI. Set to an empty string to disable static page processing entirely.
 
+### Aliases Are Not Resolved
+
+The converter resolves a wikilink by filename, then by slug. It does not read `aliases:` front matter, which is an editor feature of the extension. A link written as `[[Short Name]]` where `Short Name` is only an alias produces a **placeholder page**, not a link to the canonical page. Inside a folder you publish, link by filename.
+
 ### Special Files Summary
 
 Three filenames have special behaviour in the converter:
 
 | File | Behaviour |
 |---|---|
-| `index.md` | Becomes the home page (`/index.html`). If absent, an index is auto-generated. |
+| `index.md` | Becomes the home page (`/index.html`). If absent, an index is auto-generated. Matched case-sensitively, so the file must be lowercase `index.md`. |
 | `nav.md` | Rendered as the site navigation sidebar. Not published as a standalone page. |
 | `static/` | Directory of standalone pages and files. Always included in output, never in nav or blog feed. |
 
@@ -412,7 +416,8 @@ Local file paths are automatically copied to the output. Multiple `--stylesheet`
 ## SEO
 
 - `description:` front matter injects `<meta name="description">`
-- Filenames are slugified to clean URLs (`Getting Started.md` → `getting-started.html`)
+- Filenames are slugified to clean URLs (`Getting Started.md` → `getting-started.html`). Slugifying lowercases the name, turns spaces and underscores into hyphens, and discards every other character — so `Import & Export.md` and `Import Export.md` both produce `import-export.html`, and the later one silently overwrites the earlier. The converter warns about two files sharing a *filename*, not about two filenames sharing a *slug*
+- `title:` sets the `<title>` and the navigation label; it does **not** affect the URL, which always comes from the filename
 - A `sitemap.xml` is auto-generated with all public pages
 - An RSS feed (`feed.xml`) is generated for pages with a `date:` field
 

@@ -4,7 +4,7 @@ All notable changes to AS Notes will be documented here.
 
 ## Pending Release
 
-## [2.6.0] - 2026-07-09
+## [2.6.1] - 2026-07-10
 
 - Feature: KeePass password safe (Pro). Open, edit, and create standard KeePass KDBX 4 (`.kdbx`) files directly in VS Code - interoperable with KeePassXC and other KeePass clients. Unlock with a master password plus an optional key file (composite key); the safe path and key-file path are stored per-machine and never committed. Browse groups and entries in the "KeePass Password Safe" sidebar with search, drag-and-drop to move items between groups, group create/rename/delete, and copy-to-clipboard (auto-clearing). Edit entries in a full Tailwind editor: standard and custom fields (add/rename/remove), tags, authenticator keys (TOTP - accepts otpauth URIs and Bitwarden-style base32 secrets, with the live code shown beneath the field), attachments (add/open/save/delete), icon (with previews, reflected in the sidebar), expiry, and browsable history with restore. New safes use Argon2id with a random per-file salt; a guided wizard walks through location, master password, and optional key-file generation. Idle auto-lock wipes the decrypted safe from memory. Settings: `as-notes.safe.autoLock`, `as-notes.safe.autoSaveOnLock`, `as-notes.safe.autoLockTimeoutSeconds`, `as-notes.safe.allowOpenAttachments`, `as-notes.safe.clipboardClearSeconds`.
 

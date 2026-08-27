@@ -13,13 +13,20 @@ AS Notes turns VS Code into a PKMS. Activates when `.asnotes/` exists at the wor
 
 ---
 
+## Source Code
+
+If you need more detail on the workings of AS Notes than you find included in this skill document, source is available at `~/src/as-notes`
+
+---
+
 ## Agent Directives
 
 ### When writing or editing notes (use case 1)
 
 - Always use `[[wikilinks]]` for cross-references between pages - never raw markdown links for internal pages
 - Omit `.md` in wikilinks: `[[My Page]]` not `[[My Page.md]]`
-- Add `aliases:` front matter only when a page genuinely needs alternative names
+- Name note files in title case with spaces - `Note Name.md`, not `note-name.md`. See [Note File Naming](#note-file-naming)
+- `title:` is publish-only display text; it cannot name or find a note. `aliases:` can, but never in a tree you publish - the publish tool ignores aliases
 - Use task tags (`#P1`, `#D-YYYY-MM-DD`, etc.) inline on task lines - do not invent new tag formats
 - In outliner mode every line must start with `- `; use indentation for hierarchy
 - When the user's notes may be published as a static HTML site, ensure wikilinks and structure are clean - the `publish` tool converts them to relative `.html` links
@@ -35,7 +42,83 @@ AS Notes turns VS Code into a PKMS. Activates when `.asnotes/` exists at the wor
 
 ---
 
+## Note File Naming
+
+The filename is the note's identity: wikilinks, the Search panel, `[[` autocomplete and the
+published URL all resolve against it.
+
+- **Title case with spaces, every word capitalised** - `Document Editor.md`, not
+  `document-editor.md`, so `[[Document Editor]]` reads as English in a sentence.
+- **Letters, digits, spaces and hyphens only.** Reword rather than substitute:
+  `Sync: Overview` → `Sync Overview`, `Import & Export` → `Import And Export`.
+- **Exceptions:** `index.md` stays lowercase (publish matches it case-sensitively); journals,
+  kanban cards and any numbered or dated files keep their sortable prefix.
+
+Casing never breaks a link - index and publish resolver both match case-insensitively. Word
+boundaries and punctuation do. Renaming `local-folders.md` → `Local Folders.md` keeps the
+published URL (`slugify` maps spaces and `-` alike) but orphans every `[[local-folders]]`;
+renaming from the VS Code explorer rewrites wikilinks, plain markdown links it does not.
+
+Punctuation vanishes silently. `slugify` strips everything outside `[a-z0-9-]`, so
+`Import & Export.md` and `Import Export.md` both publish to `import-export.html`, one
+overwriting the other unwarned. `/ ? < > \ : * | "` become `_` in the file a wikilink targets;
+`[` `]` break wikilink parsing.
+
+| | Read by | Affects |
+|---|---|---|
+| **Filename** | everything | resolution, search, published URL |
+| **`aliases:`** | index, Search panel, `[[` autocomplete - **extension only** | a second name for a note |
+| **First `# H1`** | index (`pages.title`) | labels and sort order in Tasks and Backlinks panels |
+| **`title:`** | publish only | `<title>`, nav label, RSS - never the URL, never search |
+
+`title:` therefore cannot make a note findable. `aliases:` can, but publish ignores aliases and
+emits a dead placeholder for an alias link - so keep aliases to notes you do not publish.
+
+---
+
 ## Writing Notes in AS Notes Format
+
+### Front Matter (YAML)
+
+Optional YAML front matter between `---` fences at the top of the file. All fields are optional.
+
+```markdown
+---
+public: true
+title: My Page Title
+order: 1
+description: A short description for SEO
+layout: docs
+assets: true
+retina: true
+draft: false
+date: 2025-03-23
+aliases:
+  - Short Name
+  - Another Name
+---
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `public` | boolean | Page included in published output. Required unless `--default-public` / `defaultPublic` config is set |
+| `title` | string | **Publish only.** `<title>` and nav label; defaults to filename. Never read by the index, search panel or wikilink resolution |
+| `order` | number | Nav sort order. Lower numbers appear first. Unordered pages sort alphabetically after ordered ones |
+| `description` | string | Injected as `<meta name="description">` for SEO |
+| `layout` | string | Per-page layout override: `docs`, `blog`, `minimal`, or custom name |
+| `assets` | boolean | Enable asset (image) copying for this page. Required unless `--default-assets` is set |
+| `retina` | boolean | Apply retina sizing (half intrinsic width) to all images on this page |
+| `draft` | boolean | Exclude from output unless `--include-drafts` is passed |
+| `date` | string | Date (`YYYY-MM-DD`) for blog-style display, RSS feed ordering, and sitemap `<lastmod>` |
+| `aliases` | string[] | **Extension only.** Alternative names for wikilink resolution (list or inline `[A, B]`). Publish ignores aliases |
+
+**Nav ordering logic** (from source): `index` always first → pages with `order` sorted numerically → remaining pages alphabetically by `title` (or filename).
+
+**Slash commands for front matter** (type `/` in editor):
+- `/Public` — toggle `public: true/false`
+- `/Layout` — cycle through `docs` → `blog` → `minimal`
+- `/Retina` — toggle `retina: true/false`
+- `/Assets` — toggle `assets: true/false`
 
 ### Standard page
 
@@ -52,8 +135,8 @@ Link to [[Page Name]] or [[Subfolder/Topic]].
 Nested wikilinks: [[Specific [[Topic]] Details]].
 ```
 
-- YAML front matter optional; include only when aliases are needed
-- First `# heading` is the page title in the index
+- YAML front matter optional; see [Front Matter](#front-matter-yaml) for all supported fields
+- First `# heading` is the page title in the index, falling back to the filename stem; `title:` does **not** override it
 - Omit `.md` in wikilinks - `[[My Page]]` resolves to `My Page.md`
 
 ### Task lines
@@ -194,6 +277,22 @@ Tags stripped from display. First priority tag wins. Dates: `YYYY-MM-DD`.
 **Group By:** Page · Priority (P1→P2→P3→None, sorted by due date) · Due Date (Overdue/Today/This Week/Later/None) · Completion Date
 
 **Filters:** TODO ONLY (default on) · WAITING ONLY · Filter by page (case-insensitive)
+
+---
+
+## Search Panel
+
+Always-present webview (`as-notes-search`) at the top of the AS Notes sidebar in full mode; no
+command or keybinding. Type to filter, **Enter** or **Go To** navigates.
+
+| Kind | Label | Detail |
+|---|---|---|
+| page | filename stem | containing directory |
+| alias | alias name | `→ CanonicalStem` |
+| forward | uncreated wikilink target | marked **New**; selecting it creates the file |
+
+Matches that label only - case-insensitive substring. It never reads `title:`, headings or body
+text. For full-text search use VS Code's own find-in-files.
 
 ---
 
@@ -368,40 +467,103 @@ When a user reports a problem, work through these checks in order:
 
 ## Publishing to Static HTML
 
-`publish` is a Node.js tool (`publish/` in the repo) that converts a notes workspace to a static HTML site.
+For full documentation on static site publishing see https://docs.asnotes.io/publishing-a-static-site.html
 
-- Scans `--input` for `.md` → outputs `.html` files
-- `[[wikilinks]]` → relative `.html` links; auto-generates `<nav>` sidebar
-- Creates placeholder pages for missing wikilink targets
-- Content in `<article class="markdown-body">` - compatible with `github-markdown-css`
+The publish tool converts `.md` notes to a flat static HTML site. Installed via `npx asnotes-publish` or built from `publish/` in the repo.
+
+- `[[wikilinks]]` → relative `.html` links; filenames slugified to kebab-case - see [Note File Naming](#note-file-naming) for the silent collision this can cause
+- **Aliases are not resolved** - an `[[Alias]]` link becomes a placeholder page
+- Auto-generates `<nav>` sidebar (or use custom `nav.md`)
+- Creates placeholder pages for unresolved wikilink targets
+- Content in `<article class="markdown-body">` (docs layout) or `<article class="blog-post">` (blog layout)
+- Supports inline math (`$...$`), display math (`$$...$$`), and mermaid fenced code blocks
+- Task tags (`#P1`, `#W`, etc.) rendered as styled badge spans
+- Auto-generates TOC from h2/h3/h4 headings
+- Generates `sitemap.xml` and `feed.xml` (RSS for pages with `date:`)
 - **Wipes output directory before each run**
 
-```bash
-cd publish && npm install && npm run build
-npm run convert -- --input <notes-dir> --output <output-dir>
+### Config file
+
+JSON config at workspace root (e.g. `asnotes-publish.json`). For subdirectory input: `asnotes-publish.<dirname>.json`.
+
+```json
+{
+    "inputDir": "./docs",
+    "defaultPublic": true,
+    "defaultAssets": true,
+    "layout": "docs",
+    "layouts": "./layouts",
+    "includes": "./includes",
+    "theme": "default",
+    "themes": "./themes",
+    "baseUrl": "",
+    "retina": false,
+    "includeDrafts": false,
+    "stylesheets": [],
+    "exclude": [],
+    "outputDir": "./site"
+}
 ```
+
+### CLI flags
 
 | Flag | Description |
 |---|---|
+| `--config <file>` | Load settings from JSON config file |
 | `--input <dir>` | Source `.md` directory |
 | `--output <dir>` | Output directory (wiped each run) |
-| `--stylesheet <url>` | Inject `<link rel="stylesheet">`. Repeatable; CDN URLs or relative paths. |
-| `--asset <file>` | Copy local file to output. Repeatable. |
+| `--default-public` | Publish all pages unless `public: false` |
+| `--default-assets` | Copy referenced assets unless `assets: false` |
+| `--layout <name>` | Layout: `docs` (default), `blog`, `minimal`, or custom |
+| `--layouts <path>` | Directory containing editable layout HTML templates |
+| `--includes <path>` | Directory for `header.html` and `footer.html` partials |
+| `--theme <name>` | Built-in CSS theme: `default` (light), `dark` |
+| `--themes <path>` | Directory containing custom theme CSS files |
+| `--retina` | Enable retina image sizing globally |
+| `--base-url <prefix>` | URL path prefix for links/assets (e.g. `/docs`) |
+| `--include-drafts` | Include pages with `draft: true` |
+| `--stylesheet <url\|file>` | Add stylesheet (repeatable). Local files auto-copied |
+| `--asset <file>` | Copy file to output (repeatable) |
+| `--exclude <dirname>` | Exclude directory from scanning (repeatable) |
 
-```bash
-npm run convert -- \
-  --input ../docs-src/pages --output ../docs \
-  --stylesheet https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-light.css \
-  --stylesheet docs.css --asset ../docs-src/docs.css
+Default excluded directories: `templates`, `node_modules`.
+
+### Custom navigation (`nav.md`)
+
+Create `nav.md` at the input directory root to fully control sidebar navigation structure. Supports wikilinks, headings, lists, and `---` separators:
+
+```markdown
+## Getting Started
+
+- [[Introducing AgentKanban]]
+- [[Auth Flow]]
+
+---
+
+## Reference
+
+- [[API Keys]]
+- [[External API]]
 ```
 
-**GitHub Pages / CI:** commit output to `docs/`; enable GitHub Pages in repo settings.
+`nav.md` is not published as a standalone page. If absent, auto-generated nav is used with `nav-current` class highlighting.
 
-```yaml
-- name: Build docs
-  run: |
-    cd publish && npm ci && npm run build
-    npm run convert -- --input ../docs-src/pages --output ../docs
-```
+### Layouts
 
-`index.md` → `index.html` (shown as "Home"). Pages listed alphabetically; `index` always first.
+Three built-in layouts: `docs` (sidebar + content), `blog` (nav + article with date), `minimal` (content only). Custom layouts go in the `--layouts` directory as `<name>.html` files.
+
+Template tokens: `{{title}}`, `{{header}}`, `{{nav}}`, `{{content}}`, `{{stylesheets}}`, `{{description}}`, `{{date}}`, `{{toc}}`, `{{footer}}`, `{{baseUrl}}`.
+
+### Header/Footer partials
+
+Create `header.html` and `footer.html` in the `--includes` directory. Supports `{{baseUrl}}` and `{{title}}` tokens.
+
+### Asset pipeline
+
+When enabled (per-page `assets: true` or `--default-assets`), local `<img src="...">` references are discovered, files copied to output, and paths rewritten. Supported retina formats: PNG, JPEG, GIF, WebP, BMP.
+
+### Retina images
+
+Three levels: per-image (`![alt {.retina}](img.png)`), per-page (`retina: true` front matter), or global (`--retina`). Sets `width` to half intrinsic dimensions.
+
+`index.md` → `index.html` (shown as "Home"). Pages without `index.md` auto-generate a page index.
